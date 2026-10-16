@@ -1,0 +1,27 @@
+- generic [ref=e3]:
+  - navigation [ref=e4]:
+    - button "Workspace" [ref=e5]
+    - button "Document" [ref=e6]
+    - button "Ticket" [ref=e7]
+    - button "Global Settings" [ref=e8]
+  - complementary [ref=e9]:
+    - generic [ref=e10]:
+      - generic [ref=e11]: Workspace
+      - generic [ref=e12]: "0"
+    - generic [ref=e13]:
+      - textbox "Nama project…" [ref=e14]
+      - generic [ref=e15]:
+        - textbox "/path/ke/workspace" [ref=e16]
+        - button "Pilih folder workspace" [disabled]
+      - button "Buat project" [ref=e17]
+    - paragraph [ref=e19]: Belum ada project.
+    - separator [ref=e20]
+  - main [ref=e21]:
+    - generic [ref=e22]:
+      - generic [ref=e23]:
+        - text: RND Workflow
+        - generic [ref=e24]: Deno Desktop · shadcn/ui
+      - button "Chat" [ref=e25]
+    - generic [ref=e28]:
+      - generic [ref=e30]: Kosong
+      - generic [ref=e31]: Buka menu dari activity bar di kiri.

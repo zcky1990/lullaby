@@ -51,6 +51,9 @@ const MonacoViewer = lazy(() => import("@/components/MonacoViewer"));
 const MarkdownView = lazy(() => import("@/components/MarkdownView"));
 
 const ACTIVE_PROJECT_KEY = "rnd.activeProjectId:v1";
+const PANEL_WIDTH_KEY = "rnd.panelWidth:v1";
+const PANEL_MIN_WIDTH = 180;
+const PANEL_MAX_WIDTH = 560;
 
 function readActiveProjectId(): string | null {
   try {
@@ -58,6 +61,18 @@ function readActiveProjectId(): string | null {
   } catch {
     return null;
   }
+}
+
+function readPanelWidth(): number {
+  try {
+    const value = Number(localStorage.getItem(PANEL_WIDTH_KEY));
+    if (Number.isFinite(value) && value >= PANEL_MIN_WIDTH && value <= PANEL_MAX_WIDTH) {
+      return value;
+    }
+  } catch {
+    // ignore
+  }
+  return 256;
 }
 
 const PANEL_FOR_KIND: Record<TabKind, Menu> = {
@@ -95,6 +110,7 @@ export default function App() {
   const [detailKey, setDetailKey] = useState<string | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
+  const [panelWidth, setPanelWidth] = useState(readPanelWidth);
 
   const hasWorkspace = !!detail?.project.workspace_path;
   const activeTab = tabs.find((tab) => tab.id === activeTabId) ?? null;
@@ -340,6 +356,37 @@ export default function App() {
     if (tab) setMenu(PANEL_FOR_KIND[tab.kind]);
   };
 
+  useEffect(() => {
+    try {
+      localStorage.setItem(PANEL_WIDTH_KEY, String(panelWidth));
+    } catch {
+      // ignore
+    }
+  }, [panelWidth]);
+
+  const startResize = (event: React.MouseEvent) => {
+    event.preventDefault();
+    const startX = event.clientX;
+    const startWidth = panelWidth;
+    const onMove = (moveEvent: MouseEvent) => {
+      const next = Math.min(
+        PANEL_MAX_WIDTH,
+        Math.max(PANEL_MIN_WIDTH, startWidth + (moveEvent.clientX - startX)),
+      );
+      setPanelWidth(next);
+    };
+    const onUp = () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+      document.body.style.userSelect = "";
+      document.body.style.cursor = "";
+    };
+    document.body.style.userSelect = "none";
+    document.body.style.cursor = "col-resize";
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  };
+
   const createProject = async (input: { name: string; workspacePath?: string }) => {
     const { project } = await api.createProject(input);
     setProjects((current) => [project, ...current]);
@@ -479,7 +526,10 @@ export default function App() {
       />
 
       {(menu === "workspace" || menu === "files" || menu === "document") && (
-        <aside className="flex w-64 shrink-0 flex-col border-r bg-card/20">
+        <aside
+          style={{ width: panelWidth }}
+          className="relative flex shrink-0 flex-col border-r bg-card/20"
+        >
           {menu === "workspace" && (
             <WorkspacePanel
               projects={projects}
@@ -509,6 +559,12 @@ export default function App() {
               onCreate={createDocument}
             />
           )}
+          <div
+            onMouseDown={startResize}
+            role="separator"
+            aria-orientation="vertical"
+            className="hover:bg-primary/40 absolute inset-y-0 right-0 w-1 cursor-col-resize transition-colors"
+          />
         </aside>
       )}
 

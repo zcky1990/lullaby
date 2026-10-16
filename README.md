@@ -71,8 +71,9 @@ markdown. Backend memakai provider OpenAI-compatible (`/chat/completions`) atau 
 **Editor tabs (ala VS Code):** memilih file (Explorer), dokumen (Document), atau menu
 (Workspace/Ticket/Project Settings/Global Settings) membuka **tab** di area konten. Tab bisa diklik
 ulang dan **ditutup** (`×`); menutup tab terakhir menampilkan empty state. Workspace/Explorer/
-Document memakai **panel kiri terpisah**, sedangkan **Project Settings** dan **Global Settings**
-menaruh sidebar-nya (section nav) di dalam tab.
+Document memakai **panel kiri terpisah** yang **lebarnya bisa di-drag** (tersimpan di `localStorage`
+`rnd.panelWidth:v1`), sedangkan **Project Settings** dan **Global Settings** menaruh sidebar-nya
+(section nav) di dalam tab.
 
 ## HTTP API
 
