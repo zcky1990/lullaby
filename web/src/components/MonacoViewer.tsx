@@ -1,0 +1,34 @@
+import Editor from "@monaco-editor/react";
+import "@/lib/monaco";
+import { Skeleton } from "@/components/ui/skeleton";
+import { languageForPath } from "@/lib/languages";
+
+interface Props {
+  path: string;
+  content: string;
+  theme: string;
+  height?: string;
+}
+
+export default function MonacoViewer({ path, content, theme, height = "100%" }: Props) {
+  return (
+    <Editor
+      height={height}
+      path={path}
+      language={languageForPath(path)}
+      value={content}
+      theme={theme}
+      loading={<Skeleton className="h-full w-full rounded-none" />}
+      options={{
+        readOnly: true,
+        minimap: { enabled: false },
+        fontSize: 13,
+        scrollBeyondLastLine: false,
+        wordWrap: "off",
+        renderWhitespace: "selection",
+        automaticLayout: true,
+        scrollbar: { alwaysConsumeMouseWheel: false },
+      }}
+    />
+  );
+}

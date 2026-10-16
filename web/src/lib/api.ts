@@ -1,0 +1,213 @@
+export interface Project {
+  id: string;
+  name: string;
+  workspace_path: string | null;
+  docmost_space_id: string | null;
+  jira_project_key: string | null;
+  github_repo: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Integration {
+  kind: string;
+  mode: string;
+  config: Record<string, unknown>;
+  updatedAt: string;
+}
+
+export interface LlmProvider {
+  id: string;
+  name: string;
+  provider: string;
+  model: string | null;
+  baseUrl: string | null;
+  apiKey: string | null;
+  mode: string;
+  updatedAt: string;
+}
+
+export interface ProjectDetail {
+  project: Project;
+  integrations: Integration[];
+  llmProviders: LlmProvider[];
+}
+
+export interface TestResult {
+  ok: boolean;
+  status?: number;
+  message: string;
+  detail?: unknown;
+  latencyMs: number;
+}
+
+export interface DocSummary {
+  id: string;
+  title: string;
+  spaceId?: string;
+  hasChildren?: boolean;
+  children?: DocSummary[];
+}
+
+export interface DocContent {
+  id: string;
+  title?: string;
+  content: string;
+}
+
+export interface TicketSummary {
+  key: string;
+  summary: string;
+  status?: string;
+  assignee?: string;
+  priority?: string;
+  url: string;
+}
+
+export interface TicketDetail {
+  key: string;
+  summary: string;
+  status?: string;
+  priority?: string;
+  assignee?: string;
+  reporter?: string;
+  type?: string;
+  created?: string;
+  updated?: string;
+  labels: string[];
+  description: string;
+  url: string;
+}
+
+export interface DocumentsResponse {
+  configured: boolean;
+  error?: string;
+  documents: DocSummary[];
+  debug?: string;
+}
+
+export interface TicketsResponse {
+  configured: boolean;
+  error?: string;
+  tickets: TicketSummary[];
+}
+
+export interface FileEntry {
+  name: string;
+  path: string;
+  type: "file" | "dir";
+  size?: number;
+}
+
+export interface FilesResponse {
+  configured: boolean;
+  path: string;
+  entries: FileEntry[];
+  truncated?: boolean;
+  error?: string;
+}
+
+export interface FileContentResponse {
+  path: string;
+  content: string;
+  size: number;
+  truncated: boolean;
+  binary: boolean;
+}
+
+export interface IntegrationPayload {
+  kind: string;
+  mode: string;
+  config: Record<string, string>;
+}
+
+export interface LlmProviderPayload {
+  name: string;
+  provider: string;
+  model?: string;
+  baseUrl?: string;
+  apiKey?: string;
+  mode: string;
+}
+
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(path, init);
+  let data: unknown = null;
+  try {
+    data = await res.json();
+  } catch {
+    data = null;
+  }
+  if (!res.ok) {
+    const error = (data as { error?: string } | null)?.error ?? `HTTP ${res.status}`;
+    throw new Error(error);
+  }
+  return data as T;
+}
+
+const jsonInit = (method: string, body: unknown): RequestInit => ({
+  method,
+  headers: { "content-type": "application/json" },
+  body: JSON.stringify(body),
+});
+
+export const api = {
+  health: () =>
+    request<{ ok: boolean; name: string; version: string; dataDir: string }>("/api/health"),
+  listProjects: () => request<{ projects: Project[] }>("/api/projects"),
+  createProject: (input: { name: string; workspacePath?: string }) =>
+    request<{ project: Project }>("/api/projects", jsonInit("POST", input)),
+  updateProject: (id: string, input: { name?: string; workspacePath?: string }) =>
+    request<{ project: Project }>(`/api/projects/${id}`, jsonInit("PUT", input)),
+  listFiles: (projectId: string, path: string) =>
+    request<FilesResponse>(`/api/projects/${projectId}/files?path=${encodeURIComponent(path)}`),
+  readFile: (projectId: string, path: string) =>
+    request<FileContentResponse>(
+      `/api/projects/${projectId}/files/content?path=${encodeURIComponent(path)}`,
+    ),
+  projectDetail: (id: string) => request<ProjectDetail>(`/api/projects/${id}`),
+  listDocuments: (projectId: string, pageId?: string) =>
+    request<DocumentsResponse>(
+      `/api/projects/${projectId}/documents${pageId ? `?pageId=${encodeURIComponent(pageId)}` : ""}`,
+    ),
+  getDocument: (projectId: string, pageId: string) =>
+    request<{ document: DocContent }>(`/api/projects/${projectId}/documents/${pageId}`),
+  createDocument: (projectId: string, payload: { title: string; parentPageId?: string }) =>
+    request<{ document: DocSummary }>(
+      `/api/projects/${projectId}/documents`,
+      jsonInit("POST", payload),
+    ),
+  listTickets: (projectId: string) =>
+    request<TicketsResponse>(`/api/projects/${projectId}/tickets`),
+  getTicket: (projectId: string, key: string) =>
+    request<{ ticket: TicketDetail }>(
+      `/api/projects/${projectId}/tickets/${encodeURIComponent(key)}`,
+    ),
+  transitionTicket: (projectId: string, key: string, status: string) =>
+    request<{ ok: boolean }>(
+      `/api/projects/${projectId}/tickets/${encodeURIComponent(key)}/transition`,
+      jsonInit("POST", { status }),
+    ),
+  saveIntegration: (projectId: string, payload: IntegrationPayload) =>
+    request<{ integration: Integration }>(
+      `/api/projects/${projectId}/integrations/${payload.kind}`,
+      jsonInit("PUT", payload),
+    ),
+  testIntegration: (payload: IntegrationPayload) =>
+    request<{ result: TestResult }>("/api/integrations/test", jsonInit("POST", payload)),
+  createLlm: (projectId: string, payload: LlmProviderPayload) =>
+    request<{ provider: LlmProvider }>(`/api/projects/${projectId}/llm`, jsonInit("POST", payload)),
+  updateLlm: (projectId: string, id: string, payload: LlmProviderPayload) =>
+    request<{ provider: LlmProvider }>(
+      `/api/projects/${projectId}/llm/${id}`,
+      jsonInit("PUT", payload),
+    ),
+  deleteLlm: (projectId: string, id: string) =>
+    request<{ ok: boolean }>(`/api/projects/${projectId}/llm/${id}`, { method: "DELETE" }),
+  chat: (
+    projectId: string,
+    payload: { providerId?: string; messages: { role: string; content: string }[] },
+  ) => request<{ message: string }>(`/api/projects/${projectId}/chat`, jsonInit("POST", payload)),
+  testRaw: (body: IntegrationPayload) =>
+    request<{ result: TestResult }>("/api/integrations/test", jsonInit("POST", body)),
+};

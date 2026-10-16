@@ -1,0 +1,31 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install client deps
+        run: npm --prefix web install
+      - name: Build client + assets
+        run: deno task build
+      - name: Type check backend
+        run: deno task check
+      - name: Type check client
+        run: npm --prefix web run typecheck
+      - name: Lint
+        run: deno lint
+      - name: Format check
+        run: deno fmt --check
+      - name: Test
+        run: deno test -A
