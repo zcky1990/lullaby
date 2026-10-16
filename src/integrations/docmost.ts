@@ -274,3 +274,40 @@ export async function createDocument(
     hasChildren: false,
   };
 }
+
+export interface UpdateDocumentInput {
+  pageId: string;
+  title?: string;
+  content: string;
+}
+
+export async function updateDocument(
+  cfg: DocmostConfig,
+  input: UpdateDocumentInput,
+): Promise<DocContent> {
+  if (!cfg.apiToken) throw new Error("API token Docmost belum diisi.");
+  const base = cfg.baseUrl.replace(/\/+$/, "");
+
+  const body: Record<string, unknown> = {
+    pageId: input.pageId,
+    operation: "replace",
+    content: input.content,
+    format: "markdown",
+  };
+  if (input.title) body.title = input.title;
+
+  const res = await request(`${base}/api/pages/update`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${cfg.apiToken}`, "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    throw new Error(`${statusMessage(res.status)} ${truncate(res.text, 300)}`);
+  }
+
+  return {
+    id: input.pageId,
+    title: input.title,
+    content: input.content,
+  };
+}

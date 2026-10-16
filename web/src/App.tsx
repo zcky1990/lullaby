@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, lazy, Suspense } from "react";
-import { Inbox, MessageSquare, RefreshCw } from "lucide-react";
+import { Inbox, MessageSquare, Pencil, RefreshCw, Save } from "lucide-react";
 import type { ActivityEvent } from "@/components/ActivityFeed";
 import { ActivityBar, type Menu } from "@/components/ActivityBar";
 import { ChatSidebar } from "@/components/ChatSidebar";
@@ -34,6 +34,7 @@ import { WorkspacePanel } from "@/components/WorkspacePanel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import {
   api,
@@ -257,6 +258,19 @@ export default function App() {
     [currentId, loadDocuments, openDocument],
   );
 
+  const saveDocument = useCallback(
+    async (pageId: string, payload: { title?: string; content: string }) => {
+      if (!currentId) return;
+      const { document } = await api.updateDocument(currentId, pageId, payload);
+      patchTab(`doc:${currentId}:${pageId}`, {
+        content: document.content,
+        title: document.title ?? payload.title,
+      });
+      await loadDocuments(currentId);
+    },
+    [currentId, patchTab, loadDocuments],
+  );
+
   useEffect(() => {
     loadProjects().catch(console.error);
   }, [loadProjects]);
@@ -449,7 +463,7 @@ export default function App() {
           </div>
         );
       case "document":
-        return <DocumentTab tab={tab} />;
+        return <DocumentTab key={tab.id} tab={tab} onSave={saveDocument} />;
       case "file":
         return <FileTab tab={tab} />;
     }
@@ -631,7 +645,42 @@ function FileTab({ tab }: { tab: EditorTab }) {
   );
 }
 
-function DocumentTab({ tab }: { tab: EditorTab }) {
+function DocumentTab({
+  tab,
+  onSave,
+}: {
+  tab: EditorTab;
+  onSave: (pageId: string, payload: { title?: string; content: string }) => Promise<void>;
+}) {
+  const { resolvedEditorTheme } = useTheme();
+  const [editing, setEditing] = useState(false);
+  const [draftTitle, setDraftTitle] = useState(tab.title);
+  const [draftContent, setDraftContent] = useState(tab.content ?? "");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | undefined>();
+
+  const pageId = tab.ref ?? "";
+
+  const save = async () => {
+    setBusy(true);
+    setError(undefined);
+    try {
+      await onSave(pageId, { title: draftTitle.trim() || undefined, content: draftContent });
+      setEditing(false);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const cancel = () => {
+    setEditing(false);
+    setError(undefined);
+    setDraftTitle(tab.title);
+    setDraftContent(tab.content ?? "");
+  };
+
   if (tab.loading) {
     return (
       <div className="flex flex-col gap-2 p-8">
@@ -642,19 +691,69 @@ function DocumentTab({ tab }: { tab: EditorTab }) {
     );
   }
   if (tab.error) return <p className="p-8 text-sm text-destructive">{tab.error}</p>;
+
   return (
-    <div className="h-full overflow-y-auto">
-      <div className="px-8 py-6">
-        <Suspense
-          fallback={
-            <div className="flex flex-col gap-2">
-              <Skeleton className="h-4 w-2/3" />
-              <Skeleton className="h-4 w-full" />
+    <div className="flex h-full flex-col">
+      <div className="flex items-center justify-between gap-2 border-b px-4 py-2">
+        {editing ? (
+          <Input
+            value={draftTitle}
+            onChange={(event) => setDraftTitle(event.target.value)}
+            placeholder="Judul dokumen"
+            className="max-w-md"
+          />
+        ) : (
+          <h1 className="truncate text-base font-semibold">{tab.title}</h1>
+        )}
+        <div className="flex shrink-0 items-center gap-2">
+          {error ? <span className="text-xs text-destructive">{error}</span> : null}
+          {editing ? (
+            <>
+              <Button size="sm" variant="ghost" onClick={cancel} disabled={busy}>
+                Batal
+              </Button>
+              <Button size="sm" onClick={save} disabled={busy} data-icon="inline-start">
+                {busy ? <Spinner /> : <Save />}
+                Simpan
+              </Button>
+            </>
+          ) : (
+            <Button size="sm" variant="outline" onClick={() => setEditing(true)} data-icon="inline-start">
+              <Pencil />
+              Edit
+            </Button>
+          )}
+        </div>
+      </div>
+
+      <div className="min-h-0 flex-1">
+        {editing ? (
+          <Suspense fallback={<Skeleton className="h-full w-full rounded-none" />}>
+            <MonacoViewer
+              path={`${pageId}.md`}
+              language="markdown"
+              content={draftContent}
+              theme={resolvedEditorTheme}
+              readOnly={false}
+              onChange={setDraftContent}
+            />
+          </Suspense>
+        ) : (
+          <div className="h-full overflow-y-auto">
+            <div className="px-8 py-6">
+              <Suspense
+                fallback={
+                  <div className="flex flex-col gap-2">
+                    <Skeleton className="h-4 w-2/3" />
+                    <Skeleton className="h-4 w-full" />
+                  </div>
+                }
+              >
+                <MarkdownView content={tab.content || "_(kosong)_"} />
+              </Suspense>
             </div>
-          }
-        >
-          <MarkdownView content={tab.content || "_(kosong)_"} />
-        </Suspense>
+          </div>
+        )}
       </div>
     </div>
   );

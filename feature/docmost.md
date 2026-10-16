@@ -10,11 +10,13 @@ alur (Docmost PRD -> Planner -> Draft tiket -> Jira).
 
 > **Status implementasi.** Yang sudah berjalan (mode `api`, REST): health-check
 > `POST /api/spaces/`, daftar dokumen `POST /api/pages/sidebar-pages` (children di-load saat
-> expand: `{ spaceId, pageId }`), isi dokumen `POST /api/pages/info` (`format: markdown`), dan
-> **buat halaman** `POST /api/pages/create` (`{ spaceId, title, parentPageId? }`) — dipakai menu
-> **Document** (tree collapsible + tombol **+**). **Kredensial:** token disimpan **plaintext** di
-> `config.apiToken` (bukan `secretRef`/encryption seperti contoh di bawah). **Belum:** write-back
-> (annotate/comment), MCP, cache `prd_documents`, generate tiket.
+> expand: `{ spaceId, pageId }`), isi dokumen `POST /api/pages/info` (`format: markdown`),
+> **buat halaman** `POST /api/pages/create` (`{ spaceId, title, parentPageId? }`), dan
+> **edit halaman** `POST /api/pages/update`
+> (`{ pageId, operation: "replace", content, format: markdown, title? }`) —
+> dipakai menu **Document** (tree collapsible, tombol **+**, mode **Edit**). **Kredensial:** token
+> disimpan **plaintext** di `config.apiToken` (bukan `secretRef`/encryption seperti contoh di
+> bawah). **Belum:** write-back komentar, MCP, cache `prd_documents`, generate tiket.
 
 ---
 

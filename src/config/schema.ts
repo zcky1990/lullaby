@@ -76,6 +76,12 @@ export const CreateDocumentInput = z.object({
 });
 export type CreateDocumentInput = z.infer<typeof CreateDocumentInput>;
 
+export const UpdateDocumentInput = z.object({
+  title: z.string().trim().min(1).max(200).optional(),
+  content: z.string().max(500_000),
+});
+export type UpdateDocumentInput = z.infer<typeof UpdateDocumentInput>;
+
 export const DocmostConfig = z.object({
   baseUrl: httpUrl,
   apiToken: z.string().trim().optional(),

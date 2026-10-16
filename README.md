@@ -58,7 +58,7 @@ Shell ala VSCode: **activity bar** (kiri) + **panel** terpisah (Workspace/Explor
 | -------------------- | ----------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
 | **Workspace**        | selalu                  | daftar/buat project (nama + workspace folder opsional), overview project                                                      |
 | **Explorer**         | project punya workspace | file tree folder workspace + viewer kode **Monaco** (read-only)                                                               |
-| **Document**         | selalu                  | tree halaman Docmost (collapsible, lazy children, tombol **+** tambah) + render **markdown** (GFM + **Mermaid**)              |
+| **Document**         | selalu                  | tree halaman Docmost (collapsible, lazy children, **+** tambah) + render **markdown** + **Edit** (judul/isi via Monaco)       |
 | **Ticket**           | selalu                  | **Kanban** tiket Jira full-width (kolom = status, drag = transition); klik card → detail; filter assignee + refresh di header |
 | **Project Settings** | ada project             | Workspace, Integrations (Document/Ticket/Code, `+` pilih tipe), LLM Providers — form **collapsible**                          |
 | **Global Settings**  | selalu                  | satu halaman: Appearance (tema app) · Editor (tema Monaco) · About                                                            |
@@ -87,6 +87,7 @@ menaruh sidebar-nya (section nav) di dalam tab.
 | `GET /api/projects/:id/documents`                          | daftar halaman Docmost                              |
 | `POST /api/projects/:id/documents`                         | buat halaman Docmost (judul, parent opsional)       |
 | `GET /api/projects/:id/documents/:pageId`                  | isi halaman (markdown)                              |
+| `PUT /api/projects/:id/documents/:pageId`                  | edit halaman Docmost (judul/isi)                    |
 | `GET /api/projects/:id/tickets`                            | daftar tiket Jira (JQL)                             |
 | `GET /api/projects/:id/tickets/:key`                       | detail tiket (deskripsi ADF → teks)                 |
 | `POST /api/projects/:id/tickets/:key/transition`           | pindah status tiket (drag Kanban)                   |

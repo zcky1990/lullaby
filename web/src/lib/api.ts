@@ -177,6 +177,15 @@ export const api = {
       `/api/projects/${projectId}/documents`,
       jsonInit("POST", payload),
     ),
+  updateDocument: (
+    projectId: string,
+    pageId: string,
+    payload: { title?: string; content: string },
+  ) =>
+    request<{ document: DocContent }>(
+      `/api/projects/${projectId}/documents/${encodeURIComponent(pageId)}`,
+      jsonInit("PUT", payload),
+    ),
   listTickets: (projectId: string) =>
     request<TicketsResponse>(`/api/projects/${projectId}/tickets`),
   getTicket: (projectId: string, key: string) =>

@@ -8,6 +8,7 @@ import {
   LlmProviderInput,
   ProjectInput,
   ProjectUpdateInput,
+  UpdateDocumentInput,
 } from "../config/schema.ts";
 import { appDataDir } from "../core/paths.ts";
 import { log } from "../core/logger.ts";
@@ -28,7 +29,12 @@ import {
   upsertIntegration,
 } from "../db/db.ts";
 import { listDirectory, readWorkspaceFile } from "../fs/workspace.ts";
-import { createDocument, getDocument, listDocuments } from "../integrations/docmost.ts";
+import {
+  createDocument,
+  getDocument,
+  listDocuments,
+  updateDocument,
+} from "../integrations/docmost.ts";
 import { getTicket, listTickets, transitionTicket } from "../integrations/jira.ts";
 import { chat } from "../integrations/llm.ts";
 import { testIntegration } from "../integrations/index.ts";
@@ -363,6 +369,34 @@ async function createDocumentHandler(projectId: string, req: Request): Promise<R
   }
 }
 
+async function updateDocumentHandler(
+  projectId: string,
+  pageId: string,
+  req: Request,
+): Promise<Response> {
+  const ctx = await integrationContext(projectId, "docmost");
+  if (!ctx) return json({ error: "not_configured" }, 400);
+  const parsedCfg = DocmostConfig.safeParse(ctx.config);
+  if (!parsedCfg.success) return json({ error: "invalid_config" }, 400);
+
+  const parsed = UpdateDocumentInput.safeParse(await readJson(req));
+  if (!parsed.success) {
+    return json({ error: "invalid_input", issues: parsed.error.issues }, 400);
+  }
+
+  try {
+    const document = await updateDocument(parsedCfg.data, {
+      pageId,
+      title: parsed.data.title,
+      content: parsed.data.content,
+    });
+    await record("document.updated", { projectId, id: pageId });
+    return json({ document });
+  } catch (error) {
+    return json({ error: (error as Error).message }, 502);
+  }
+}
+
 async function getDocumentHandler(projectId: string, pageId: string): Promise<Response> {
   const ctx = await integrationContext(projectId, "docmost");
   if (!ctx) return json({ error: "not_configured" }, 400);
@@ -481,8 +515,11 @@ export async function handleRequest(req: Request): Promise<Response> {
     }
 
     const documentItem = pathname.match(/^\/api\/projects\/([^/]+)\/documents\/([^/]+)$/);
-    if (documentItem && method === "GET") {
-      return await getDocumentHandler(documentItem[1], documentItem[2]);
+    if (documentItem) {
+      if (method === "GET") return await getDocumentHandler(documentItem[1], documentItem[2]);
+      if (method === "PUT") {
+        return await updateDocumentHandler(documentItem[1], documentItem[2], req);
+      }
     }
 
     const tickets = pathname.match(/^\/api\/projects\/([^/]+)\/tickets$/);

@@ -8,19 +8,31 @@ interface Props {
   content: string;
   theme: string;
   height?: string;
+  language?: string;
+  readOnly?: boolean;
+  onChange?: (value: string) => void;
 }
 
-export default function MonacoViewer({ path, content, theme, height = "100%" }: Props) {
+export default function MonacoViewer({
+  path,
+  content,
+  theme,
+  height = "100%",
+  language,
+  readOnly = true,
+  onChange,
+}: Props) {
   return (
     <Editor
       height={height}
       path={path}
-      language={languageForPath(path)}
+      language={language ?? languageForPath(path)}
       value={content}
       theme={theme}
       loading={<Skeleton className="h-full w-full rounded-none" />}
+      onChange={(value) => onChange?.(value ?? "")}
       options={{
-        readOnly: true,
+        readOnly,
         minimap: { enabled: false },
         fontSize: 13,
         scrollBeyondLastLine: false,
