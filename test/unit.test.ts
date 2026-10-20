@@ -1,5 +1,13 @@
 import { equal, throws } from "node:assert/strict";
-import { ChatInput, JiraConfig, LlmProviderInput, ProjectInput } from "../src/config/schema.ts";
+import {
+  ChatInput,
+  JiraConfig,
+  LlmProviderInput,
+  LocalTicketInput,
+  LocalTicketUpdateInput,
+  ProjectInput,
+} from "../src/config/schema.ts";
+import { htmlToAdf, htmlToPlainText, sanitizeHtml } from "../src/core/html.ts";
 import { diffLines } from "../src/server/diff.ts";
 
 Deno.test("ProjectInput trims and drops empty optional fields", () => {
@@ -100,4 +108,56 @@ Deno.test("ChatInput accepts workspace path attachments", () => {
       }],
     })
   );
+});
+
+Deno.test("LocalTicketInput validates status and defaults", () => {
+  const parsed = LocalTicketInput.parse({ title: " Bug dropdown " });
+  equal(parsed.title, "Bug dropdown");
+  equal(parsed.status, "Backlog");
+  equal(parsed.type, "Task");
+  throws(() => LocalTicketInput.parse({ title: "" }));
+  throws(() => LocalTicketInput.parse({ title: "x", status: "Doing" }));
+  const updated = LocalTicketUpdateInput.parse({ status: "Done" });
+  equal(updated.status, "Done");
+});
+
+Deno.test("sanitizeHtml strips scripts, handlers, and unsafe links", () => {
+  const html = sanitizeHtml(
+    '<p onclick="x()">Hi <b>there</b><script>alert(1)</script>' +
+      '<img src=x onerror=1><a href="javascript:alert(1)">x</a>' +
+      '<a href="https://example.com">y</a></p>',
+  );
+  equal(html.includes("<script"), false);
+  equal(html.includes("onclick"), false);
+  equal(html.includes("onerror"), false);
+  equal(html.includes("javascript:"), false);
+  equal(html.includes('href="https://example.com"'), true);
+  equal(html.startsWith("<p>"), true);
+});
+
+Deno.test("htmlToAdf converts headings, marks, and lists", () => {
+  const doc = htmlToAdf(
+    "<h2>Judul</h2><p>Halo <strong>dunia</strong></p><ul><li>Satu</li><li>Dua</li></ul>",
+  ) as {
+    type: string;
+    content: Array<{
+      type: string;
+      attrs?: { level?: number };
+      content?: Array<{ type: string; marks?: Array<{ type: string }> }>;
+    }>;
+  };
+  equal(doc.type, "doc");
+  equal(doc.content[0].type, "heading");
+  equal(doc.content[0].attrs?.level, 2);
+  equal(doc.content[1].type, "paragraph");
+  equal(doc.content[1].content?.[1].marks?.[0].type, "strong");
+  equal(doc.content[2].type, "bulletList");
+  equal(doc.content[2].content?.length, 2);
+});
+
+Deno.test("htmlToPlainText keeps block content", () => {
+  const text = htmlToPlainText("<p>Halo</p><ul><li>satu</li><li>dua</li></ul>");
+  equal(text.includes("Halo"), true);
+  equal(text.includes("• satu"), true);
+  equal(text.includes("• dua"), true);
 });

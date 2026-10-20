@@ -58,7 +58,7 @@ function buildBoard(tickets: TicketSummary[]): Board {
 interface Props {
   tickets: TicketSummary[];
   onMove: (key: string, fromStatus: string, toStatus: string) => Promise<void>;
-  onOpenDetail: (key: string) => void;
+  onOpenDetail: (ticket: TicketSummary) => void;
   onError: (message: string) => void;
 }
 
@@ -114,7 +114,7 @@ export function TicketKanban({ tickets, onMove, onOpenDetail, onError }: Props) 
                 <KanbanItem key={ticket.key} value={ticket.key}>
                   <KanbanItemHandle>
                     <Card
-                      onClick={() => onOpenDetail(ticket.key)}
+                      onClick={() => onOpenDetail(ticket)}
                       className="h-[108px] cursor-grab overflow-hidden shadow-sm active:cursor-grabbing"
                     >
                       <CardContent className="flex h-full flex-col justify-between py-3">
@@ -122,27 +122,43 @@ export function TicketKanban({ tickets, onMove, onOpenDetail, onError }: Props) 
                           <span className="font-mono text-xs text-muted-foreground">
                             {ticket.key}
                           </span>
-                          {ticket.priority && (
-                            <Badge variant="outline" className="h-5 px-1.5 text-[10px]">
-                              {ticket.priority}
-                            </Badge>
-                          )}
+                          <div className="flex items-center gap-1">
+                            {ticket.source === "local" && ticket.syncStatus !== "synced" && (
+                              <Badge
+                                variant={ticket.syncStatus === "error" ? "destructive" : "secondary"}
+                                className="h-5 px-1.5 text-[10px]"
+                              >
+                                {ticket.syncStatus === "error" ? "Sync error" : "Local"}
+                              </Badge>
+                            )}
+                            {ticket.priority && (
+                              <Badge variant="outline" className="h-5 px-1.5 text-[10px]">
+                                {ticket.priority}
+                              </Badge>
+                            )}
+                          </div>
                         </div>
                         <p className="line-clamp-2 text-sm">{ticket.summary}</p>
                         <div className="flex items-center justify-between text-xs text-muted-foreground">
                           <span className="truncate">{ticket.assignee ?? "Tanpa assignee"}</span>
-                          <a
-                            href={ticket.url}
-                            target="_blank"
-                            rel="noreferrer"
-                            onPointerDown={(e) => e.stopPropagation()}
-                            onMouseDown={(e) => e.stopPropagation()}
-                            onClick={(e) => e.stopPropagation()}
-                            className="inline-flex shrink-0 items-center gap-1 hover:text-foreground"
-                          >
-                            <ExternalLink className="size-3" />
-                            Jira
-                          </a>
+                          {ticket.url ? (
+                            <a
+                              href={ticket.url}
+                              target="_blank"
+                              rel="noreferrer"
+                              onPointerDown={(e) => e.stopPropagation()}
+                              onMouseDown={(e) => e.stopPropagation()}
+                              onClick={(e) => e.stopPropagation()}
+                              className="inline-flex shrink-0 items-center gap-1 hover:text-foreground"
+                            >
+                              <ExternalLink className="size-3" />
+                              Jira
+                            </a>
+                          ) : (
+                            <span className="inline-flex shrink-0 items-center gap-1">
+                              {ticket.source === "local" ? "Belum disync" : ""}
+                            </span>
+                          )}
                         </div>
                       </CardContent>
                     </Card>

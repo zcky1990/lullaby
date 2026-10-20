@@ -1,4 +1,5 @@
 import { DatabaseSync } from "node:sqlite";
+import { sanitizeHtml } from "../core/html.ts";
 import type { IntegrationKind, IntegrationMode } from "../config/schema.ts";
 import { dbPath, ensureAppDataDir } from "../core/paths.ts";
 
@@ -107,6 +108,24 @@ CREATE TABLE IF NOT EXISTS chat_messages (
   role       TEXT NOT NULL,
   content    TEXT NOT NULL,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS local_tickets (
+  id          TEXT PRIMARY KEY,
+  project_id  TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  title       TEXT NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
+  status      TEXT NOT NULL DEFAULT 'Backlog',
+  priority    TEXT,
+  type        TEXT NOT NULL DEFAULT 'Task',
+  assignee    TEXT,
+  labels      TEXT NOT NULL DEFAULT '[]',
+  jira_key    TEXT,
+  sync_status TEXT NOT NULL DEFAULT 'local',
+  sync_error  TEXT,
+  synced_at   TEXT,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
 );
 `;
 
@@ -476,4 +495,124 @@ export async function deleteChatSession(id: string): Promise<void> {
   const db = await getDb();
   db.prepare("DELETE FROM chat_messages WHERE session_id = ?").run(id);
   db.prepare("DELETE FROM chat_sessions WHERE id = ?").run(id);
+}
+
+export interface LocalTicketRow {
+  id: string;
+  project_id: string;
+  title: string;
+  description: string;
+  status: string;
+  priority: string | null;
+  type: string;
+  assignee: string | null;
+  labels: string;
+  jira_key: string | null;
+  sync_status: string;
+  sync_error: string | null;
+  synced_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface LocalTicketInput {
+  title: string;
+  description?: string;
+  status?: string;
+  priority?: string;
+  type?: string;
+  assignee?: string;
+  labels?: string[];
+}
+
+export async function createLocalTicket(
+  projectId: string,
+  input: LocalTicketInput,
+): Promise<LocalTicketRow> {
+  const db = await getDb();
+  const id = crypto.randomUUID();
+  db.prepare(
+    "INSERT INTO local_tickets (id, project_id, title, description, status, priority, type, assignee, labels) " +
+      "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+  ).run(
+    id,
+    projectId,
+    input.title,
+    sanitizeHtml(input.description ?? ""),
+    input.status ?? "Backlog",
+    input.priority ?? null,
+    input.type ?? "Task",
+    input.assignee ?? null,
+    JSON.stringify(input.labels ?? []),
+  );
+  return (await getLocalTicket(id))!;
+}
+
+export async function getLocalTicket(id: string): Promise<LocalTicketRow | null> {
+  const db = await getDb();
+  const row = db.prepare("SELECT * FROM local_tickets WHERE id = ?").get(id);
+  return (row as LocalTicketRow | undefined) ?? null;
+}
+
+export async function listLocalTickets(projectId: string): Promise<LocalTicketRow[]> {
+  const db = await getDb();
+  return rows<LocalTicketRow>(
+    db
+      .prepare("SELECT * FROM local_tickets WHERE project_id = ? ORDER BY created_at DESC")
+      .all(projectId),
+  );
+}
+
+export interface LocalTicketPatch {
+  title?: string;
+  description?: string;
+  status?: string;
+  priority?: string | null;
+  type?: string;
+  assignee?: string | null;
+  labels?: string[];
+}
+
+export async function updateLocalTicket(
+  id: string,
+  patch: LocalTicketPatch,
+): Promise<LocalTicketRow | null> {
+  const db = await getDb();
+  const existing = await getLocalTicket(id);
+  if (!existing) return null;
+  db.prepare(
+    "UPDATE local_tickets SET title = ?, description = ?, status = ?, priority = ?, type = ?, " +
+      "assignee = ?, labels = ?, updated_at = datetime('now') WHERE id = ?",
+  ).run(
+    patch.title ?? existing.title,
+    patch.description === undefined ? existing.description : sanitizeHtml(patch.description),
+    patch.status ?? existing.status,
+    patch.priority === undefined ? existing.priority : patch.priority,
+    patch.type ?? existing.type,
+    patch.assignee === undefined ? existing.assignee : patch.assignee,
+    patch.labels ? JSON.stringify(patch.labels) : existing.labels,
+    id,
+  );
+  return await getLocalTicket(id);
+}
+
+export async function deleteLocalTicket(id: string): Promise<void> {
+  const db = await getDb();
+  db.prepare("DELETE FROM local_tickets WHERE id = ?").run(id);
+}
+
+export async function markLocalTicketSynced(id: string, jiraKey: string): Promise<void> {
+  const db = await getDb();
+  db.prepare(
+    "UPDATE local_tickets SET jira_key = ?, sync_status = 'synced', sync_error = NULL, " +
+      "synced_at = datetime('now'), updated_at = datetime('now') WHERE id = ?",
+  ).run(jiraKey, id);
+}
+
+export async function markLocalTicketSyncError(id: string, message: string): Promise<void> {
+  const db = await getDb();
+  db.prepare(
+    "UPDATE local_tickets SET sync_status = 'error', sync_error = ?, updated_at = datetime('now') " +
+      "WHERE id = ?",
+  ).run(message, id);
 }

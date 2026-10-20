@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ExternalLink } from "lucide-react";
+import { ExternalLink, Upload } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -9,31 +9,61 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Spinner } from "@/components/ui/spinner";
 import { api, type TicketDetail } from "@/lib/api";
 
 interface Props {
   projectId: string | null;
   ticketKey: string | null;
+  localId?: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onChanged?: () => void;
 }
 
-export function TicketDetailDialog({ projectId, ticketKey, open, onOpenChange }: Props) {
+export function TicketDetailDialog({
+  projectId,
+  ticketKey,
+  localId,
+  open,
+  onOpenChange,
+  onChanged,
+}: Props) {
   const [ticket, setTicket] = useState<TicketDetail | null>(null);
   const [loading, setLoading] = useState(false);
+  const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState<string | undefined>();
+  const [syncError, setSyncError] = useState<string | undefined>();
 
   useEffect(() => {
-    if (!open || !projectId || !ticketKey) return;
+    if (!open || !projectId || (!ticketKey && !localId)) return;
     setLoading(true);
     setError(undefined);
+    setSyncError(undefined);
     setTicket(null);
-    api
-      .getTicket(projectId, ticketKey)
+    const load = localId
+      ? api.getLocalTicket(projectId, localId)
+      : api.getTicket(projectId, ticketKey!);
+    load
       .then((res) => setTicket(res.ticket))
       .catch((e) => setError((e as Error).message))
       .finally(() => setLoading(false));
-  }, [open, projectId, ticketKey]);
+  }, [open, projectId, ticketKey, localId]);
+
+  const syncNow = async () => {
+    if (!projectId || !localId) return;
+    setSyncing(true);
+    setSyncError(undefined);
+    try {
+      const res = await api.syncLocalTicket(projectId, localId);
+      setTicket(res.ticket);
+      onChanged?.();
+    } catch (e) {
+      setSyncError((e as Error).message);
+    } finally {
+      setSyncing(false);
+    }
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -43,6 +73,15 @@ export function TicketDetailDialog({ projectId, ticketKey, open, onOpenChange }:
             <span className="font-mono text-muted-foreground">{ticketKey}</span>
             {ticket?.status && <Badge>{ticket.status}</Badge>}
             {ticket?.priority && <Badge variant="outline">{ticket.priority}</Badge>}
+            {ticket?.source === "local" && (
+              <Badge variant={ticket.syncStatus === "synced" ? "secondary" : "outline"}>
+                {ticket.syncStatus === "synced"
+                  ? "Synced"
+                  : ticket.syncStatus === "error"
+                  ? "Sync error"
+                  : "Local"}
+              </Badge>
+            )}
           </DialogTitle>
           <DialogDescription>{ticket?.summary ?? "Memuat detail tiket…"}</DialogDescription>
         </DialogHeader>
@@ -73,17 +112,47 @@ export function TicketDetailDialog({ projectId, ticketKey, open, onOpenChange }:
               <p className="text-xs font-medium tracking-wider text-muted-foreground uppercase">
                 Deskripsi
               </p>
-              <pre className="max-h-72 overflow-auto rounded-md border bg-muted/40 p-3 font-sans text-sm whitespace-pre-wrap">
-                {ticket.description || "(tidak ada deskripsi)"}
-              </pre>
+              {ticket.description ? (
+                /<[a-z][\s\S]*>/i.test(ticket.description) ? (
+                  <div
+                    className="max-h-72 overflow-auto rounded-md border bg-muted/40 p-3 text-sm [&_a]:underline [&_blockquote]:border-l-2 [&_blockquote]:pl-3 [&_blockquote]:text-muted-foreground [&_code]:font-mono [&_h1]:mb-1 [&_h1]:text-lg [&_h1]:font-semibold [&_h2]:mb-1 [&_h2]:text-base [&_h2]:font-semibold [&_h3]:mb-1 [&_h3]:font-semibold [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:mb-2 [&_p]:last:mb-0 [&_pre]:overflow-auto [&_pre]:rounded [&_pre]:bg-background [&_pre]:p-2 [&_pre]:font-mono [&_ul]:list-disc [&_ul]:pl-5"
+                    dangerouslySetInnerHTML={{ __html: ticket.description }}
+                  />
+                ) : (
+                  <pre className="max-h-72 overflow-auto rounded-md border bg-muted/40 p-3 font-sans text-sm whitespace-pre-wrap">
+                    {ticket.description}
+                  </pre>
+                )
+              ) : (
+                <p className="text-sm text-muted-foreground">(tidak ada deskripsi)</p>
+              )}
             </div>
 
-            <Button asChild variant="outline" size="sm" data-icon="inline-start">
-              <a href={ticket.url} target="_blank" rel="noreferrer">
-                <ExternalLink />
-                Buka di Jira
-              </a>
-            </Button>
+            {ticket.source === "local" && ticket.syncStatus !== "synced" ? (
+              <div className="flex flex-col gap-2">
+                {ticket.syncError ? (
+                  <p className="text-xs text-destructive">{ticket.syncError}</p>
+                ) : null}
+                {syncError ? <p className="text-xs text-destructive">{syncError}</p> : null}
+                <Button
+                  size="sm"
+                  onClick={syncNow}
+                  disabled={syncing}
+                  data-icon="inline-start"
+                  className="self-start"
+                >
+                  {syncing ? <Spinner /> : <Upload />}
+                  Sync ke Jira
+                </Button>
+              </div>
+            ) : ticket.url ? (
+              <Button asChild variant="outline" size="sm" data-icon="inline-start" className="self-start">
+                <a href={ticket.url} target="_blank" rel="noreferrer">
+                  <ExternalLink />
+                  Buka di Jira
+                </a>
+              </Button>
+            ) : null}
           </div>
         )}
       </DialogContent>

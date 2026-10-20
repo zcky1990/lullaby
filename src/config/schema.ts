@@ -96,6 +96,26 @@ export const ChatApproveInput = z.object({
 });
 export type ChatApproveInput = z.infer<typeof ChatApproveInput>;
 
+export const LocalTicketStatus = z.enum(["Backlog", "To Do", "In Progress", "Test", "Done"]);
+export type LocalTicketStatus = z.infer<typeof LocalTicketStatus>;
+
+export const LocalTicketPriority = z.enum(["Low", "Medium", "High", "Urgent"]);
+export const LocalTicketType = z.enum(["Task", "Bug", "Story"]);
+
+export const LocalTicketInput = z.object({
+  title: z.string().trim().min(1).max(200),
+  description: z.string().max(20_000).optional(),
+  status: LocalTicketStatus.default("Backlog"),
+  priority: LocalTicketPriority.optional(),
+  type: LocalTicketType.default("Task"),
+  assignee: z.string().trim().max(120).optional(),
+  labels: z.array(z.string().trim().min(1).max(50)).max(20).optional(),
+});
+export type LocalTicketInput = z.infer<typeof LocalTicketInput>;
+
+export const LocalTicketUpdateInput = LocalTicketInput.partial();
+export type LocalTicketUpdateInput = z.infer<typeof LocalTicketUpdateInput>;
+
 export const CreateDocumentInput = z.object({
   title: z.string().trim().min(1).max(200),
   parentPageId: z.string().trim().max(200).optional(),

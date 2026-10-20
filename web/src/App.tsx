@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, lazy, Suspense } from "react";
-import { Inbox, MessageSquare, Pencil, RefreshCw, Save } from "lucide-react";
+import { Inbox, MessageSquare, Pencil, Plus, RefreshCw, Save } from "lucide-react";
 import type { ActivityEvent } from "@/components/ActivityFeed";
 import { ActivityBar, type Menu } from "@/components/ActivityBar";
 import { ChatSidebar } from "@/components/ChatSidebar";
@@ -27,6 +27,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { type EditorTab, type TabKind, TabsBar } from "@/components/TabsBar";
+import { TicketCreateDialog } from "@/components/TicketCreateDialog";
 import { TicketDetailDialog } from "@/components/TicketDetailDialog";
 import { TicketKanban } from "@/components/TicketKanban";
 import { useTheme } from "@/components/ThemeProvider";
@@ -107,8 +108,9 @@ export default function App() {
   const [ticketsError, setTicketsError] = useState<string | undefined>();
   const [ticketsLoading, setTicketsLoading] = useState(false);
   const [assigneeFilter, setAssigneeFilter] = useState<string>("all");
-  const [detailKey, setDetailKey] = useState<string | null>(null);
+  const [detailTicket, setDetailTicket] = useState<TicketSummary | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
+  const [createTicketOpen, setCreateTicketOpen] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
   const [panelWidth, setPanelWidth] = useState(readPanelWidth);
 
@@ -310,7 +312,8 @@ export default function App() {
     setAddingProvider(false);
     setAssigneeFilter("all");
     setDetailOpen(false);
-    setDetailKey(null);
+    setDetailTicket(null);
+    setCreateTicketOpen(false);
     setSettingsSection("workspace");
     const workspaceTab: EditorTab = {
       id: `workspace:${currentId}`,
@@ -437,7 +440,12 @@ export default function App() {
 
   const moveTicket = async (key: string, _from: string, to: string) => {
     if (!currentId) return;
-    await api.transitionTicket(currentId, key, to);
+    const ticket = tickets.find((item) => item.key === key);
+    if (ticket?.source === "local" && ticket.localId) {
+      await api.updateLocalTicket(currentId, ticket.localId, { status: to });
+    } else {
+      await api.transitionTicket(currentId, key, to);
+    }
     await loadTickets(currentId);
   };
 
@@ -479,10 +487,11 @@ export default function App() {
               .map((ticket) => `${ticket.key}.${ticket.status ?? ""}`)
               .join(",")}`}
             onMove={moveTicket}
-            onOpenDetail={(key) => {
-              setDetailKey(key);
+            onOpenDetail={(ticket) => {
+              setDetailTicket(ticket);
               setDetailOpen(true);
             }}
+            onCreate={() => setCreateTicketOpen(true)}
             onError={setTicketsError}
           />
         );
@@ -612,14 +621,24 @@ export default function App() {
           providers={detail?.llmProviders ?? []}
           onClose={() => setChatOpen(false)}
           onOpenFile={(path) => void openFile(path, true)}
+          onTicketsChanged={() => currentId && loadTickets(currentId)}
         />
       )}
 
       <TicketDetailDialog
         projectId={currentId}
-        ticketKey={detailKey}
+        ticketKey={detailTicket?.key ?? null}
+        localId={detailTicket?.localId}
         open={detailOpen}
         onOpenChange={setDetailOpen}
+        onChanged={() => currentId && loadTickets(currentId)}
+      />
+
+      <TicketCreateDialog
+        projectId={currentId}
+        open={createTicketOpen}
+        onOpenChange={setCreateTicketOpen}
+        onCreated={() => currentId && loadTickets(currentId)}
       />
     </div>
   );
@@ -884,6 +903,7 @@ function TicketTab({
   assigneeFilter,
   onFilter,
   onRefresh,
+  onCreate,
   boardKey,
   onMove,
   onOpenDetail,
@@ -899,16 +919,22 @@ function TicketTab({
   assigneeFilter: string;
   onFilter: (value: string) => void;
   onRefresh: () => void;
+  onCreate: () => void;
   boardKey: string;
   onMove: (key: string, from: string, to: string) => Promise<void>;
-  onOpenDetail: (key: string) => void;
+  onOpenDetail: (ticket: TicketSummary) => void;
   onError: (message: string) => void;
 }) {
   if (!hasProject) return <Empty text="Pilih project dulu di menu Workspace." />;
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-end gap-2">
+      <div className="flex items-center justify-between gap-2">
+        <Button size="sm" onClick={onCreate} data-icon="inline-start">
+          <Plus />
+          Tiket baru
+        </Button>
+        <div className="flex items-center gap-2">
         <Select value={assigneeFilter} onValueChange={onFilter}>
           <SelectTrigger size="sm" className="w-56" aria-label="Filter assignee">
             <SelectValue placeholder="Semua user" />
@@ -935,14 +961,19 @@ function TicketTab({
           {loading ? <Spinner /> : <RefreshCw />}
           Refresh
         </Button>
+        </div>
       </div>
+
+      {error && tickets.length > 0 ? (
+        <p className="text-xs text-destructive">Jira: {error}</p>
+      ) : null}
 
       {loading ? (
         <Empty text="Memuat tiket…" />
-      ) : error ? (
+      ) : error && tickets.length === 0 ? (
         <Empty text={error} />
       ) : tickets.length === 0 ? (
-        <Empty text="Belum ada tiket. Periksa integrasi Jira di Project Settings." />
+        <Empty text="Belum ada tiket. Buat tiket lokal (bisa disync ke Jira nanti) atau periksa integrasi Jira." />
       ) : visibleTickets.length === 0 ? (
         <Empty
           text={`Tidak ada tiket untuk "${assigneeFilter === "none" ? "tanpa assignee" : assigneeFilter}".`}

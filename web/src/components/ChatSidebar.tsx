@@ -106,9 +106,16 @@ interface Props {
   providers: LlmProvider[];
   onClose: () => void;
   onOpenFile?: (path: string) => void;
+  onTicketsChanged?: () => void;
 }
 
-export function ChatSidebar({ projectId, providers, onClose, onOpenFile }: Props) {
+export function ChatSidebar({
+  projectId,
+  providers,
+  onClose,
+  onOpenFile,
+  onTicketsChanged,
+}: Props) {
   const [providerId, setProviderId] = useState(providers[0]?.id ?? "");
   const [variant, setVariant] = useState("medium");
   const [sessionId, setSessionId] = useState<string | null>(null);
@@ -198,6 +205,9 @@ export function ChatSidebar({ projectId, providers, onClose, onOpenFile }: Props
   }, []);
 
   const handleResponse = (response: ChatResponse) => {
+    if (response.status !== "error" && response.createdTickets?.length) {
+      onTicketsChanged?.();
+    }
     if (response.status === "done") {
       setPending(null);
       if (response.sessionId) setSessionId(response.sessionId);
@@ -414,7 +424,7 @@ export function ChatSidebar({ projectId, providers, onClose, onOpenFile }: Props
               <div
                 key={index}
                 className={cn(
-                  "text-sm",
+                  "text-md",
                   entry.role === "user"
                     ? "max-w-[85%] self-end rounded-lg border border-muted-foreground/10 px-3 py-2 text-primary"
                     : "w-full self-start",

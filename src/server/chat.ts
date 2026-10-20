@@ -2,6 +2,7 @@ import type { ChatChange, LlmProviderRow } from "../db/db.ts";
 import {
   appendChatMessage,
   createChatSession,
+  createLocalTicket,
   getChatSession,
   listChatMessages,
 } from "../db/db.ts";
@@ -48,14 +49,27 @@ export interface VisibleMessage {
   attachments?: ChatAttachment[];
 }
 
+export interface CreatedTicket {
+  id: string;
+  key: string;
+  title: string;
+}
+
 export type ChatResponse =
-  | { status: "done"; message: string; sessionId: string; changes: ChatChange[] }
+  | {
+    status: "done";
+    message: string;
+    sessionId: string;
+    changes: ChatChange[];
+    createdTickets: CreatedTicket[];
+  }
   | {
     status: "approval_required";
     runId: string;
     pending: PendingApproval[];
     sessionId: string;
     changes: ChatChange[];
+    createdTickets: CreatedTicket[];
   }
   | { status: "error"; error: string; sessionId?: string };
 
@@ -73,13 +87,15 @@ const SYSTEM_PROMPT =
   "You are an assistant inside a developer workspace. You can inspect and edit files in the " +
   "workspace using the provided tools. Use list_files/read_file to inspect before editing. " +
   "Use write_file to create or overwrite a file with full content. Keep edits minimal and " +
-  "focused. Never touch files outside the workspace. When the task is complete, reply with a " +
-  "short summary (no tool call).";
+  "focused. Never touch files outside the workspace. Use create_ticket to record a ticket in " +
+  "the project's LOCAL backlog (it is not synced to Jira until the user syncs it manually; " +
+  "never claim it already exists in Jira). When the task is complete, reply with a short " +
+  "summary (no tool call).";
 
 function systemPrompt(workspace: string | null): string {
   if (!workspace) {
     return `${SYSTEM_PROMPT} No workspace is configured for this project, so file tools are ` +
-      "unavailable; reply without tool calls.";
+      "unavailable; you can still use create_ticket to record tickets locally.";
   }
   return `${SYSTEM_PROMPT}\nThe workspace root is: ${workspace}. All tool paths are relative ` +
     'to this root (for example "src/index.ts"). Do not use absolute paths or "..".';
@@ -117,6 +133,40 @@ const TOOL_DEFS: ToolDef[] = [
   },
 ];
 
+const TICKET_TOOL: ToolDef = {
+  name: "create_ticket",
+  description:
+    "Create a ticket in the project's local backlog. It is stored locally and NOT synced to " +
+    "Jira; the user can sync it manually later.",
+  parameters: {
+    type: "object",
+    properties: {
+      title: { type: "string", description: "Short ticket title." },
+      description: { type: "string", description: "Detailed ticket description." },
+      status: {
+        type: "string",
+        enum: ["Backlog", "To Do", "In Progress", "Test", "Done"],
+      },
+      priority: { type: "string", enum: ["Low", "Medium", "High", "Urgent"] },
+      type: { type: "string", enum: ["Task", "Bug", "Story"] },
+    },
+    required: ["title"],
+  },
+};
+
+const TICKET_STATUSES = ["Backlog", "To Do", "In Progress", "Test", "Done"] as const;
+const TICKET_PRIORITIES = ["Low", "Medium", "High", "Urgent"] as const;
+const TICKET_TYPES = ["Task", "Bug", "Story"] as const;
+
+function pickTicketValue<T extends string>(
+  options: readonly T[],
+  value: unknown,
+  fallback: T,
+): T {
+  const wanted = String(value ?? "").toLowerCase();
+  return options.find((option) => option.toLowerCase() === wanted) ?? fallback;
+}
+
 const WRITE_TOOLS = new Set(["write_file"]);
 
 interface Run {
@@ -131,6 +181,8 @@ interface Run {
   decisions: Map<string, "once" | "always" | "deny">;
   alwaysAllow: Set<string>;
   changes: ChatChange[];
+  projectId: string;
+  createdTickets: CreatedTicket[];
   createdAt: number;
 }
 
@@ -144,7 +196,7 @@ function pruneRuns(): void {
 }
 
 function toolsFor(workspace: string | null): ToolDef[] {
-  return workspace ? TOOL_DEFS : [];
+  return workspace ? [TICKET_TOOL, ...TOOL_DEFS] : [TICKET_TOOL];
 }
 
 function summarize(call: ToolCall): string {
@@ -180,8 +232,28 @@ function parseImageDataUrl(data: string): { mediaType: string; base64: string } 
   return { mediaType: match[1].toLowerCase(), base64: match[2].replace(/\s+/g, "") };
 }
 
-async function executeTool(workspace: string, call: ToolCall): Promise<string> {
+async function executeTool(run: Run, call: ToolCall): Promise<string> {
   const args = safeParse(call.arguments);
+  if (call.name === "create_ticket") {
+    const title = String(args.title ?? "").trim().slice(0, 200);
+    if (!title) return "Error: title is required.";
+    const ticket = await createLocalTicket(run.projectId, {
+      title,
+      description: String(args.description ?? "").slice(0, 8000),
+      status: pickTicketValue(TICKET_STATUSES, args.status, "Backlog"),
+      priority: args.priority
+        ? pickTicketValue(TICKET_PRIORITIES, args.priority, "Medium")
+        : undefined,
+      type: pickTicketValue(TICKET_TYPES, args.type, "Task"),
+    });
+    const key = `LOCAL-${ticket.id.slice(0, 6).toUpperCase()}`;
+    run.createdTickets.push({ id: ticket.id, key, title: ticket.title });
+    return `Created local ticket ${key}: "${ticket.title}" (status ${ticket.status}). ` +
+      "It is stored locally and NOT synced to Jira yet.";
+  }
+
+  const workspace = run.workspace;
+  if (!workspace) return "No workspace configured.";
   const path = typeof args.path === "string" ? args.path : "";
   if (call.name === "list_files") {
     const listing = await listDirectory(workspace, path);
@@ -324,10 +396,10 @@ async function executeBatch(run: Run, batch: ToolCall[]): Promise<void> {
             decision === "always";
           result = allowed ? await writeFileWithChange(run, call) : "Ditolak oleh user.";
         }
-      } else if (!run.workspace) {
+      } else if (!run.workspace && call.name !== "create_ticket") {
         result = "No workspace configured.";
       } else {
-        result = await executeTool(run.workspace, call);
+        result = await executeTool(run, call);
       }
     } catch (error) {
       result = `Error: ${(error as Error).message}`;
@@ -558,6 +630,7 @@ async function advance(run: Run): Promise<ChatResponse> {
           message: response.text,
           sessionId: run.sessionId,
           changes: run.changes,
+          createdTickets: run.createdTickets,
         };
       }
 
@@ -579,6 +652,7 @@ async function advance(run: Run): Promise<ChatResponse> {
           runId: run.id,
           sessionId: run.sessionId,
           changes: run.changes,
+          createdTickets: run.createdTickets,
           pending: needsApproval.map((call) => ({
             id: call.id,
             tool: call.name,
@@ -592,7 +666,13 @@ async function advance(run: Run): Promise<ChatResponse> {
     const message = "(berhenti: batas langkah tercapai)";
     await appendChatMessage(run.sessionId, "assistant", message, run.changes);
     runs.delete(run.id);
-    return { status: "done", message, sessionId: run.sessionId, changes: run.changes };
+    return {
+      status: "done",
+      message,
+      sessionId: run.sessionId,
+      changes: run.changes,
+      createdTickets: run.createdTickets,
+    };
   } catch (error) {
     runs.delete(run.id);
     return { status: "error", error: (error as Error).message, sessionId: run.sessionId };
@@ -654,6 +734,8 @@ export async function startChat(
     decisions: new Map(),
     alwaysAllow: new Set(),
     changes: [],
+    projectId,
+    createdTickets: [],
     createdAt: Date.now(),
   };
   runs.set(run.id, run);
@@ -682,6 +764,7 @@ export async function approveChat(
       runId: run.id,
       sessionId: run.sessionId,
       changes: run.changes,
+      createdTickets: run.createdTickets,
       pending: run.pending.map((call) => ({
         id: call.id,
         tool: call.name,

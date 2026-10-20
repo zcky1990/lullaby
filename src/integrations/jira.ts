@@ -1,4 +1,5 @@
 import type { JiraConfig } from "../config/schema.ts";
+import { htmlToAdf, htmlToPlainText } from "../core/html.ts";
 import { request, type TestResult, truncate } from "./http.ts";
 
 type ApiVersion = "2" | "3";
@@ -303,4 +304,50 @@ export async function listTickets(cfg: JiraConfig): Promise<TicketSummary[]> {
     }
   }
   throw new Error(`Gagal memuat tiket. ${statusMessage(last.status)} ${truncate(last.text, 200)}`);
+}
+
+export interface CreateTicketInput {
+  summary: string;
+  description?: string;
+  type?: string;
+  priority?: string;
+  labels?: string[];
+}
+
+export async function createTicket(
+  cfg: JiraConfig,
+  input: CreateTicketInput,
+): Promise<{ key: string; url: string }> {
+  const auth = authHeader(cfg);
+  if (!auth) throw new Error("Kredensial Jira belum lengkap: butuh API token.");
+  if (!cfg.projectKey) throw new Error("Project Key Jira belum diisi.");
+
+  const version = preferredVersion(cfg);
+  const fields: Record<string, unknown> = {
+    project: { key: cfg.projectKey },
+    summary: input.summary,
+    issuetype: { name: input.type || "Task" },
+  };
+  if (input.description) {
+    fields.description = version === "3"
+      ? htmlToAdf(input.description)
+      : htmlToPlainText(input.description);
+  }
+  if (input.priority) fields.priority = { name: input.priority };
+  if (input.labels?.length) fields.labels = input.labels;
+
+  const res = await request(`${jiraApiBase(cfg, version)}/issue`, {
+    method: "POST",
+    headers: {
+      Authorization: auth,
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ fields }),
+  });
+  if (!res.ok) throw new Error(`${statusMessage(res.status)} ${truncate(res.text, 200)}`);
+  const json = JSON.parse(res.text || "{}") as { key?: string };
+  const key = String(json.key ?? "");
+  if (!key) throw new Error("Jira tidak mengembalikan key tiket.");
+  return { key, url: `${normalizeBase(cfg.baseUrl)}/browse/${key}` };
 }

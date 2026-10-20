@@ -7,6 +7,8 @@ import {
   type IntegrationKind,
   JiraConfig,
   LlmProviderInput,
+  LocalTicketInput,
+  LocalTicketUpdateInput,
   ProjectInput,
   ProjectUpdateInput,
   UpdateDocumentInput,
@@ -16,20 +18,28 @@ import { log } from "../core/logger.ts";
 import {
   appendEvent,
   createLlmProvider,
+  createLocalTicket,
   createProject,
   deleteChatSession,
   deleteLlmProvider,
+  deleteLocalTicket,
   getChatSession,
   getIntegration,
   getLlmProvider,
+  getLocalTicket,
   getProject,
   listChatMessages,
   listChatSessions,
   listIntegrations,
   listLlmProviders,
+  listLocalTickets,
   listProjects,
+  type LocalTicketRow,
+  markLocalTicketSynced,
+  markLocalTicketSyncError,
   recentEvents,
   updateLlmProvider,
+  updateLocalTicket,
   updateProject,
   upsertIntegration,
 } from "../db/db.ts";
@@ -40,7 +50,7 @@ import {
   listDocuments,
   updateDocument,
 } from "../integrations/docmost.ts";
-import { getTicket, listTickets, transitionTicket } from "../integrations/jira.ts";
+import { createTicket, getTicket, listTickets, transitionTicket } from "../integrations/jira.ts";
 import { approveChat, startChat, type VisibleMessage } from "./chat.ts";
 import { testIntegration } from "../integrations/index.ts";
 import { publish } from "./bus.ts";
@@ -475,20 +485,173 @@ async function getDocumentHandler(projectId: string, pageId: string): Promise<Re
   }
 }
 
+function localLabels(row: LocalTicketRow): string[] {
+  try {
+    const parsed = JSON.parse(row.labels);
+    return Array.isArray(parsed) ? parsed.map(String) : [];
+  } catch {
+    return [];
+  }
+}
+
+function localTicketKey(row: LocalTicketRow): string {
+  return row.jira_key ?? `LOCAL-${row.id.slice(0, 6).toUpperCase()}`;
+}
+
+function localTicketUrl(row: LocalTicketRow, baseUrl?: string): string {
+  if (!row.jira_key || !baseUrl) return "";
+  return `${baseUrl.replace(/\/+$/, "")}/browse/${row.jira_key}`;
+}
+
+function localTicketSummary(row: LocalTicketRow, baseUrl?: string) {
+  return {
+    key: localTicketKey(row),
+    summary: row.title,
+    status: row.status,
+    assignee: row.assignee ?? undefined,
+    priority: row.priority ?? undefined,
+    url: localTicketUrl(row, baseUrl),
+    source: "local" as const,
+    localId: row.id,
+    syncStatus: row.sync_status,
+    syncError: row.sync_error ?? undefined,
+  };
+}
+
+function localTicketDetail(row: LocalTicketRow, baseUrl?: string) {
+  return {
+    key: localTicketKey(row),
+    summary: row.title,
+    status: row.status,
+    priority: row.priority ?? undefined,
+    assignee: row.assignee ?? undefined,
+    reporter: undefined,
+    type: row.type,
+    created: row.created_at,
+    updated: row.updated_at,
+    labels: localLabels(row),
+    description: row.description,
+    url: localTicketUrl(row, baseUrl),
+    source: "local" as const,
+    localId: row.id,
+    syncStatus: row.sync_status,
+    syncError: row.sync_error ?? undefined,
+  };
+}
+
 async function listTicketsHandler(projectId: string): Promise<Response> {
   const project = await getProject(projectId);
   if (!project) return json({ error: "project_not_found" }, 404);
+
+  const locals = await listLocalTickets(projectId);
   const ctx = await integrationContext(projectId, "jira");
-  if (!ctx) return json({ configured: false, tickets: [] });
+  if (!ctx) {
+    return json({ configured: false, tickets: locals.map((row) => localTicketSummary(row)) });
+  }
 
   const parsed = JiraConfig.safeParse(ctx.config);
   if (!parsed.success) {
-    return json({ configured: true, error: "Konfigurasi Jira tidak valid.", tickets: [] });
+    return json({
+      configured: true,
+      error: "Konfigurasi Jira tidak valid.",
+      tickets: locals.map((row) => localTicketSummary(row)),
+    });
   }
+
   try {
-    return json({ configured: true, tickets: await listTickets(parsed.data) });
+    const remote = await listTickets(parsed.data);
+    const remoteKeys = new Set(remote.map((ticket) => ticket.key));
+    const pending = locals
+      .filter((row) => !row.jira_key || !remoteKeys.has(row.jira_key))
+      .map((row) => localTicketSummary(row, parsed.data.baseUrl));
+    return json({ configured: true, tickets: [...pending, ...remote] });
   } catch (error) {
-    return json({ configured: true, error: (error as Error).message, tickets: [] });
+    return json({
+      configured: true,
+      error: (error as Error).message,
+      tickets: locals.map((row) => localTicketSummary(row, parsed.data.baseUrl)),
+    });
+  }
+}
+
+async function createLocalTicketHandler(projectId: string, req: Request): Promise<Response> {
+  const project = await getProject(projectId);
+  if (!project) return json({ error: "project_not_found" }, 404);
+
+  const parsed = LocalTicketInput.safeParse(await readJson(req));
+  if (!parsed.success) {
+    return json({ error: "invalid_input", issues: parsed.error.issues }, 400);
+  }
+  const ticket = await createLocalTicket(projectId, parsed.data);
+  await record("ticket.created_local", { projectId, id: ticket.id });
+  return json({ ticket: localTicketDetail(ticket) }, 201);
+}
+
+async function getLocalTicketHandler(projectId: string, id: string): Promise<Response> {
+  const ticket = await getLocalTicket(id);
+  if (!ticket || ticket.project_id !== projectId) {
+    return json({ error: "ticket_not_found" }, 404);
+  }
+  return json({ ticket: localTicketDetail(ticket) });
+}
+
+async function updateLocalTicketHandler(
+  projectId: string,
+  id: string,
+  req: Request,
+): Promise<Response> {
+  const ticket = await getLocalTicket(id);
+  if (!ticket || ticket.project_id !== projectId) {
+    return json({ error: "ticket_not_found" }, 404);
+  }
+  const parsed = LocalTicketUpdateInput.safeParse(await readJson(req));
+  if (!parsed.success) {
+    return json({ error: "invalid_input", issues: parsed.error.issues }, 400);
+  }
+  const updated = await updateLocalTicket(id, parsed.data);
+  return json({ ticket: updated ? localTicketDetail(updated) : null });
+}
+
+async function deleteLocalTicketHandler(projectId: string, id: string): Promise<Response> {
+  const ticket = await getLocalTicket(id);
+  if (!ticket || ticket.project_id !== projectId) {
+    return json({ error: "ticket_not_found" }, 404);
+  }
+  await deleteLocalTicket(id);
+  await record("ticket.deleted_local", { projectId, id });
+  return json({ ok: true });
+}
+
+async function syncLocalTicketHandler(projectId: string, id: string): Promise<Response> {
+  const ticket = await getLocalTicket(id);
+  if (!ticket || ticket.project_id !== projectId) {
+    return json({ error: "ticket_not_found" }, 404);
+  }
+  if (ticket.jira_key) {
+    return json({ ticket: localTicketDetail(ticket) });
+  }
+
+  const ctx = await integrationContext(projectId, "jira");
+  if (!ctx) return json({ error: "Integrasi Jira belum dikonfigurasi." }, 400);
+  const parsed = JiraConfig.safeParse(ctx.config);
+  if (!parsed.success) return json({ error: "Konfigurasi Jira tidak valid." }, 400);
+
+  try {
+    const created = await createTicket(parsed.data, {
+      summary: ticket.title,
+      description: ticket.description,
+      type: ticket.type,
+      priority: ticket.priority ?? undefined,
+      labels: localLabels(ticket),
+    });
+    await markLocalTicketSynced(ticket.id, created.key);
+    const updated = (await getLocalTicket(ticket.id))!;
+    await record("ticket.synced", { projectId, id, key: created.key });
+    return json({ ticket: localTicketDetail(updated, parsed.data.baseUrl) });
+  } catch (error) {
+    const message = (error as Error).message;
+    await markLocalTicketSyncError(ticket.id, message);
+    return json({ error: message }, 502);
   }
 }
 
@@ -584,6 +747,31 @@ export async function handleRequest(req: Request): Promise<Response> {
       if (method === "GET") return await getDocumentHandler(documentItem[1], documentItem[2]);
       if (method === "PUT") {
         return await updateDocumentHandler(documentItem[1], documentItem[2], req);
+      }
+    }
+
+    const localTicketSync = pathname.match(
+      /^\/api\/projects\/([^/]+)\/local-tickets\/([^/]+)\/sync$/,
+    );
+    if (localTicketSync && method === "POST") {
+      return await syncLocalTicketHandler(localTicketSync[1], localTicketSync[2]);
+    }
+
+    const localTickets = pathname.match(/^\/api\/projects\/([^/]+)\/local-tickets$/);
+    if (localTickets && method === "POST") {
+      return await createLocalTicketHandler(localTickets[1], req);
+    }
+
+    const localTicketItem = pathname.match(/^\/api\/projects\/([^/]+)\/local-tickets\/([^/]+)$/);
+    if (localTicketItem) {
+      if (method === "GET") {
+        return await getLocalTicketHandler(localTicketItem[1], localTicketItem[2]);
+      }
+      if (method === "PATCH" || method === "PUT") {
+        return await updateLocalTicketHandler(localTicketItem[1], localTicketItem[2], req);
+      }
+      if (method === "DELETE") {
+        return await deleteLocalTicketHandler(localTicketItem[1], localTicketItem[2]);
       }
     }
 

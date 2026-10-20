@@ -62,6 +62,10 @@ export interface TicketSummary {
   assignee?: string;
   priority?: string;
   url: string;
+  source?: "local" | "jira";
+  localId?: string;
+  syncStatus?: "local" | "synced" | "error";
+  syncError?: string;
 }
 
 export interface TicketDetail {
@@ -77,6 +81,20 @@ export interface TicketDetail {
   labels: string[];
   description: string;
   url: string;
+  source?: "local" | "jira";
+  localId?: string;
+  syncStatus?: "local" | "synced" | "error";
+  syncError?: string;
+}
+
+export interface LocalTicketPayload {
+  title: string;
+  description?: string;
+  status?: string;
+  priority?: string;
+  type?: string;
+  assignee?: string;
+  labels?: string[];
 }
 
 export interface ChatPending {
@@ -101,14 +119,27 @@ export interface FileChange {
   removed: number;
 }
 
+export interface CreatedTicket {
+  id: string;
+  key: string;
+  title: string;
+}
+
 export type ChatResponse =
-  | { status: "done"; message: string; sessionId: string; changes: FileChange[] }
+  | {
+    status: "done";
+    message: string;
+    sessionId: string;
+    changes: FileChange[];
+    createdTickets: CreatedTicket[];
+  }
   | {
     status: "approval_required";
     runId: string;
     pending: ChatPending[];
     sessionId: string;
     changes: FileChange[];
+    createdTickets: CreatedTicket[];
   }
   | { status: "error"; error: string; sessionId?: string };
 
@@ -244,6 +275,30 @@ export const api = {
     request<{ ok: boolean }>(
       `/api/projects/${projectId}/tickets/${encodeURIComponent(key)}/transition`,
       jsonInit("POST", { status }),
+    ),
+  createLocalTicket: (projectId: string, payload: LocalTicketPayload) =>
+    request<{ ticket: TicketDetail }>(
+      `/api/projects/${projectId}/local-tickets`,
+      jsonInit("POST", payload),
+    ),
+  getLocalTicket: (projectId: string, id: string) =>
+    request<{ ticket: TicketDetail }>(
+      `/api/projects/${projectId}/local-tickets/${encodeURIComponent(id)}`,
+    ),
+  updateLocalTicket: (projectId: string, id: string, payload: Partial<LocalTicketPayload>) =>
+    request<{ ticket: TicketDetail }>(
+      `/api/projects/${projectId}/local-tickets/${encodeURIComponent(id)}`,
+      jsonInit("PATCH", payload),
+    ),
+  deleteLocalTicket: (projectId: string, id: string) =>
+    request<{ ok: boolean }>(
+      `/api/projects/${projectId}/local-tickets/${encodeURIComponent(id)}`,
+      { method: "DELETE" },
+    ),
+  syncLocalTicket: (projectId: string, id: string) =>
+    request<{ ticket: TicketDetail }>(
+      `/api/projects/${projectId}/local-tickets/${encodeURIComponent(id)}/sync`,
+      { method: "POST" },
     ),
   saveIntegration: (projectId: string, payload: IntegrationPayload) =>
     request<{ integration: Integration }>(

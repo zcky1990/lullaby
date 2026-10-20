@@ -54,14 +54,14 @@ setiap kali UI berubah. Task `dev`/`desktop`/`start` sudah menjalankannya otomat
 Shell ala VSCode: **activity bar** (kiri) + **panel** terpisah (Workspace/Explorer/Document) +
 **area konten bertab**. Memilih file/dokumen/menu membuka **tab** di area konten.
 
-| Menu                 | Muncul bila             | Isi                                                                                                                           |
-| -------------------- | ----------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| **Workspace**        | selalu                  | daftar/buat project (nama + workspace folder opsional), overview project                                                      |
-| **Explorer**         | project punya workspace | file tree folder workspace + viewer kode **Monaco** (read-only)                                                               |
-| **Document**         | selalu                  | tree halaman Docmost (collapsible, lazy children, **+** tambah) + render **markdown** + **Edit** (judul/isi via Monaco)       |
-| **Ticket**           | selalu                  | **Kanban** tiket Jira full-width (kolom = status, drag = transition); klik card → detail; filter assignee + refresh di header |
-| **Project Settings** | ada project             | Workspace, Integrations (Document/Ticket/Code, `+` pilih tipe), LLM Providers — form **collapsible**                          |
-| **Global Settings**  | selalu                  | satu halaman: Appearance (tema app) · Editor (tema Monaco) · About                                                            |
+| Menu                 | Muncul bila             | Isi                                                                                                                                                           |
+| -------------------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Workspace**        | selalu                  | daftar/buat project (nama + workspace folder opsional), overview project                                                                                      |
+| **Explorer**         | project punya workspace | file tree folder workspace + viewer kode **Monaco** (read-only)                                                                                               |
+| **Document**         | selalu                  | tree halaman Docmost (collapsible, lazy children, **+** tambah) + render **markdown** + **Edit** (judul/isi via Monaco)                                       |
+| **Ticket**           | selalu                  | **Kanban** tiket lokal + Jira (kolom = status, drag = transition/update); **Tiket baru** (lokal) + sync manual; klik card → detail; filter assignee + refresh |
+| **Project Settings** | ada project             | Workspace, Integrations (Document/Ticket/Code, `+` pilih tipe), LLM Providers — form **collapsible**                                                          |
+| **Global Settings**  | selalu                  | satu halaman: Appearance (tema app) · Editor (tema Monaco) · About                                                                                            |
 
 **Chat LLM:** tombol **Chat** di header membuka sidebar kanan. Chat bisa memakai **tools** untuk
 membaca (`list_files`, `read_file`) dan **menulis** (`write_file`) file di folder workspace project
@@ -110,9 +110,12 @@ Document memakai **panel kiri terpisah** yang **lebarnya bisa di-drag** (tersimp
 | `POST /api/projects/:id/documents`                         | buat halaman Docmost (judul, parent opsional)       |
 | `GET /api/projects/:id/documents/:pageId`                  | isi halaman (markdown)                              |
 | `PUT /api/projects/:id/documents/:pageId`                  | edit halaman Docmost (judul/isi)                    |
-| `GET /api/projects/:id/tickets`                            | daftar tiket Jira (JQL)                             |
-| `GET /api/projects/:id/tickets/:key`                       | detail tiket (deskripsi ADF → teks)                 |
-| `POST /api/projects/:id/tickets/:key/transition`           | pindah status tiket (drag Kanban)                   |
+| `GET /api/projects/:id/tickets`                            | daftar tiket lokal + Jira (JQL)                     |
+| `GET /api/projects/:id/tickets/:key`                       | detail tiket Jira (deskripsi ADF → teks)            |
+| `POST /api/projects/:id/tickets/:key/transition`           | pindah status tiket Jira (drag Kanban)              |
+| `POST /api/projects/:id/local-tickets`                     | buat tiket **lokal** (belum di Jira)                |
+| `GET/PATCH/DELETE /api/projects/:id/local-tickets/:id`     | detail / ubah (termasuk status) / hapus tiket lokal |
+| `POST /api/projects/:id/local-tickets/:id/sync`            | sync manual tiket lokal → Jira (buat issue)         |
 | `GET /api/projects/:id/llm` · `POST /api/projects/:id/llm` | list / tambah provider LLM                          |
 | `PUT /api/projects/:id/llm/:providerId` · `DELETE ...`     | ubah / hapus provider LLM                           |
 | `POST /api/projects/:id/chat`                              | chat LLM (agent + tools file workspace)             |
@@ -125,14 +128,15 @@ Document memakai **panel kiri terpisah** yang **lebarnya bisa di-drag** (tersimp
 
 ## Skema data (SQLite)
 
-| Tabel                  | Isi                                                                                      |
-| ---------------------- | ---------------------------------------------------------------------------------------- |
-| `projects`             | `name`, `workspace_path`, target (`docmost_space_id`, `jira_project_key`, `github_repo`) |
-| `project_integrations` | per `(project, kind)`: `mode`, `config` (JSON, termasuk token)                           |
-| `llm_providers`        | banyak per project: `name`, `provider`, `model`, `base_url`, `api_key`, `mode`           |
-| `chat_sessions`        | sesi chat per project: `title`, `created_at`, `updated_at`                               |
-| `chat_messages`        | pesan per sesi: `role` (user/assistant), `content`, `changes` (JSON diff), `created_at`  |
-| `events`               | stream event (audit/activity)                                                            |
+| Tabel                  | Isi                                                                                                        |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `projects`             | `name`, `workspace_path`, target (`docmost_space_id`, `jira_project_key`, `github_repo`)                   |
+| `project_integrations` | per `(project, kind)`: `mode`, `config` (JSON, termasuk token)                                             |
+| `llm_providers`        | banyak per project: `name`, `provider`, `model`, `base_url`, `api_key`, `mode`                             |
+| `chat_sessions`        | sesi chat per project: `title`, `created_at`, `updated_at`                                                 |
+| `chat_messages`        | pesan per sesi: `role` (user/assistant), `content`, `changes` (JSON diff), `created_at`                    |
+| `local_tickets`        | tiket lokal: `title`, `description`, `status`, `priority`, `type`, `jira_key`, `sync_status`, `sync_error` |
+| `events`               | stream event (audit/activity)                                                                              |
 
 ## Konfigurasi & data
 
@@ -169,15 +173,19 @@ Fondasi (F0) — yang sudah jalan:
 - **Explorer**: file tree folder workspace + viewer kode **Monaco** (read-only).
 - **Document**: tree halaman Docmost collapsible (children di-load saat expand) + isi markdown.
 - **Ticket**: **Kanban** full-width dengan kolom tetap **Backlog / To Do / In Progress / Test /
-  Done** (kosong tetap tampil, card seragam), **drag antar kolom = Jira transition**, **klik card =
-  dialog detail**, **filter assignee** + refresh di header.
+  Done** (kosong tetap tampil, card seragam), **drag antar kolom** = update status lokal atau Jira
+  transition, **klik card** = dialog detail, **Tiket baru** membuat tiket lokal, **sync manual** ke
+  Jira dari detail (badge Local/Synced/Sync error), **filter assignee** + refresh di header. Tiket
+  lokal disimpan di tabel `local_tickets`; `GET /tickets` menggabungkan tiket lokal yang belum
+  synced dengan tiket Jira (yang sudah synced tidak diduplikasi). AI punya tool `create_ticket` yang
+  selalu membuat tiket **lokal** (tidak langsung POST ke Jira).
 - **Project Settings**: layout **section** (bukan card) dengan tombol `+` pilih tipe integrasi
   (Document/Ticket/Code), LLM Providers, Workspace, Activity.
 - **Global Settings**: satu halaman — Appearance (tema app) · Editor (tema Monaco) · About.
 - Integrasi Docmost/Jira/GitHub/LLM: simpan config, health-check, list document/ticket.
 - Multi-provider LLM per project; live activity via SSE.
 
-**Belum termasuk:** generate tiket AI dari PRD, push/bulk-create Jira, workflow engine, sandbox
+**Belum termasuk:** generate tiket AI dari PRD, bulk-sync/update Jira, workflow engine, sandbox
 coding loop, MCP transport (mode `mcp` tersimpan di config tetapi belum dieksekusi), WebSocket
 (masih SSE), agent roles (Planner/Coder/Verifier).
 
