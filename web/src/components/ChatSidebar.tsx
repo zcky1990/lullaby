@@ -195,7 +195,7 @@ export function ChatSidebar({ projectId, providers, onClose }: Props) {
         <div className="flex items-center gap-2">
           <Select value={sessionId ?? "new"} onValueChange={selectSession} disabled={!!pending}>
             <SelectTrigger size="sm" className="min-w-0 flex-1" aria-label="Sesi chat">
-              <SelectValue placeholder="Chat baru" className="truncate" />
+              <SelectValue placeholder="Chat baru" />
             </SelectTrigger>
             <SelectContent>
               <SelectGroup>
@@ -317,7 +317,7 @@ export function ChatSidebar({ projectId, providers, onClose }: Props) {
               disabled={providers.length === 0 || !!pending}
             >
               <SelectTrigger size="sm" className="w-full" aria-label="Pilih model">
-                <SelectValue placeholder="Pilih model" className="truncate" />
+                <SelectValue placeholder="Pilih model" />
               </SelectTrigger>
               <SelectContent>
                 <SelectGroup>
