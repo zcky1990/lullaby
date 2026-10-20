@@ -79,6 +79,28 @@ export interface TicketDetail {
   url: string;
 }
 
+export interface ChatPending {
+  id: string;
+  tool: string;
+  summary: string;
+}
+
+export type ChatResponse =
+  | { status: "done"; message: string; sessionId: string }
+  | { status: "approval_required"; runId: string; pending: ChatPending[]; sessionId: string }
+  | { status: "error"; error: string; sessionId?: string };
+
+export interface ChatSession {
+  id: string;
+  title: string;
+  updatedAt: string;
+}
+
+export interface ChatSessionDetail {
+  session: ChatSession;
+  messages: Array<{ role: "user" | "assistant"; content: string }>;
+}
+
 export interface DocumentsResponse {
   configured: boolean;
   error?: string;
@@ -215,8 +237,26 @@ export const api = {
     request<{ ok: boolean }>(`/api/projects/${projectId}/llm/${id}`, { method: "DELETE" }),
   chat: (
     projectId: string,
-    payload: { providerId?: string; messages: { role: string; content: string }[] },
-  ) => request<{ message: string }>(`/api/projects/${projectId}/chat`, jsonInit("POST", payload)),
+    payload: {
+      providerId?: string;
+      sessionId?: string;
+      variant?: string;
+      messages: { role: string; content: string }[];
+    },
+  ) => request<ChatResponse>(`/api/projects/${projectId}/chat`, jsonInit("POST", payload)),
+  chatApprove: (payload: { runId: string; id: string; action: "once" | "always" | "deny" }) =>
+    request<ChatResponse>("/api/chat/approve", jsonInit("POST", payload)),
+  listChatSessions: (projectId: string) =>
+    request<{ sessions: ChatSession[] }>(`/api/projects/${projectId}/chat/sessions`),
+  getChatSession: (projectId: string, sessionId: string) =>
+    request<ChatSessionDetail>(
+      `/api/projects/${projectId}/chat/sessions/${encodeURIComponent(sessionId)}`,
+    ),
+  deleteChatSession: (projectId: string, sessionId: string) =>
+    request<{ ok: boolean }>(
+      `/api/projects/${projectId}/chat/sessions/${encodeURIComponent(sessionId)}`,
+      { method: "DELETE" },
+    ),
   testRaw: (body: IntegrationPayload) =>
     request<{ result: TestResult }>("/api/integrations/test", jsonInit("POST", body)),
 };

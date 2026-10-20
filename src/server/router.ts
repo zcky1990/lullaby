@@ -1,4 +1,5 @@
 import {
+  ChatApproveInput,
   ChatInput,
   CreateDocumentInput,
   DocmostConfig,
@@ -16,10 +17,14 @@ import {
   appendEvent,
   createLlmProvider,
   createProject,
+  deleteChatSession,
   deleteLlmProvider,
+  getChatSession,
   getIntegration,
   getLlmProvider,
   getProject,
+  listChatMessages,
+  listChatSessions,
   listIntegrations,
   listLlmProviders,
   listProjects,
@@ -36,7 +41,7 @@ import {
   updateDocument,
 } from "../integrations/docmost.ts";
 import { getTicket, listTickets, transitionTicket } from "../integrations/jira.ts";
-import { chat } from "../integrations/llm.ts";
+import { approveChat, startChat, type VisibleMessage } from "./chat.ts";
 import { testIntegration } from "../integrations/index.ts";
 import { publish } from "./bus.ts";
 import { APP_TOKEN_COOKIE, APP_TOKEN_HEADER, appToken } from "./session.ts";
@@ -277,21 +282,66 @@ async function chatHandler(projectId: string, req: Request): Promise<Response> {
   }
   if (!provider) return json({ error: "no_provider" }, 400);
 
-  try {
-    const message = await chat(
-      {
-        provider: provider.provider,
-        model: provider.model ?? undefined,
-        baseUrl: provider.base_url ?? undefined,
-        apiKey: provider.api_key ?? undefined,
-      },
-      parsed.data.messages,
-    );
-    await record("chat.message", { projectId, providerId: provider.id });
-    return json({ message });
-  } catch (error) {
-    return json({ error: (error as Error).message }, 502);
+  const messages: VisibleMessage[] = parsed.data.messages
+    .filter((message) => message.role !== "system")
+    .map((message) => ({
+      role: message.role === "assistant" ? "assistant" : "user",
+      content: message.content,
+    }));
+
+  const result = await startChat(
+    projectId,
+    provider,
+    project.workspace_path ?? null,
+    messages,
+    parsed.data.sessionId,
+    parsed.data.variant,
+  );
+  await record("chat.message", { projectId, providerId: provider.id });
+  return json(result);
+}
+
+async function chatApproveHandler(req: Request): Promise<Response> {
+  const parsed = ChatApproveInput.safeParse(await readJson(req));
+  if (!parsed.success) {
+    return json({ error: "invalid_input", issues: parsed.error.issues }, 400);
   }
+  const result = await approveChat(parsed.data.runId, parsed.data.id, parsed.data.action);
+  return json(result);
+}
+
+async function listChatSessionsHandler(projectId: string): Promise<Response> {
+  const project = await getProject(projectId);
+  if (!project) return json({ error: "project_not_found" }, 404);
+  const sessions = (await listChatSessions(projectId)).map((session) => ({
+    id: session.id,
+    title: session.title,
+    updatedAt: session.updated_at,
+  }));
+  return json({ sessions });
+}
+
+async function getChatSessionHandler(projectId: string, sessionId: string): Promise<Response> {
+  const session = await getChatSession(sessionId);
+  if (!session || session.project_id !== projectId) {
+    return json({ error: "session_not_found" }, 404);
+  }
+  const messages = (await listChatMessages(session.id))
+    .filter((message) => message.role === "user" || message.role === "assistant")
+    .map((message) => ({ role: message.role, content: message.content }));
+  return json({
+    session: { id: session.id, title: session.title, updatedAt: session.updated_at },
+    messages,
+  });
+}
+
+async function deleteChatSessionHandler(projectId: string, sessionId: string): Promise<Response> {
+  const session = await getChatSession(sessionId);
+  if (!session || session.project_id !== projectId) {
+    return json({ error: "session_not_found" }, 404);
+  }
+  await deleteChatSession(sessionId);
+  return json({ ok: true });
 }
 
 async function testIntegrationHandler(req: Request): Promise<Response> {
@@ -553,8 +603,25 @@ export async function handleRequest(req: Request): Promise<Response> {
       if (method === "DELETE") return await deleteLlmHandler(llmItem[1], llmItem[2]);
     }
 
+    const chatSessions = pathname.match(/^\/api\/projects\/([^/]+)\/chat\/sessions$/);
+    if (chatSessions && method === "GET") {
+      return await listChatSessionsHandler(chatSessions[1]);
+    }
+
+    const chatSession = pathname.match(/^\/api\/projects\/([^/]+)\/chat\/sessions\/([^/]+)$/);
+    if (chatSession) {
+      if (method === "GET") return await getChatSessionHandler(chatSession[1], chatSession[2]);
+      if (method === "DELETE") {
+        return await deleteChatSessionHandler(chatSession[1], chatSession[2]);
+      }
+    }
+
     const chatRoute = pathname.match(/^\/api\/projects\/([^/]+)\/chat$/);
     if (chatRoute && method === "POST") return await chatHandler(chatRoute[1], req);
+
+    if (pathname === "/api/chat/approve" && method === "POST") {
+      return await chatApproveHandler(req);
+    }
 
     const integration = pathname.match(/^\/api\/projects\/([^/]+)\/integrations\/([a-z]+)$/);
     if (integration && (method === "PUT" || method === "POST")) {

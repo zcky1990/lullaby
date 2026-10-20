@@ -56,8 +56,13 @@ export const LlmProviderInput = z.object({
 });
 export type LlmProviderInput = z.infer<typeof LlmProviderInput>;
 
+export const ChatVariant = z.enum(["low", "medium", "high"]);
+export type ChatVariant = z.infer<typeof ChatVariant>;
+
 export const ChatInput = z.object({
   providerId: z.string().trim().optional(),
+  sessionId: z.string().trim().optional(),
+  variant: ChatVariant.default("medium"),
   messages: z
     .array(
       z.object({
@@ -69,6 +74,13 @@ export const ChatInput = z.object({
     .max(60),
 });
 export type ChatInput = z.infer<typeof ChatInput>;
+
+export const ChatApproveInput = z.object({
+  runId: z.string().trim().min(1),
+  id: z.string().trim().min(1),
+  action: z.enum(["once", "always", "deny"]),
+});
+export type ChatApproveInput = z.infer<typeof ChatApproveInput>;
 
 export const CreateDocumentInput = z.object({
   title: z.string().trim().min(1).max(200),

@@ -51,7 +51,9 @@ finishing a change.
 - Local API is guarded by a per-session token cookie (`src/server/session.ts`); `/api/health` is
   open, everything else requires the cookie (set when the HTML shell is served) or the `x-app-token`
   header.
-- Filesystem reads must go through `src/fs/workspace.ts` (path-traversal guarded, capped size).
+- **Filesystem reads must go through `src/fs/workspace.ts`** (path-traversal guarded, capped size).
+  Writes (chat `write_file`) go through `writeWorkspaceFile` and require **user approval**
+  (`src/server/chat.ts`: `once` / `always` / `deny`).
 - Persistence uses `node:sqlite` (`src/db/db.ts`); keep queries parameterized and add columns via
   `ensureColumn` migrations.
 
@@ -76,6 +78,7 @@ finishing a change.
 - `src/fs` — workspace file tree + file reader.
 - `src/secrets` — legacy env/keychain helper (unused; kept for reference/tests).
 - `src/integrations` — docmost/jira/github/llm clients + health-check.
-- `src/server` — router, SSE, event bus, static asset serving.
+- `src/server` — router, SSE, event bus, static asset serving, chat agent engine (`chat.ts`:
+  tool-calling, file write approval, chat sessions).
 - `src/desktop` — window, bindings, native dialogs.
 - `src/ui/assets.generated.ts` — generated embedded client bundle.

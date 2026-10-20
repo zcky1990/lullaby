@@ -1,4 +1,4 @@
-import { resolve, sep } from "node:path";
+import { dirname, resolve, sep } from "node:path";
 
 const IGNORED = new Set([".git", "node_modules", ".DS_Store"]);
 const MAX_ENTRIES = 1000;
@@ -89,4 +89,15 @@ export async function readWorkspaceFile(root: string, rel: string): Promise<File
     truncated,
     binary,
   };
+}
+
+export async function writeWorkspaceFile(
+  root: string,
+  rel: string,
+  content: string,
+): Promise<void> {
+  const file = resolveWithin(root, rel);
+  if (!file) throw new Error("Path di luar workspace.");
+  await Deno.mkdir(dirname(file), { recursive: true });
+  await Deno.writeTextFile(file, content);
 }

@@ -63,10 +63,19 @@ Shell ala VSCode: **activity bar** (kiri) + **panel** terpisah (Workspace/Explor
 | **Project Settings** | ada project             | Workspace, Integrations (Document/Ticket/Code, `+` pilih tipe), LLM Providers — form **collapsible**                          |
 | **Global Settings**  | selalu                  | satu halaman: Appearance (tema app) · Editor (tema Monaco) · About                                                            |
 
-**Chat LLM:** tombol **Chat** di header membuka sidebar kanan untuk chat ke provider LLM project
-(pilih provider, riwayat pesan, Enter kirim / Shift+Enter baris baru). Balasan dirender sebagai
-markdown. Backend memakai provider OpenAI-compatible (`/chat/completions`) atau Anthropic
-(`/messages`).
+**Chat LLM:** tombol **Chat** di header membuka sidebar kanan. Chat bisa memakai **tools** untuk
+membaca (`list_files`, `read_file`) dan **menulis** (`write_file`) file di folder workspace project
+(**root = `workspace_path` yang di-set saat membuat project / Settings → Workspace**; semua path
+tool relatif terhadap root itu, `..`/path di luar ditolak). Setiap aksi tulis meminta
+**persetujuan**: **Allow once**, **Always allow**, atau **No** (selama run berjalan). Backend
+memakai tool-calling OpenAI-compatible (`/chat/completions`) atau Anthropic (`/messages`).
+
+**Sesi chat** disimpan di SQLite (`chat_sessions`/`chat_messages`). Sidebar punya pemilih sesi (chat
+baru + riwayat), bisa **memuat** sesi lama dan **menghapus** sesi. Judul sesi diambil dari pesan
+user pertama. Pemilihan **model** memakai satu selector di composer chat (gaya Cursor): daftar model
+dari semua provider LLM project (label = `model`, fallback nama provider). Di sampingnya ada
+selector **Variant** — **Low / Medium / High** — yang memetakan ke `temperature` (low 0.2, medium
+0.5, high 0.9).
 
 **Editor tabs (ala VS Code):** memilih file (Explorer), dokumen (Document), atau menu
 (Workspace/Ticket/Project Settings/Global Settings) membuka **tab** di area konten. Tab bisa diklik
@@ -94,7 +103,10 @@ Document memakai **panel kiri terpisah** yang **lebarnya bisa di-drag** (tersimp
 | `POST /api/projects/:id/tickets/:key/transition`           | pindah status tiket (drag Kanban)                   |
 | `GET /api/projects/:id/llm` · `POST /api/projects/:id/llm` | list / tambah provider LLM                          |
 | `PUT /api/projects/:id/llm/:providerId` · `DELETE ...`     | ubah / hapus provider LLM                           |
-| `POST /api/projects/:id/chat`                              | chat ke provider LLM (messages → balasan)           |
+| `POST /api/projects/:id/chat`                              | chat LLM (agent + tools file workspace)             |
+| `POST /api/chat/approve`                                   | setujui/tolak aksi tulis (once/always/deny)         |
+| `GET /api/projects/:id/chat/sessions`                      | daftar sesi chat                                    |
+| `GET/DELETE /api/projects/:id/chat/sessions/:sid`          | muat / hapus sesi chat                              |
 | `GET /api/projects/:id/files?path=`                        | daftar isi folder workspace                         |
 | `GET /api/projects/:id/files/content?path=`                | isi file (maks 200 KB, deteksi biner)               |
 | `GET /*`                                                   | aset client (SPA fallback ke `index.html`)          |
@@ -106,6 +118,8 @@ Document memakai **panel kiri terpisah** yang **lebarnya bisa di-drag** (tersimp
 | `projects`             | `name`, `workspace_path`, target (`docmost_space_id`, `jira_project_key`, `github_repo`) |
 | `project_integrations` | per `(project, kind)`: `mode`, `config` (JSON, termasuk token)                           |
 | `llm_providers`        | banyak per project: `name`, `provider`, `model`, `base_url`, `api_key`, `mode`           |
+| `chat_sessions`        | sesi chat per project: `title`, `created_at`, `updated_at`                               |
+| `chat_messages`        | pesan per sesi: `role` (user/assistant), `content`, `created_at`                         |
 | `events`               | stream event (audit/activity)                                                            |
 
 ## Konfigurasi & data

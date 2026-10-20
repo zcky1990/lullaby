@@ -92,6 +92,22 @@ CREATE TABLE IF NOT EXISTS llm_providers (
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+CREATE TABLE IF NOT EXISTS chat_sessions (
+  id         TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  title      TEXT NOT NULL DEFAULT 'Chat',
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS chat_messages (
+  id         TEXT PRIMARY KEY,
+  session_id TEXT NOT NULL REFERENCES chat_sessions(id) ON DELETE CASCADE,
+  role       TEXT NOT NULL,
+  content    TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
 `;
 
 function ensureColumn(db: DatabaseSync, table: string, column: string, ddl: string): void {
@@ -371,4 +387,79 @@ export async function updateLlmProvider(
 export async function deleteLlmProvider(id: string): Promise<void> {
   const db = await getDb();
   db.prepare("DELETE FROM llm_providers WHERE id = ?").run(id);
+}
+
+export interface ChatSessionRow {
+  id: string;
+  project_id: string;
+  title: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ChatMessageRow {
+  id: string;
+  session_id: string;
+  role: string;
+  content: string;
+  created_at: string;
+}
+
+export async function createChatSession(
+  projectId: string,
+  title: string,
+): Promise<ChatSessionRow> {
+  const db = await getDb();
+  const id = crypto.randomUUID();
+  db.prepare("INSERT INTO chat_sessions (id, project_id, title) VALUES (?, ?, ?)").run(
+    id,
+    projectId,
+    title,
+  );
+  return (await getChatSession(id))!;
+}
+
+export async function getChatSession(id: string): Promise<ChatSessionRow | null> {
+  const db = await getDb();
+  const row = db.prepare("SELECT * FROM chat_sessions WHERE id = ?").get(id);
+  return (row as ChatSessionRow | undefined) ?? null;
+}
+
+export async function listChatSessions(projectId: string): Promise<ChatSessionRow[]> {
+  const db = await getDb();
+  return rows<ChatSessionRow>(
+    db
+      .prepare("SELECT * FROM chat_sessions WHERE project_id = ? ORDER BY updated_at DESC")
+      .all(projectId),
+  );
+}
+
+export async function listChatMessages(sessionId: string): Promise<ChatMessageRow[]> {
+  const db = await getDb();
+  return rows<ChatMessageRow>(
+    db
+      .prepare("SELECT * FROM chat_messages WHERE session_id = ? ORDER BY created_at, id")
+      .all(sessionId),
+  );
+}
+
+export async function appendChatMessage(
+  sessionId: string,
+  role: string,
+  content: string,
+): Promise<void> {
+  const db = await getDb();
+  db.prepare("INSERT INTO chat_messages (id, session_id, role, content) VALUES (?, ?, ?, ?)").run(
+    crypto.randomUUID(),
+    sessionId,
+    role,
+    content,
+  );
+  db.prepare("UPDATE chat_sessions SET updated_at = datetime('now') WHERE id = ?").run(sessionId);
+}
+
+export async function deleteChatSession(id: string): Promise<void> {
+  const db = await getDb();
+  db.prepare("DELETE FROM chat_messages WHERE session_id = ?").run(id);
+  db.prepare("DELETE FROM chat_sessions WHERE id = ?").run(id);
 }
