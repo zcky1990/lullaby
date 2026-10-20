@@ -91,6 +91,21 @@ export async function readWorkspaceFile(root: string, rel: string): Promise<File
   };
 }
 
+export interface FileRawResult {
+  bytes: Uint8Array;
+  size: number;
+}
+
+export async function readWorkspaceFileRaw(root: string, rel: string): Promise<FileRawResult> {
+  const file = resolveWithin(root, rel);
+  if (!file) throw new Error("Path di luar workspace.");
+
+  const stat = await Deno.stat(file).catch(() => null);
+  if (!stat?.isFile) throw new Error("File tidak ditemukan.");
+
+  return { bytes: await Deno.readFile(file), size: stat.size };
+}
+
 export async function writeWorkspaceFile(
   root: string,
   rel: string,

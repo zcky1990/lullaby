@@ -59,6 +59,19 @@ export type LlmProviderInput = z.infer<typeof LlmProviderInput>;
 export const ChatVariant = z.enum(["low", "medium", "high"]);
 export type ChatVariant = z.infer<typeof ChatVariant>;
 
+export const ChatAttachmentInput = z
+  .object({
+    type: z.enum(["image", "text", "workspace"]),
+    name: z.string().trim().min(1).max(200),
+    mime: z.string().trim().max(120).optional(),
+    path: z.string().trim().max(500).optional(),
+    data: z.string().max(8_000_000).optional(),
+  })
+  .refine((value) => (value.type === "workspace" ? Boolean(value.path) : Boolean(value.data)), {
+    message: "Lampiran tidak lengkap",
+  });
+export type ChatAttachmentInput = z.infer<typeof ChatAttachmentInput>;
+
 export const ChatInput = z.object({
   providerId: z.string().trim().optional(),
   sessionId: z.string().trim().optional(),
@@ -68,6 +81,7 @@ export const ChatInput = z.object({
       z.object({
         role: z.enum(["system", "user", "assistant"]),
         content: z.string().min(1).max(8000),
+        attachments: z.array(ChatAttachmentInput).max(6).optional(),
       }),
     )
     .min(1)

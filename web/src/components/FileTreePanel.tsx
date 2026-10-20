@@ -80,6 +80,13 @@ export function FileTreePanel({ projectId, selectedPath, onOpenFile }: Props) {
         <div key={entry.path}>
           <button
             onClick={() => (isDir ? toggle(entry) : onOpenFile(entry.path))}
+            draggable={!isDir}
+            onDragStart={(event) => {
+              if (isDir) return;
+              event.dataTransfer.setData("application/x-rnd-workspace-path", entry.path);
+              event.dataTransfer.setData("text/plain", entry.path);
+              event.dataTransfer.effectAllowed = "copy";
+            }}
             style={{ paddingLeft: depth * 12 + 8 }}
             className={cn(
               "flex w-full items-center gap-1.5 rounded-md py-1 pr-2 text-left text-sm transition-colors hover:bg-accent",

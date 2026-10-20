@@ -1,18 +1,33 @@
-import type { LlmProviderRow } from "../db/db.ts";
+import type { ChatChange, LlmProviderRow } from "../db/db.ts";
 import {
   appendChatMessage,
   createChatSession,
   getChatSession,
   listChatMessages,
 } from "../db/db.ts";
-import { listDirectory, readWorkspaceFile, writeWorkspaceFile } from "../fs/workspace.ts";
+import {
+  listDirectory,
+  readWorkspaceFile,
+  readWorkspaceFileRaw,
+  writeWorkspaceFile,
+} from "../fs/workspace.ts";
 import { request } from "../integrations/http.ts";
+import { diffLines } from "./diff.ts";
+
+export interface ChatAttachment {
+  type: "image" | "text" | "workspace";
+  name: string;
+  mime?: string;
+  path?: string;
+  data?: string;
+}
 
 export interface ChatTurn {
   role: "system" | "user" | "assistant" | "tool";
   content: string;
   toolCalls?: ToolCall[];
   toolCallId?: string;
+  attachments?: ChatAttachment[];
 }
 
 export interface ToolCall {
@@ -30,11 +45,18 @@ interface ToolDef {
 export interface VisibleMessage {
   role: "user" | "assistant";
   content: string;
+  attachments?: ChatAttachment[];
 }
 
 export type ChatResponse =
-  | { status: "done"; message: string; sessionId: string }
-  | { status: "approval_required"; runId: string; pending: PendingApproval[]; sessionId: string }
+  | { status: "done"; message: string; sessionId: string; changes: ChatChange[] }
+  | {
+    status: "approval_required";
+    runId: string;
+    pending: PendingApproval[];
+    sessionId: string;
+    changes: ChatChange[];
+  }
   | { status: "error"; error: string; sessionId?: string };
 
 export interface PendingApproval {
@@ -108,6 +130,7 @@ interface Run {
   pending: ToolCall[];
   decisions: Map<string, "once" | "always" | "deny">;
   alwaysAllow: Set<string>;
+  changes: ChatChange[];
   createdAt: number;
 }
 
@@ -141,6 +164,22 @@ function safeParse(value: string): Record<string, unknown> {
   }
 }
 
+const MAX_TEXT_ATTACHMENT = 200_000;
+
+function attachmentText(attachments: ChatAttachment[] | undefined): string {
+  if (!attachments?.length) return "";
+  return attachments
+    .filter((item) => item.type === "text")
+    .map((item) => `\n\n--- ${item.name} ---\n${(item.data ?? "").slice(0, MAX_TEXT_ATTACHMENT)}`)
+    .join("");
+}
+
+function parseImageDataUrl(data: string): { mediaType: string; base64: string } | null {
+  const match = /^data:(image\/[a-z0-9.+-]+);base64,([a-z0-9+/=\s]+)$/i.exec(data.trim());
+  if (!match) return null;
+  return { mediaType: match[1].toLowerCase(), base64: match[2].replace(/\s+/g, "") };
+}
+
 async function executeTool(workspace: string, call: ToolCall): Promise<string> {
   const args = safeParse(call.arguments);
   const path = typeof args.path === "string" ? args.path : "";
@@ -153,11 +192,123 @@ async function executeTool(workspace: string, call: ToolCall): Promise<string> {
     if (file.binary) return "(binary file, not shown)";
     return file.content.slice(0, MAX_TOOL_RESULT);
   }
-  if (call.name === "write_file") {
-    await writeWorkspaceFile(workspace, path, String(args.content ?? ""));
-    return `Wrote ${path}`;
-  }
   return `Unknown tool: ${call.name}`;
+}
+
+const IMAGE_MIME: Record<string, string> = {
+  png: "image/png",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  gif: "image/gif",
+  webp: "image/webp",
+};
+
+const MAX_WORKSPACE_IMAGE_BYTES = 4_000_000;
+
+function toBase64(bytes: Uint8Array): string {
+  let binary = "";
+  const chunk = 0x8000;
+  for (let index = 0; index < bytes.length; index += chunk) {
+    binary += String.fromCharCode(...bytes.subarray(index, index + chunk));
+  }
+  return btoa(binary);
+}
+
+async function resolveAttachments(
+  workspace: string | null,
+  attachments: ChatAttachment[] | undefined,
+): Promise<ChatAttachment[]> {
+  if (!attachments?.length) return [];
+  const result: ChatAttachment[] = [];
+  for (const item of attachments) {
+    if (item.type !== "workspace") {
+      result.push(item);
+      continue;
+    }
+    const path = item.path ?? "";
+    if (!workspace) {
+      result.push({
+        type: "text",
+        name: item.name,
+        data: `(file ${path} tidak dapat dibaca: workspace belum diatur)`,
+      });
+      continue;
+    }
+    const extension = path.split(".").pop()?.toLowerCase() ?? "";
+    const mime = IMAGE_MIME[extension];
+    try {
+      if (mime) {
+        const raw = await readWorkspaceFileRaw(workspace, path);
+        if (raw.size > MAX_WORKSPACE_IMAGE_BYTES) {
+          result.push({
+            type: "text",
+            name: item.name,
+            data: `(gambar ${path} terlalu besar untuk dilampirkan)`,
+          });
+          continue;
+        }
+        result.push({
+          type: "image",
+          name: item.name,
+          mime,
+          data: `data:${mime};base64,${toBase64(raw.bytes)}`,
+        });
+        continue;
+      }
+      const file = await readWorkspaceFile(workspace, path);
+      if (file.binary) {
+        result.push({
+          type: "text",
+          name: item.name,
+          data: `(file biner ${path} tidak dapat ditampilkan)`,
+        });
+        continue;
+      }
+      result.push({
+        type: "text",
+        name: item.name,
+        data: `${file.content}${file.truncated ? "\n… (dipotong)" : ""}`,
+      });
+    } catch (error) {
+      result.push({
+        type: "text",
+        name: item.name,
+        data: `(gagal membaca ${path}: ${(error as Error).message})`,
+      });
+    }
+  }
+  return result;
+}
+
+async function writeFileWithChange(run: Run, call: ToolCall): Promise<string> {
+  if (!run.workspace) return "No workspace configured.";
+  const args = safeParse(call.arguments);
+  const path = typeof args.path === "string" ? args.path : "";
+  const content = String(args.content ?? "");
+
+  let before = "";
+  let exists = false;
+  try {
+    const file = await readWorkspaceFile(run.workspace, path);
+    exists = true;
+    before = file.binary ? "" : file.content;
+  } catch {
+    exists = false;
+  }
+
+  await writeWorkspaceFile(run.workspace, path, content);
+  const result = diffLines(before, content);
+  const change: ChatChange = {
+    path,
+    action: exists ? "update" : "create",
+    diff: result.diff,
+    added: result.added,
+    removed: result.removed,
+  };
+  const index = run.changes.findIndex((item) => item.path === path);
+  if (index >= 0) run.changes[index] = change;
+  else run.changes.push(change);
+  return `Wrote ${path} (+${result.added}/-${result.removed})`;
 }
 
 async function executeBatch(run: Run, batch: ToolCall[]): Promise<void> {
@@ -171,7 +322,7 @@ async function executeBatch(run: Run, batch: ToolCall[]): Promise<void> {
           const decision = run.decisions.get(call.id);
           const allowed = run.alwaysAllow.has(call.name) || decision === "once" ||
             decision === "always";
-          result = allowed ? await executeTool(run.workspace, call) : "Ditolak oleh user.";
+          result = allowed ? await writeFileWithChange(run, call) : "Ditolak oleh user.";
         }
       } else if (!run.workspace) {
         result = "No workspace configured.";
@@ -199,6 +350,18 @@ function openAiMessages(turns: ChatTurn[]) {
           type: "function",
           function: { name: call.name, arguments: call.arguments },
         })),
+      };
+    }
+    if (turn.role === "user" && turn.attachments?.length) {
+      const text = `${turn.content}${attachmentText(turn.attachments)}`;
+      const images = turn.attachments.filter((item) => item.type === "image");
+      if (!images.length) return { role: "user", content: text };
+      return {
+        role: "user",
+        content: [
+          ...(text ? [{ type: "text", text }] : []),
+          ...images.map((image) => ({ type: "image_url", image_url: { url: image.data ?? "" } })),
+        ],
       };
     }
     return { role: turn.role, content: turn.content };
@@ -286,6 +449,23 @@ async function completeAnthropic(
       }
       continue;
     }
+    if (turn.role === "user" && turn.attachments?.length) {
+      const text = `${turn.content}${attachmentText(turn.attachments)}`;
+      const blocks: Block[] = [];
+      if (text) blocks.push({ type: "text", text });
+      for (const image of turn.attachments) {
+        if (image.type !== "image") continue;
+        const parsed = parseImageDataUrl(image.data ?? "");
+        if (parsed) {
+          blocks.push({
+            type: "image",
+            source: { type: "base64", media_type: parsed.mediaType, data: parsed.base64 },
+          });
+        }
+      }
+      messages.push({ role: "user", content: blocks.length ? blocks : text });
+      continue;
+    }
     if (turn.role === "assistant" && turn.toolCalls?.length) {
       const content: Block[] = [];
       if (turn.content) content.push({ type: "text", text: turn.content });
@@ -371,9 +551,14 @@ async function advance(run: Run): Promise<ChatResponse> {
       const response = await complete(run.provider, run.turns, tools, run.temperature);
       if (response.toolCalls.length === 0) {
         run.turns.push({ role: "assistant", content: response.text });
-        await appendChatMessage(run.sessionId, "assistant", response.text);
+        await appendChatMessage(run.sessionId, "assistant", response.text, run.changes);
         runs.delete(run.id);
-        return { status: "done", message: response.text, sessionId: run.sessionId };
+        return {
+          status: "done",
+          message: response.text,
+          sessionId: run.sessionId,
+          changes: run.changes,
+        };
       }
 
       run.turns.push({
@@ -393,6 +578,7 @@ async function advance(run: Run): Promise<ChatResponse> {
           status: "approval_required",
           runId: run.id,
           sessionId: run.sessionId,
+          changes: run.changes,
           pending: needsApproval.map((call) => ({
             id: call.id,
             tool: call.name,
@@ -403,12 +589,10 @@ async function advance(run: Run): Promise<ChatResponse> {
 
       await executeBatch(run, response.toolCalls);
     }
+    const message = "(berhenti: batas langkah tercapai)";
+    await appendChatMessage(run.sessionId, "assistant", message, run.changes);
     runs.delete(run.id);
-    return {
-      status: "done",
-      message: "(berhenti: batas langkah tercapai)",
-      sessionId: run.sessionId,
-    };
+    return { status: "done", message, sessionId: run.sessionId, changes: run.changes };
   } catch (error) {
     runs.delete(run.id);
     return { status: "error", error: (error as Error).message, sessionId: run.sessionId };
@@ -444,6 +628,13 @@ export async function startChat(
     await appendChatMessage(session.id, lastMessage.role, lastMessage.content);
   }
 
+  const resolved = await Promise.all(
+    messages.map(async (message) => ({
+      ...message,
+      attachments: await resolveAttachments(workspace, message.attachments),
+    })),
+  );
+
   const run: Run = {
     id: crypto.randomUUID(),
     provider,
@@ -452,12 +643,17 @@ export async function startChat(
     temperature: VARIANT_TEMPERATURE[variant],
     turns: [
       { role: "system", content: systemPrompt(workspace) },
-      ...messages.map((message) => ({ role: message.role, content: message.content })),
+      ...resolved.map((message) => ({
+        role: message.role,
+        content: message.content,
+        attachments: message.attachments,
+      })),
     ],
     pendingBatch: [],
     pending: [],
     decisions: new Map(),
     alwaysAllow: new Set(),
+    changes: [],
     createdAt: Date.now(),
   };
   runs.set(run.id, run);
@@ -485,6 +681,7 @@ export async function approveChat(
       status: "approval_required",
       runId: run.id,
       sessionId: run.sessionId,
+      changes: run.changes,
       pending: run.pending.map((call) => ({
         id: call.id,
         tool: call.name,

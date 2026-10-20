@@ -79,6 +79,7 @@ finishing a change.
 - `src/secrets` — legacy env/keychain helper (unused; kept for reference/tests).
 - `src/integrations` — docmost/jira/github/llm clients + health-check.
 - `src/server` — router, SSE, event bus, static asset serving, chat agent engine (`chat.ts`:
-  tool-calling, file write approval, chat sessions).
+  tool-calling, file write approval, chat sessions, diff tracking, image/text attachments;
+  `diff.ts`: line diff).
 - `src/desktop` — window, bindings, native dialogs.
 - `src/ui/assets.generated.ts` — generated embedded client bundle.

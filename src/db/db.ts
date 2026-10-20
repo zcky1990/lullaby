@@ -120,6 +120,7 @@ function ensureColumn(db: DatabaseSync, table: string, column: string, ddl: stri
 function migrate(db: DatabaseSync): void {
   ensureColumn(db, "projects", "workspace_path", "workspace_path TEXT");
   ensureColumn(db, "llm_providers", "api_key", "api_key TEXT");
+  ensureColumn(db, "chat_messages", "changes", "changes TEXT");
 
   const legacy = db
     .prepare(
@@ -397,11 +398,20 @@ export interface ChatSessionRow {
   updated_at: string;
 }
 
+export interface ChatChange {
+  path: string;
+  action: "create" | "update";
+  diff: string;
+  added: number;
+  removed: number;
+}
+
 export interface ChatMessageRow {
   id: string;
   session_id: string;
   role: string;
   content: string;
+  changes: string | null;
   created_at: string;
 }
 
@@ -438,7 +448,7 @@ export async function listChatMessages(sessionId: string): Promise<ChatMessageRo
   const db = await getDb();
   return rows<ChatMessageRow>(
     db
-      .prepare("SELECT * FROM chat_messages WHERE session_id = ? ORDER BY created_at, id")
+      .prepare("SELECT * FROM chat_messages WHERE session_id = ? ORDER BY created_at, rowid")
       .all(sessionId),
   );
 }
@@ -447,13 +457,17 @@ export async function appendChatMessage(
   sessionId: string,
   role: string,
   content: string,
+  changes: ChatChange[] = [],
 ): Promise<void> {
   const db = await getDb();
-  db.prepare("INSERT INTO chat_messages (id, session_id, role, content) VALUES (?, ?, ?, ?)").run(
+  db.prepare(
+    "INSERT INTO chat_messages (id, session_id, role, content, changes) VALUES (?, ?, ?, ?, ?)",
+  ).run(
     crypto.randomUUID(),
     sessionId,
     role,
     content,
+    changes.length ? JSON.stringify(changes) : null,
   );
   db.prepare("UPDATE chat_sessions SET updated_at = datetime('now') WHERE id = ?").run(sessionId);
 }

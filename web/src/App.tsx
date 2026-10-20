@@ -244,16 +244,21 @@ export default function App() {
   );
 
   const openFile = useCallback(
-    async (path: string) => {
+    async (path: string, reload = false) => {
       if (!currentId) return;
       setMenu("files");
       const id = `file:${currentId}:${path}`;
       const existing = tabs.find((tab) => tab.id === id);
-      if (existing && !existing.error) {
+      if (existing && !existing.error && !reload) {
         setActiveTabId(id);
         return;
       }
-      focusTab({ id, kind: "file", title: path, ref: path, loading: true });
+      if (existing) {
+        patchTab(id, { loading: true, error: undefined });
+        setActiveTabId(id);
+      } else {
+        focusTab({ id, kind: "file", title: path, ref: path, loading: true });
+      }
       try {
         const res = await api.readFile(currentId, path);
         patchTab(id, { content: res.content, binary: res.binary, size: res.size, loading: false });
@@ -606,6 +611,7 @@ export default function App() {
           projectId={currentId}
           providers={detail?.llmProviders ?? []}
           onClose={() => setChatOpen(false)}
+          onOpenFile={(path) => void openFile(path, true)}
         />
       )}
 

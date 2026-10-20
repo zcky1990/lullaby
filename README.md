@@ -77,6 +77,18 @@ dari semua provider LLM project (label = `model`, fallback nama provider). Di sa
 selector **Variant** — **Low / Medium / High** — yang memetakan ke `temperature` (low 0.2, medium
 0.5, high 0.9).
 
+**Perubahan file di chat:** setiap `write_file` yang disetujui menghasilkan kartu perubahan berisi
+**path** (klik → tab file dibuka/di-reload di aplikasi), status (baru/diubah), jumlah `+/-`, dan
+**diff** berwarna. Diff ikut disimpan di kolom `chat_messages.changes` sehingga tetap tampil saat
+sesi dimuat ulang.
+
+**Lampiran chat:** composer (ikon lampiran berada **di dalam kotak chat**, seperti Cursor) mendukung
+**gambar** (dikirim sebagai vision content: `image_url` untuk OpenAI-compatible, blok `image` base64
+untuk Anthropic) dan **file teks** (isi file ditambahkan ke prompt). File bisa dipilih lewat tombol
+lampiran, **drag & drop** dari Explorer (hanya path yang dikirim — backend membaca file dari
+workspace) atau file eksternal, maupun paste dari clipboard. Batas: 6 lampiran/pesan, gambar ≤ 3 MB,
+file teks ≤ 200 KB (body API ≤ 26 MB).
+
 **Editor tabs (ala VS Code):** memilih file (Explorer), dokumen (Document), atau menu
 (Workspace/Ticket/Project Settings/Global Settings) membuka **tab** di area konten. Tab bisa diklik
 ulang dan **ditutup** (`×`); menutup tab terakhir menampilkan empty state. Workspace/Explorer/
@@ -119,7 +131,7 @@ Document memakai **panel kiri terpisah** yang **lebarnya bisa di-drag** (tersimp
 | `project_integrations` | per `(project, kind)`: `mode`, `config` (JSON, termasuk token)                           |
 | `llm_providers`        | banyak per project: `name`, `provider`, `model`, `base_url`, `api_key`, `mode`           |
 | `chat_sessions`        | sesi chat per project: `title`, `created_at`, `updated_at`                               |
-| `chat_messages`        | pesan per sesi: `role` (user/assistant), `content`, `created_at`                         |
+| `chat_messages`        | pesan per sesi: `role` (user/assistant), `content`, `changes` (JSON diff), `created_at`  |
 | `events`               | stream event (audit/activity)                                                            |
 
 ## Konfigurasi & data

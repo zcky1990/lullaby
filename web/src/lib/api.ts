@@ -85,9 +85,31 @@ export interface ChatPending {
   summary: string;
 }
 
+export interface ChatAttachment {
+  type: "image" | "text" | "workspace";
+  name: string;
+  mime?: string;
+  path?: string;
+  data?: string;
+}
+
+export interface FileChange {
+  path: string;
+  action: "create" | "update";
+  diff: string;
+  added: number;
+  removed: number;
+}
+
 export type ChatResponse =
-  | { status: "done"; message: string; sessionId: string }
-  | { status: "approval_required"; runId: string; pending: ChatPending[]; sessionId: string }
+  | { status: "done"; message: string; sessionId: string; changes: FileChange[] }
+  | {
+    status: "approval_required";
+    runId: string;
+    pending: ChatPending[];
+    sessionId: string;
+    changes: FileChange[];
+  }
   | { status: "error"; error: string; sessionId?: string };
 
 export interface ChatSession {
@@ -98,7 +120,11 @@ export interface ChatSession {
 
 export interface ChatSessionDetail {
   session: ChatSession;
-  messages: Array<{ role: "user" | "assistant"; content: string }>;
+  messages: Array<{
+    role: "user" | "assistant";
+    content: string;
+    changes?: FileChange[];
+  }>;
 }
 
 export interface DocumentsResponse {
@@ -241,7 +267,7 @@ export const api = {
       providerId?: string;
       sessionId?: string;
       variant?: string;
-      messages: { role: string; content: string }[];
+      messages: { role: string; content: string; attachments?: ChatAttachment[] }[];
     },
   ) => request<ChatResponse>(`/api/projects/${projectId}/chat`, jsonInit("POST", payload)),
   chatApprove: (payload: { runId: string; id: string; action: "once" | "always" | "deny" }) =>

@@ -49,7 +49,7 @@ import { sse } from "./sse.ts";
 import { serveAsset } from "./static.ts";
 
 const VERSION = "0.1.0";
-const MAX_BODY_BYTES = 1_000_000;
+const MAX_BODY_BYTES = 26_000_000;
 
 function json(data: unknown, status = 200): Response {
   return new Response(JSON.stringify(data), {
@@ -287,6 +287,7 @@ async function chatHandler(projectId: string, req: Request): Promise<Response> {
     .map((message) => ({
       role: message.role === "assistant" ? "assistant" : "user",
       content: message.content,
+      attachments: message.attachments,
     }));
 
   const result = await startChat(
@@ -310,6 +311,16 @@ async function chatApproveHandler(req: Request): Promise<Response> {
   return json(result);
 }
 
+function parseChanges(value: string | null): unknown[] {
+  if (!value) return [];
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
 async function listChatSessionsHandler(projectId: string): Promise<Response> {
   const project = await getProject(projectId);
   if (!project) return json({ error: "project_not_found" }, 404);
@@ -328,7 +339,11 @@ async function getChatSessionHandler(projectId: string, sessionId: string): Prom
   }
   const messages = (await listChatMessages(session.id))
     .filter((message) => message.role === "user" || message.role === "assistant")
-    .map((message) => ({ role: message.role, content: message.content }));
+    .map((message) => ({
+      role: message.role,
+      content: message.content,
+      changes: parseChanges(message.changes),
+    }));
   return json({
     session: { id: session.id, title: session.title, updatedAt: session.updated_at },
     messages,

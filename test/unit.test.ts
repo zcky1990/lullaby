@@ -1,5 +1,6 @@
 import { equal, throws } from "node:assert/strict";
-import { JiraConfig, LlmProviderInput, ProjectInput } from "../src/config/schema.ts";
+import { ChatInput, JiraConfig, LlmProviderInput, ProjectInput } from "../src/config/schema.ts";
+import { diffLines } from "../src/server/diff.ts";
 
 Deno.test("ProjectInput trims and drops empty optional fields", () => {
   throws(() => ProjectInput.parse({ name: "" }));
@@ -35,4 +36,68 @@ Deno.test("LlmProviderInput supports multiple providers and defaults", () => {
 
   throws(() => LlmProviderInput.parse({ name: "" }));
   throws(() => LlmProviderInput.parse({ name: "X", baseUrl: "not-a-url" }));
+});
+
+Deno.test("diffLines reports added and removed lines", () => {
+  const result = diffLines("one\ntwo\nthree\n", "one\nTWO\nthree\nfour\n");
+  equal(result.added, 2);
+  equal(result.removed, 1);
+  equal(result.diff.includes("-two"), true);
+  equal(result.diff.includes("+TWO"), true);
+  equal(result.diff.includes("+four"), true);
+});
+
+Deno.test("diffLines handles new and empty files", () => {
+  const created = diffLines("", "a\nb");
+  equal(created.added, 2);
+  equal(created.removed, 0);
+  const same = diffLines("same", "same");
+  equal(same.added, 0);
+  equal(same.removed, 0);
+});
+
+Deno.test("ChatInput accepts message attachments", () => {
+  const parsed = ChatInput.parse({
+    messages: [{
+      role: "user",
+      content: "lihat ini",
+      attachments: [{
+        type: "image",
+        name: "screen.png",
+        mime: "image/png",
+        data: "data:image/png;base64,AAAA",
+      }],
+    }],
+  });
+  equal(parsed.variant, "medium");
+  equal(parsed.messages[0].attachments?.length, 1);
+  throws(() =>
+    ChatInput.parse({
+      messages: [{
+        role: "user",
+        content: "x",
+        attachments: [{ type: "image", name: "a.png", data: "" }],
+      }],
+    })
+  );
+});
+
+Deno.test("ChatInput accepts workspace path attachments", () => {
+  const parsed = ChatInput.parse({
+    messages: [{
+      role: "user",
+      content: "baca file",
+      attachments: [{ type: "workspace", name: "note.md", path: "docs/note.md" }],
+    }],
+  });
+  equal(parsed.messages[0].attachments?.[0].path, "docs/note.md");
+  throws(() =>
+    ChatInput.parse({
+      messages: [{
+        role: "user",
+        content: "x",
+        attachments: [{ type: "workspace", name: "note.md" }],
+      }],
+    })
+  );
 });
