@@ -414,11 +414,10 @@ export function ChatSidebar({ projectId, providers, onClose, onOpenFile }: Props
               <div
                 key={index}
                 className={cn(
-                  "w-fit rounded-lg px-3 py-2 text-sm",
-                  entry.changes?.length ? "max-w-full" : "max-w-[85%]",
+                  "text-sm",
                   entry.role === "user"
-                    ? "bg-primary text-primary-foreground self-end"
-                    : "bg-muted self-start",
+                    ? "max-w-[85%] self-end rounded-lg border border-muted-foreground/10 px-3 py-2 text-primary"
+                    : "w-full self-start",
                 )}
               >
                 {entry.attachments?.length ? (
