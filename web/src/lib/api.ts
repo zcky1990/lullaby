@@ -97,6 +97,8 @@ export interface LocalTicketPayload {
   labels?: string[];
 }
 
+export type ChatMode = "plan" | "build";
+
 export interface ChatPending {
   id: string;
   tool: string;
@@ -322,6 +324,7 @@ export const api = {
       providerId?: string;
       sessionId?: string;
       variant?: string;
+      mode?: ChatMode;
       messages: { role: string; content: string; attachments?: ChatAttachment[] }[];
     },
   ) => request<ChatResponse>(`/api/projects/${projectId}/chat`, jsonInit("POST", payload)),

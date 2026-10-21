@@ -14,6 +14,7 @@ import { Spinner } from "@/components/ui/spinner";
 import {
   api,
   type ChatAttachment,
+  type ChatMode,
   type ChatPending,
   type ChatResponse,
   type ChatSession,
@@ -118,6 +119,13 @@ export function ChatSidebar({
 }: Props) {
   const [providerId, setProviderId] = useState(providers[0]?.id ?? "");
   const [variant, setVariant] = useState("medium");
+  const [mode, setMode] = useState<ChatMode>(() => {
+    try {
+      return localStorage.getItem("rnd.chatMode:v1") === "plan" ? "plan" : "build";
+    } catch {
+      return "build";
+    }
+  });
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [entries, setEntries] = useState<Entry[]>([]);
@@ -133,6 +141,14 @@ export function ChatSidebar({
   useEffect(() => {
     if (!providerId && providers[0]) setProviderId(providers[0].id);
   }, [providers, providerId]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("rnd.chatMode:v1", mode);
+    } catch {
+      // ignore storage errors
+    }
+  }, [mode]);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
@@ -270,6 +286,7 @@ export function ChatSidebar({
         providerId: providerId || undefined,
         sessionId: sessionId ?? undefined,
         variant,
+        mode,
         messages: next.map((entry, index) => ({
           role: entry.role,
           content: entry.content,
@@ -371,15 +388,8 @@ export function ChatSidebar({
         </div>
       ) : null}
 
-      <div className="flex items-center justify-between border-b px-3 py-2">
-        <span className="text-sm font-semibold">Chat</span>
-        <Button size="icon" variant="ghost" onClick={onClose} aria-label="Tutup chat">
-          <X />
-        </Button>
-      </div>
-
-      <div className="border-b px-3 py-2">
-        <div className="flex items-center gap-2">
+      <div className="flex items-center justify-between gap-3 border-b px-3 py-2 max-h-[40px] h-[40px]">
+        <div className="flex items-center gap-1 w-3/4">
           <Select value={sessionId ?? "new"} onValueChange={selectSession} disabled={!!pending}>
             <SelectTrigger size="sm" className="min-w-0 flex-1" aria-label="Sesi chat">
               <SelectValue placeholder="Chat baru" />
@@ -410,6 +420,9 @@ export function ChatSidebar({
             <Trash2 />
           </Button>
         </div>
+        <Button size="icon" variant="ghost" onClick={onClose} aria-label="Tutup chat">
+          <X />
+        </Button>
       </div>
 
       <div ref={scrollRef} className="flex-1 overflow-y-auto p-3">
@@ -592,6 +605,25 @@ export function ChatSidebar({
             >
               <Paperclip />
             </Button>
+            <Select
+              value={mode}
+              onValueChange={(value) => setMode(value as ChatMode)}
+              disabled={!!pending}
+            >
+              <SelectTrigger
+                size="sm"
+                className="h-7 w-[4.75rem] shrink-0 border-0 bg-transparent px-1 text-xs shadow-none focus-visible:ring-0 data-[size=sm]:h-7"
+                aria-label="Mode chat"
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  <SelectItem value="plan">Plan</SelectItem>
+                  <SelectItem value="build">Build</SelectItem>
+                </SelectGroup>
+              </SelectContent>
+            </Select>
             <Select
               value={providerId}
               onValueChange={setProviderId}

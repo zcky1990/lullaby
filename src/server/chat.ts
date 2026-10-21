@@ -92,7 +92,17 @@ const SYSTEM_PROMPT =
   "never claim it already exists in Jira). When the task is complete, reply with a short " +
   "summary (no tool call).";
 
-function systemPrompt(workspace: string | null): string {
+const PLAN_PROMPT =
+  "You are in PLAN mode. Do NOT call any tools, do NOT modify files, and do NOT create tickets. " +
+  "Reply with a concise, actionable plan: goal, ordered steps, files/areas likely involved, " +
+  "risks, and open questions. The user will switch to Build mode when they want implementation.";
+
+function systemPrompt(workspace: string | null, mode: "plan" | "build"): string {
+  if (mode === "plan") {
+    return workspace
+      ? `${PLAN_PROMPT}\nThe workspace root is: ${workspace}. Paths in your plan are relative to it.`
+      : PLAN_PROMPT;
+  }
   if (!workspace) {
     return `${SYSTEM_PROMPT} No workspace is configured for this project, so file tools are ` +
       "unavailable; you can still use create_ticket to record tickets locally.";
@@ -182,6 +192,7 @@ interface Run {
   alwaysAllow: Set<string>;
   changes: ChatChange[];
   projectId: string;
+  mode: "plan" | "build";
   createdTickets: CreatedTicket[];
   createdAt: number;
 }
@@ -195,7 +206,8 @@ function pruneRuns(): void {
   }
 }
 
-function toolsFor(workspace: string | null): ToolDef[] {
+function toolsFor(workspace: string | null, mode: "plan" | "build"): ToolDef[] {
+  if (mode === "plan") return [];
   return workspace ? [TICKET_TOOL, ...TOOL_DEFS] : [TICKET_TOOL];
 }
 
@@ -618,9 +630,23 @@ const VARIANT_TEMPERATURE: Record<string, number | undefined> = {
 
 async function advance(run: Run): Promise<ChatResponse> {
   try {
-    const tools = toolsFor(run.workspace);
+    const tools = toolsFor(run.workspace, run.mode);
     for (let step = 0; step < MAX_STEPS; step++) {
       const response = await complete(run.provider, run.turns, tools, run.temperature);
+      if (run.mode === "plan") {
+        const message = response.text ||
+          "(Mode plan: tidak ada tool yang dijalankan. Aktifkan mode Build untuk implementasi.)";
+        run.turns.push({ role: "assistant", content: message });
+        await appendChatMessage(run.sessionId, "assistant", message, []);
+        runs.delete(run.id);
+        return {
+          status: "done",
+          message,
+          sessionId: run.sessionId,
+          changes: [],
+          createdTickets: [],
+        };
+      }
       if (response.toolCalls.length === 0) {
         run.turns.push({ role: "assistant", content: response.text });
         await appendChatMessage(run.sessionId, "assistant", response.text, run.changes);
@@ -686,6 +712,7 @@ export async function startChat(
   messages: VisibleMessage[],
   sessionId?: string,
   variant: string = "medium",
+  mode: "plan" | "build" = "build",
 ): Promise<ChatResponse> {
   pruneRuns();
 
@@ -722,7 +749,7 @@ export async function startChat(
     sessionId: session.id,
     temperature: VARIANT_TEMPERATURE[variant],
     turns: [
-      { role: "system", content: systemPrompt(workspace) },
+      { role: "system", content: systemPrompt(workspace, mode) },
       ...resolved.map((message) => ({
         role: message.role,
         content: message.content,
@@ -735,6 +762,7 @@ export async function startChat(
     alwaysAllow: new Set(),
     changes: [],
     projectId,
+    mode,
     createdTickets: [],
     createdAt: Date.now(),
   };

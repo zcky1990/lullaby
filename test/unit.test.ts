@@ -161,3 +161,10 @@ Deno.test("htmlToPlainText keeps block content", () => {
   equal(text.includes("• satu"), true);
   equal(text.includes("• dua"), true);
 });
+
+Deno.test("ChatInput supports plan and build modes", () => {
+  const base = { messages: [{ role: "user", content: "halo" }] };
+  equal(ChatInput.parse(base).mode, "build");
+  equal(ChatInput.parse({ ...base, mode: "plan" }).mode, "plan");
+  throws(() => ChatInput.parse({ ...base, mode: "design" }));
+});

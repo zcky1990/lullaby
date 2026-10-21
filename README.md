@@ -77,6 +77,11 @@ dari semua provider LLM project (label = `model`, fallback nama provider). Di sa
 selector **Variant** — **Low / Medium / High** — yang memetakan ke `temperature` (low 0.2, medium
 0.5, high 0.9).
 
+**Mode Plan / Build:** selector **Mode** di composer (tersimpan di `localStorage`). **Plan** hanya
+merencanakan — server tidak mengirim tool apa pun ke LLM dan tidak pernah mengeksekusi tool call
+(bila model tetap memanggil tool, hasilnya diabaikan). **Build** adalah agent penuh: file tools
+(`list_files`/`read_file`/`write_file` + approval) dan `create_ticket`.
+
 **Perubahan file di chat:** setiap `write_file` yang disetujui menghasilkan kartu perubahan berisi
 **path** (klik → tab file dibuka/di-reload di aplikasi), status (baru/diubah), jumlah `+/-`, dan
 **diff** berwarna. Diff ikut disimpan di kolom `chat_messages.changes` sehingga tetap tampil saat

@@ -307,6 +307,7 @@ async function chatHandler(projectId: string, req: Request): Promise<Response> {
     messages,
     parsed.data.sessionId,
     parsed.data.variant,
+    parsed.data.mode,
   );
   await record("chat.message", { projectId, providerId: provider.id });
   return json(result);

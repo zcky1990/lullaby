@@ -59,6 +59,9 @@ export type LlmProviderInput = z.infer<typeof LlmProviderInput>;
 export const ChatVariant = z.enum(["low", "medium", "high"]);
 export type ChatVariant = z.infer<typeof ChatVariant>;
 
+export const ChatMode = z.enum(["plan", "build"]);
+export type ChatMode = z.infer<typeof ChatMode>;
+
 export const ChatAttachmentInput = z
   .object({
     type: z.enum(["image", "text", "workspace"]),
@@ -76,6 +79,7 @@ export const ChatInput = z.object({
   providerId: z.string().trim().optional(),
   sessionId: z.string().trim().optional(),
   variant: ChatVariant.default("medium"),
+  mode: ChatMode.default("build"),
   messages: z
     .array(
       z.object({

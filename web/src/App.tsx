@@ -583,10 +583,7 @@ export default function App() {
       )}
 
       <main className="flex min-w-0 flex-1 flex-col">
-        <header className="flex items-center justify-between border-b px-6 py-3">
-          <div className="flex items-center gap-2 font-semibold">
-            RND Workflow <Badge variant="outline">Deno Desktop · shadcn/ui</Badge>
-          </div>
+        <header className="flex items-center justify-end border-b px-6 py-3 max-h-[40px] h-[40px]">
           <Button
             size="sm"
             variant={chatOpen ? "secondary" : "outline"}
