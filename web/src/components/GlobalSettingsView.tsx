@@ -2,15 +2,61 @@ import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import { Contrast, Monitor, Moon, Sun, Wand2 } from "lucide-react";
 import type { GlobalSection } from "@/components/GlobalSettingsPanel";
-import { useTheme, type EditorTheme, type Theme } from "@/components/ThemeProvider";
+import {
+  useTheme,
+  type AppFont,
+  type EditorFont,
+  type EditorTheme,
+  type IconSize,
+  type IconWeight,
+  type Theme,
+} from "@/components/ThemeProvider";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { McpSettings } from "@/components/McpSettings";
 import { api } from "@/lib/api";
 
 const THEME_OPTIONS: { id: Theme; label: string; icon: typeof Sun }[] = [
   { id: "light", label: "Light", icon: Sun },
   { id: "dark", label: "Dark", icon: Moon },
   { id: "system", label: "System", icon: Monitor },
+];
+
+const APP_FONT_OPTIONS: { id: AppFont; label: string }[] = [
+  { id: "system", label: "System" },
+  { id: "inter", label: "Inter" },
+  { id: "manrope", label: "Manrope" },
+  { id: "jetbrains", label: "JetBrains Mono" },
+];
+
+const EDITOR_FONT_OPTIONS: { id: EditorFont; label: string }[] = [
+  { id: "jetbrains", label: "JetBrains Mono" },
+  { id: "fira", label: "Fira Code" },
+  { id: "menlo", label: "Menlo" },
+  { id: "consolas", label: "Consolas" },
+  { id: "monospace", label: "Monospace" },
+];
+
+const EDITOR_SIZE_OPTIONS = [12, 13, 14, 15, 16];
+
+const ICON_SIZE_OPTIONS: { id: IconSize; label: string }[] = [
+  { id: "sm", label: "Compact" },
+  { id: "md", label: "Normal" },
+  { id: "lg", label: "Large" },
+];
+
+const ICON_WEIGHT_OPTIONS: { id: IconWeight; label: string }[] = [
+  { id: "light", label: "Light" },
+  { id: "regular", label: "Regular" },
+  { id: "bold", label: "Bold" },
 ];
 
 const EDITOR_THEME_OPTIONS: { id: EditorTheme; label: string; icon: typeof Sun }[] = [
@@ -22,8 +68,16 @@ const EDITOR_THEME_OPTIONS: { id: EditorTheme; label: string; icon: typeof Sun }
 ];
 
 export function GlobalSettingsView({ section }: { section: GlobalSection }) {
-  if (section === "appearance") return <Appearance />;
-  if (section === "editor") return <EditorSettings />;
+  if (section === "appearance") {
+    return (
+      <div className="flex flex-col gap-8">
+        <Appearance />
+        <EditorSettings />
+        <IconSettings />
+      </div>
+    );
+  }
+  if (section === "mcp") return <McpSettings />;
   return <About />;
 }
 
@@ -50,46 +104,165 @@ function Section({
   );
 }
 
-function Appearance() {
-  const { theme, setTheme } = useTheme();
+function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <Section title="Appearance" description="Pilih tema aplikasi.">
-      <ToggleGroup
-        type="single"
-        variant="outline"
-        value={theme}
-        onValueChange={(value) => value && setTheme(value as Theme)}
-        className="w-fit"
-      >
-        {THEME_OPTIONS.map((option) => (
-          <ToggleGroupItem key={option.id} value={option.id} aria-label={option.label}>
-            <option.icon />
-            {option.label}
-          </ToggleGroupItem>
-        ))}
-      </ToggleGroup>
+    <div className="flex flex-col gap-2">
+      <span className="text-xs text-muted-foreground">{label}</span>
+      {children}
+    </div>
+  );
+}
+
+function Appearance() {
+  const { theme, setTheme, appFont, setAppFont } = useTheme();
+  return (
+    <Section title="Appearance" description="Tema dan font aplikasi.">
+      <div className="flex flex-col gap-4">
+        <Field label="Theme">
+          <ToggleGroup
+            type="single"
+            variant="outline"
+            value={theme}
+            onValueChange={(value) => value && setTheme(value as Theme)}
+            className="w-fit"
+          >
+            {THEME_OPTIONS.map((option) => (
+              <ToggleGroupItem key={option.id} value={option.id} aria-label={option.label}>
+                <option.icon />
+                {option.label}
+              </ToggleGroupItem>
+            ))}
+          </ToggleGroup>
+        </Field>
+        <Field label="Font aplikasi">
+          <Select value={appFont} onValueChange={(value) => setAppFont(value as AppFont)}>
+            <SelectTrigger size="sm" className="w-56" aria-label="Font aplikasi">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                {APP_FONT_OPTIONS.map((option) => (
+                  <SelectItem key={option.id} value={option.id}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+        </Field>
+      </div>
     </Section>
   );
 }
 
 function EditorSettings() {
-  const { editorTheme, setEditorTheme } = useTheme();
+  const {
+    editorTheme,
+    setEditorTheme,
+    editorFont,
+    setEditorFont,
+    editorFontSize,
+    setEditorFontSize,
+  } = useTheme();
   return (
-    <Section title="Editor" description="Tema untuk text editor (Monaco).">
-      <ToggleGroup
-        type="single"
-        variant="outline"
-        value={editorTheme}
-        onValueChange={(value) => value && setEditorTheme(value as EditorTheme)}
-        className="w-fit"
-      >
-        {EDITOR_THEME_OPTIONS.map((option) => (
-          <ToggleGroupItem key={option.id} value={option.id} aria-label={option.label}>
-            <option.icon />
-            {option.label}
-          </ToggleGroupItem>
-        ))}
-      </ToggleGroup>
+    <Section title="Editor" description="Tema, font, dan ukuran text editor (Monaco).">
+      <div className="flex flex-col gap-4">
+        <Field label="Tema editor">
+          <ToggleGroup
+            type="single"
+            variant="outline"
+            value={editorTheme}
+            onValueChange={(value) => value && setEditorTheme(value as EditorTheme)}
+            className="w-fit"
+          >
+            {EDITOR_THEME_OPTIONS.map((option) => (
+              <ToggleGroupItem key={option.id} value={option.id} aria-label={option.label}>
+                <option.icon />
+                {option.label}
+              </ToggleGroupItem>
+            ))}
+          </ToggleGroup>
+        </Field>
+        <div className="flex flex-wrap gap-4">
+          <Field label="Font editor">
+            <Select value={editorFont} onValueChange={(value) => setEditorFont(value as EditorFont)}>
+              <SelectTrigger size="sm" className="w-56" aria-label="Font editor">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  {EDITOR_FONT_OPTIONS.map((option) => (
+                    <SelectItem key={option.id} value={option.id}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+          </Field>
+          <Field label="Ukuran font">
+            <Select
+              value={String(editorFontSize)}
+              onValueChange={(value) => setEditorFontSize(Number(value))}
+            >
+              <SelectTrigger size="sm" className="w-24" aria-label="Ukuran font editor">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  {EDITOR_SIZE_OPTIONS.map((size) => (
+                    <SelectItem key={size} value={String(size)}>
+                      {size}px
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+          </Field>
+        </div>
+      </div>
+    </Section>
+  );
+}
+
+function IconSettings() {
+  const { iconSize, setIconSize, iconWeight, setIconWeight } = useTheme();
+  return (
+    <Section title="Icons" description="Ukuran dan ketebalan ikon antarmuka.">
+      <div className="flex flex-wrap gap-4">
+        <Field label="Ukuran ikon">
+          <Select value={iconSize} onValueChange={(value) => setIconSize(value as IconSize)}>
+            <SelectTrigger size="sm" className="w-40" aria-label="Ukuran ikon">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                {ICON_SIZE_OPTIONS.map((option) => (
+                  <SelectItem key={option.id} value={option.id}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+        </Field>
+        <Field label="Ketebalan ikon">
+          <Select value={iconWeight} onValueChange={(value) => setIconWeight(value as IconWeight)}>
+            <SelectTrigger size="sm" className="w-40" aria-label="Ketebalan ikon">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                {ICON_WEIGHT_OPTIONS.map((option) => (
+                  <SelectItem key={option.id} value={option.id}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+        </Field>
+      </div>
     </Section>
   );
 }

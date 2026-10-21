@@ -61,7 +61,7 @@ Shell ala VSCode: **activity bar** (kiri) + **panel** terpisah (Workspace/Explor
 | **Document**         | selalu                  | tree halaman Docmost (collapsible, lazy children, **+** tambah) + render **markdown** + **Edit** (judul/isi via Monaco)                                       |
 | **Ticket**           | selalu                  | **Kanban** tiket lokal + Jira (kolom = status, drag = transition/update); **Tiket baru** (lokal) + sync manual; klik card → detail; filter assignee + refresh |
 | **Project Settings** | ada project             | Workspace, Integrations (Document/Ticket/Code, `+` pilih tipe), LLM Providers — form **collapsible**                                                          |
-| **Global Settings**  | selalu                  | satu halaman: Appearance (tema app) · Editor (tema Monaco) · About                                                                                            |
+| **Global Settings**  | selalu                  | satu halaman: **Appearance & Editor** (tema/font app, tema/font/ukuran Monaco, ukuran & ketebalan ikon) · MCP · About                                         |
 
 **Chat LLM:** tombol **Chat** di header membuka sidebar kanan. Chat bisa memakai **tools** untuk
 membaca (`list_files`, `read_file`) dan **menulis** (`write_file`) file di folder workspace project
@@ -111,6 +111,7 @@ Document memakai **panel kiri terpisah** yang **lebarnya bisa di-drag** (tersimp
 | `GET /api/projects/:id` · `PUT /api/projects/:id`          | detail (+ integrations, llmProviders) / update      |
 | `PUT /api/projects/:id/integrations/:kind`                 | simpan config integrasi (`docmost`/`jira`/`github`) |
 | `POST /api/integrations/test`                              | test koneksi (docmost/jira/github/llm)              |
+| `GET/PUT /api/settings/mcp`                                | baca / simpan konfigurasi server MCP global         |
 | `GET /api/projects/:id/documents`                          | daftar halaman Docmost                              |
 | `POST /api/projects/:id/documents`                         | buat halaman Docmost (judul, parent opsional)       |
 | `GET /api/projects/:id/local-documents`                    | daftar dokumen lokal (scan document workspace)      |
@@ -167,6 +168,9 @@ dibuka, project terakhir yang dipilih otomatis menjadi aktif (badge **Aktif** di
 **Zoom UI**: `Cmd/Ctrl` + `+` (perbesar), `Cmd/Ctrl` + `-` (perkecil), `Cmd/Ctrl` + `0` (reset).
 Level disimpan di `localStorage` (`rnd.zoom:v1`).
 
+**Preview markdown**: saat tab file `.md` aktif, `Cmd/Ctrl` + `Shift` + `V` men-toggle antara editor
+Monaco dan preview markdown (tombol **Preview/Kode** juga tersedia di header tab file).
+
 ## Permissions & keamanan
 
 Task menjalankan Deno dengan `--allow-read --allow-write --allow-net --allow-env --allow-run`.
@@ -196,13 +200,16 @@ Fondasi (F0) — yang sudah jalan:
   selalu membuat tiket **lokal** (tidak langsung POST ke Jira).
 - **Project Settings**: layout **section** (bukan card) dengan tombol `+` pilih tipe integrasi
   (Document/Ticket/Code), LLM Providers, Workspace, Activity.
-- **Global Settings**: satu halaman — Appearance (tema app) · Editor (tema Monaco) · About.
+- **Global Settings**: **Appearance & Editor** (tema app + tema Monaco dalam satu section) · **MCP**
+  · About. MCP ditambah/diedit lewat **editor JSON** (format `mcpServers`, seperti `mcp.json`
+  Cursor) untuk server global stdio (command/args/env) atau http (url/headers), aktif/nonaktif;
+  disimpan di `app_settings` (SQLite).
 - Integrasi Docmost/Jira/GitHub/LLM: simpan config, health-check, list document/ticket.
 - Multi-provider LLM per project; live activity via SSE.
 
-**Belum termasuk:** generate tiket AI dari PRD, bulk-sync/update Jira, workflow engine, sandbox
-coding loop, MCP transport (mode `mcp` tersimpan di config tetapi belum dieksekusi), WebSocket
-(masih SSE), agent roles (Planner/Coder/Verifier).
+**Belum termasuk:** eksekusi transport MCP (konfigurasi sudah ada), generate tiket AI dari PRD,
+bulk-sync/update Jira, workflow engine, sandbox coding loop, MCP transport (mode `mcp` tersimpan di
+config tetapi belum dieksekusi), WebSocket (masih SSE), agent roles (Planner/Coder/Verifier).
 
 ## Kredit / dependensi UI
 

@@ -1,12 +1,12 @@
-import { Code2, Info, type LucideIcon, Palette } from "lucide-react";
+import { Info, type LucideIcon, Palette, Server } from "lucide-react";
 import { PanelHeader } from "@/components/PanelHeader";
 import { cn } from "@/lib/utils";
 
-export type GlobalSection = "appearance" | "editor" | "about";
+export type GlobalSection = "appearance" | "mcp" | "about";
 
 const SECTIONS: { id: GlobalSection; label: string; icon: LucideIcon }[] = [
-  { id: "appearance", label: "Appearance", icon: Palette },
-  { id: "editor", label: "Editor", icon: Code2 },
+  { id: "appearance", label: "Appearance & Editor", icon: Palette },
+  { id: "mcp", label: "MCP", icon: Server },
   { id: "about", label: "About", icon: Info },
 ];
 

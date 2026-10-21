@@ -98,5 +98,24 @@
   }
   body {
     @apply bg-background text-foreground antialiased;
+    font-family: var(--app-font, ui-sans-serif, system-ui, sans-serif);
   }
+}
+
+html[data-icon-size="sm"] svg.lucide {
+  width: 0.875rem;
+  height: 0.875rem;
+}
+
+html[data-icon-size="lg"] svg.lucide {
+  width: 1.125rem;
+  height: 1.125rem;
+}
+
+html[data-icon-weight="light"] svg.lucide {
+  stroke-width: 1.5;
+}
+
+html[data-icon-weight="bold"] svg.lucide {
+  stroke-width: 2.5;
 }

@@ -2,6 +2,7 @@ import Editor from "@monaco-editor/react";
 import "@/lib/monaco";
 import { Skeleton } from "@/components/ui/skeleton";
 import { languageForPath } from "@/lib/languages";
+import { EDITOR_FONT_STACKS, useTheme } from "@/components/ThemeProvider";
 
 interface Props {
   path: string;
@@ -22,6 +23,7 @@ export default function MonacoViewer({
   readOnly = true,
   onChange,
 }: Props) {
+  const { editorFont, editorFontSize } = useTheme();
   return (
     <Editor
       height={height}
@@ -34,7 +36,8 @@ export default function MonacoViewer({
       options={{
         readOnly,
         minimap: { enabled: false },
-        fontSize: 13,
+        fontFamily: EDITOR_FONT_STACKS[editorFont],
+        fontSize: editorFontSize,
         scrollBeyondLastLine: false,
         wordWrap: "off",
         renderWhitespace: "selection",

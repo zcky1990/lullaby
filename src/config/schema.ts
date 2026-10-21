@@ -101,6 +101,43 @@ export const ChatApproveInput = z.object({
 });
 export type ChatApproveInput = z.infer<typeof ChatApproveInput>;
 
+export const McpTransport = z.enum(["stdio", "http"]);
+export type McpTransport = z.infer<typeof McpTransport>;
+
+const optionalHttpUrl = z.preprocess((v) => (v === "" ? undefined : v), httpUrl.optional());
+const envRecord = z.record(z.string().trim().min(1).max(100), z.string().max(2000));
+
+export const McpServerInput = z
+  .object({
+    id: z.string().trim().min(1).max(80).optional(),
+    name: z.string().trim().min(1).max(80),
+    transport: McpTransport.default("stdio"),
+    command: z.string().trim().max(300).optional(),
+    args: z.array(z.string().max(300)).max(30).default([]),
+    url: optionalHttpUrl,
+    headers: envRecord.optional(),
+    env: envRecord.optional(),
+    enabled: z.boolean().default(true),
+  })
+  .superRefine((value, ctx) => {
+    if (value.transport === "stdio" && !value.command) {
+      ctx.addIssue({
+        code: "custom",
+        message: "Command wajib untuk transport stdio.",
+        path: ["command"],
+      });
+    }
+    if (value.transport === "http" && !value.url) {
+      ctx.addIssue({ code: "custom", message: "URL wajib untuk transport http.", path: ["url"] });
+    }
+  });
+export type McpServerInput = z.infer<typeof McpServerInput>;
+
+export const McpSettingsInput = z.object({
+  servers: z.array(McpServerInput).max(20),
+});
+export type McpSettingsInput = z.infer<typeof McpSettingsInput>;
+
 export const LocalTicketStatus = z.enum(["Backlog", "To Do", "In Progress", "Test", "Done"]);
 export type LocalTicketStatus = z.infer<typeof LocalTicketStatus>;
 

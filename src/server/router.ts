@@ -12,6 +12,7 @@ import {
   LocalDocumentUpdateInput,
   LocalTicketInput,
   LocalTicketUpdateInput,
+  McpSettingsInput,
   ProjectInput,
   ProjectUpdateInput,
   UpdateDocumentInput,
@@ -26,6 +27,7 @@ import {
   deleteChatSession,
   deleteLlmProvider,
   deleteLocalTicket,
+  getAppSetting,
   getChatSession,
   getIntegration,
   getLlmProvider,
@@ -45,6 +47,7 @@ import {
   markLocalTicketSyncError,
   moveLocalDocumentMeta,
   recentEvents,
+  setAppSetting,
   updateLlmProvider,
   updateLocalTicket,
   updateProject,
@@ -531,6 +534,36 @@ async function syncLocalDocumentHandler(projectId: string, req: Request): Promis
   }
 }
 
+const MCP_SETTINGS_KEY = "mcp_servers";
+
+async function getMcpSettingsHandler(): Promise<Response> {
+  const raw = await getAppSetting(MCP_SETTINGS_KEY);
+  let servers: unknown = [];
+  if (raw) {
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) servers = parsed;
+    } catch {
+      servers = [];
+    }
+  }
+  return json({ servers });
+}
+
+async function saveMcpSettingsHandler(req: Request): Promise<Response> {
+  const parsed = McpSettingsInput.safeParse(await readJson(req));
+  if (!parsed.success) {
+    return json({ error: "invalid_input", issues: parsed.error.issues }, 400);
+  }
+  const servers = parsed.data.servers.map((server) => ({
+    ...server,
+    id: server.id ?? crypto.randomUUID(),
+  }));
+  await setAppSetting(MCP_SETTINGS_KEY, JSON.stringify(servers));
+  await record("settings.mcp_updated", { count: servers.length });
+  return json({ servers });
+}
+
 async function testIntegrationHandler(req: Request): Promise<Response> {
   const parsed = IntegrationInput.safeParse(await readJson(req));
   if (!parsed.success) {
@@ -860,6 +893,11 @@ export async function handleRequest(req: Request): Promise<Response> {
   const method = req.method.toUpperCase();
 
   try {
+    if (pathname === "/api/settings/mcp") {
+      if (method === "GET") return await getMcpSettingsHandler();
+      if (method === "PUT" || method === "POST") return await saveMcpSettingsHandler(req);
+    }
+
     if (pathname === "/api/health" && method === "GET") {
       return json({ ok: true, name: "rnd-workflow", version: VERSION, dataDir: appDataDir() });
     }

@@ -56,6 +56,18 @@ export interface DocContent {
   content: string;
 }
 
+export interface McpServer {
+  id: string;
+  name: string;
+  transport: "stdio" | "http";
+  command?: string;
+  args: string[];
+  url?: string;
+  headers?: Record<string, string>;
+  env?: Record<string, string>;
+  enabled: boolean;
+}
+
 export interface LocalDocSummary {
   id: string;
   path: string;
@@ -391,4 +403,7 @@ export const api = {
     ),
   testRaw: (body: IntegrationPayload) =>
     request<{ result: TestResult }>("/api/integrations/test", jsonInit("POST", body)),
+  getMcpSettings: () => request<{ servers: McpServer[] }>("/api/settings/mcp"),
+  saveMcpSettings: (servers: McpServer[]) =>
+    request<{ servers: McpServer[] }>("/api/settings/mcp", jsonInit("PUT", { servers })),
 };

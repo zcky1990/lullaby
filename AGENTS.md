@@ -40,6 +40,9 @@ finishing a change.
 - **Tickets**: `local_tickets` (SQLite) are created locally (UI `TicketCreateDialog` + AI tool
   `create_ticket`); `GET /tickets` merges unsynced local tickets with Jira. Syncing is manual
   (`POST /local-tickets/:id/sync` → Jira issue) and sets `jira_key`/`sync_status`.
+- **MCP**: global server config (`McpSettings`) is stored in `app_settings` (`mcp_servers`, JSON;
+  stdio command/args/env or http url/headers) via `GET/PUT /api/settings/mcp`. Transport execution
+  is not wired yet.
 - **List/menus**: `ActivityBar` (left rail) opens tabs in the main area (`TabsBar`).
   Workspace/Explorer/Document keep a **separate** side panel in `<aside>` (`WorkspacePanel`,
   `FileTreePanel`, `DocumentPanel`); files/documents open as their own tabs. Project Settings and

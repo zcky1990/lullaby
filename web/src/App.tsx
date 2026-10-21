@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, lazy, Suspense } from "react";
-import { Inbox, MessageSquare, Pencil, Plus, RefreshCw, Save, Upload } from "lucide-react";
+import { Code2, Eye, Inbox, MessageSquare, Pencil, Plus, RefreshCw, Save, Upload } from "lucide-react";
 import type { ActivityEvent } from "@/components/ActivityFeed";
 import { ActivityBar, type Menu } from "@/components/ActivityBar";
 import { ChatSidebar } from "@/components/ChatSidebar";
@@ -216,6 +216,21 @@ export default function App() {
   const patchTab = useCallback((id: string, patch: Partial<EditorTab>) => {
     setTabs((current) => current.map((tab) => (tab.id === id ? { ...tab, ...patch } : tab)));
   }, []);
+
+  useEffect(() => {
+    const handler = (event: KeyboardEvent) => {
+      if (!(event.metaKey || event.ctrlKey) || !event.shiftKey) return;
+      if (event.key.toLowerCase() !== "v") return;
+      const tab = tabs.find((item) => item.id === activeTabId);
+      if (!tab || tab.kind !== "file") return;
+      const path = tab.ref ?? tab.title;
+      if (!/\.(md|markdown|mdx)$/i.test(path)) return;
+      event.preventDefault();
+      patchTab(tab.id, { preview: !tab.preview });
+    };
+    window.addEventListener("keydown", handler, { capture: true });
+    return () => window.removeEventListener("keydown", handler, { capture: true });
+  }, [tabs, activeTabId, patchTab]);
 
   const closeTab = useCallback(
     (id: string) => {
@@ -650,7 +665,13 @@ export default function App() {
           />
         );
       case "file":
-        return <FileTab tab={tab} />;
+        return (
+          <FileTab
+            key={tab.id}
+            tab={tab}
+            onTogglePreview={() => patchTab(tab.id, { preview: !tab.preview })}
+          />
+        );
     }
   };
 
@@ -838,19 +859,69 @@ function StatCard({ label, value }: { label: string; value: number }) {
   );
 }
 
-function FileTab({ tab }: { tab: EditorTab }) {
+function FileTab({
+  tab,
+  onTogglePreview,
+}: {
+  tab: EditorTab;
+  onTogglePreview: () => void;
+}) {
   const { resolvedEditorTheme } = useTheme();
   const path = tab.ref ?? tab.title;
+  const isMarkdown = /\.(md|markdown|mdx)$/i.test(path);
 
   if (tab.loading) return <Skeleton className="h-full w-full rounded-none" />;
   if (tab.error) return <p className="p-6 text-sm text-destructive">{tab.error}</p>;
   if (tab.binary) {
     return <p className="p-6 text-sm text-muted-foreground">File biner (tidak ditampilkan).</p>;
   }
+
+  if (!isMarkdown) {
+    return (
+      <Suspense fallback={<Skeleton className="h-full w-full rounded-none" />}>
+        <MonacoViewer path={path} content={tab.content ?? ""} theme={resolvedEditorTheme} />
+      </Suspense>
+    );
+  }
+
   return (
-    <Suspense fallback={<Skeleton className="h-full w-full rounded-none" />}>
-      <MonacoViewer path={path} content={tab.content ?? ""} theme={resolvedEditorTheme} />
-    </Suspense>
+    <div className="flex h-full flex-col">
+      <div className="flex items-center justify-between gap-2 border-b px-4 py-2">
+        <span className="truncate font-mono text-xs text-muted-foreground">{path}</span>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={onTogglePreview}
+          title="Cmd/Ctrl+Shift+V"
+          data-icon="inline-start"
+        >
+          {tab.preview ? <Code2 /> : <Eye />}
+          {tab.preview ? "Kode" : "Preview"}
+        </Button>
+      </div>
+      <div className="min-h-0 flex-1">
+        {tab.preview ? (
+          <div className="h-full overflow-y-auto">
+            <div className="px-8 py-6">
+              <Suspense
+                fallback={
+                  <div className="flex flex-col gap-2">
+                    <Skeleton className="h-4 w-2/3" />
+                    <Skeleton className="h-4 w-full" />
+                  </div>
+                }
+              >
+                <MarkdownView content={tab.content || "_(kosong)_"} />
+              </Suspense>
+            </div>
+          </div>
+        ) : (
+          <Suspense fallback={<Skeleton className="h-full w-full rounded-none" />}>
+            <MonacoViewer path={path} content={tab.content ?? ""} theme={resolvedEditorTheme} />
+          </Suspense>
+        )}
+      </div>
+    </div>
   );
 }
 

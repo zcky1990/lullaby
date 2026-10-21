@@ -5,6 +5,7 @@ import {
   LlmProviderInput,
   LocalTicketInput,
   LocalTicketUpdateInput,
+  McpSettingsInput,
   ProjectInput,
 } from "../src/config/schema.ts";
 import { htmlToAdf, htmlToPlainText, sanitizeHtml } from "../src/core/html.ts";
@@ -213,4 +214,23 @@ Deno.test("local documents create, list, rename, and guard paths", async () => {
   } finally {
     await Deno.remove(dir, { recursive: true });
   }
+});
+
+Deno.test("McpSettingsInput validates stdio and http servers", () => {
+  const parsed = McpSettingsInput.parse({
+    servers: [
+      { name: "fs", transport: "stdio", command: "npx", args: ["-y", "server"] },
+      { name: "remote", transport: "http", url: "https://example.com/mcp" },
+    ],
+  });
+  equal(parsed.servers[0].transport, "stdio");
+  equal(parsed.servers[0].enabled, true);
+  equal(parsed.servers[1].enabled, true);
+
+  throws(() => McpSettingsInput.parse({ servers: [{ name: "x", transport: "stdio" }] }));
+  throws(() =>
+    McpSettingsInput.parse({
+      servers: [{ name: "x", transport: "http", url: "not-a-url" }],
+    })
+  );
 });

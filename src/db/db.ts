@@ -112,6 +112,12 @@ CREATE TABLE IF NOT EXISTS chat_messages (
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+CREATE TABLE IF NOT EXISTS app_settings (
+  key        TEXT PRIMARY KEY,
+  value      TEXT NOT NULL,
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE TABLE IF NOT EXISTS local_documents (
   project_id  TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
   path        TEXT NOT NULL,
@@ -709,4 +715,20 @@ export async function moveLocalDocumentMeta(
 export async function deleteLocalDocumentMeta(projectId: string, path: string): Promise<void> {
   const db = await getDb();
   db.prepare("DELETE FROM local_documents WHERE project_id = ? AND path = ?").run(projectId, path);
+}
+
+export async function getAppSetting(key: string): Promise<string | null> {
+  const db = await getDb();
+  const row = db.prepare("SELECT value FROM app_settings WHERE key = ?").get(key) as
+    | { value?: string }
+    | undefined;
+  return row?.value ?? null;
+}
+
+export async function setAppSetting(key: string, value: string): Promise<void> {
+  const db = await getDb();
+  db.prepare(
+    "INSERT INTO app_settings (key, value, updated_at) VALUES (?, ?, datetime('now')) " +
+      "ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now')",
+  ).run(key, value);
 }
