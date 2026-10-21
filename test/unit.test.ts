@@ -17,6 +17,7 @@ import {
   updateLocalDocument,
 } from "../src/fs/documents.ts";
 import { diffLines } from "../src/server/diff.ts";
+import { parseSkillFile } from "../src/server/skills.ts";
 
 Deno.test("ProjectInput trims and drops empty optional fields", () => {
   throws(() => ProjectInput.parse({ name: "" }));
@@ -233,4 +234,21 @@ Deno.test("McpSettingsInput validates stdio and http servers", () => {
       servers: [{ name: "x", transport: "http", url: "not-a-url" }],
     })
   );
+});
+
+Deno.test("parseSkillFile reads frontmatter and normalizes name", () => {
+  const parsed = parseSkillFile(
+    "---\nname: Demo Skill\ndescription: Does demo things\n---\n\n# Title\n\nBody text.",
+    "fallback",
+  );
+  equal(parsed.name, "demo-skill");
+  equal(parsed.description, "Does demo things");
+  equal(parsed.body.includes("Body text."), true);
+  equal(parsed.body.includes("description:"), false);
+});
+
+Deno.test("parseSkillFile falls back to folder name and first paragraph", () => {
+  const parsed = parseSkillFile("# Heading\n\nUse this for X.", "my-skill");
+  equal(parsed.name, "my-skill");
+  equal(parsed.description, "Use this for X.");
 });

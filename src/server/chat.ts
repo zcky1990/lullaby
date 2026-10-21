@@ -14,6 +14,7 @@ import {
 } from "../fs/workspace.ts";
 import { request } from "../integrations/http.ts";
 import { diffLines } from "./diff.ts";
+import { loadEnabledSkills, readSkillBody, type SkillInfo } from "./skills.ts";
 
 export interface ChatAttachment {
   type: "image" | "text" | "workspace";
@@ -93,22 +94,36 @@ const SYSTEM_PROMPT =
   "summary (no tool call).";
 
 const PLAN_PROMPT =
-  "You are in PLAN mode. Do NOT call any tools, do NOT modify files, and do NOT create tickets. " +
-  "Reply with a concise, actionable plan: goal, ordered steps, files/areas likely involved, " +
-  "risks, and open questions. The user will switch to Build mode when they want implementation.";
+  "You are in PLAN mode. Do NOT modify files and do NOT create tickets. You may call use_skill " +
+  "(read-only) to load relevant skill instructions. Reply with a concise, actionable plan: " +
+  "goal, ordered steps, files/areas likely involved, risks, and open questions. The user will " +
+  "switch to Build mode when they want implementation.";
 
-function systemPrompt(workspace: string | null, mode: "plan" | "build"): string {
+function skillPrompt(skills: SkillInfo[]): string {
+  if (!skills.length) return "";
+  return "\n\nAvailable skills (call use_skill with the exact name when the task matches, " +
+    "then follow its instructions):\n" +
+    skills.map((skill) => `- ${skill.name}: ${skill.description}`).join("\n");
+}
+
+function systemPrompt(
+  workspace: string | null,
+  mode: "plan" | "build",
+  skills: SkillInfo[],
+): string {
+  const skillList = skillPrompt(skills);
   if (mode === "plan") {
-    return workspace
+    const base = workspace
       ? `${PLAN_PROMPT}\nThe workspace root is: ${workspace}. Paths in your plan are relative to it.`
       : PLAN_PROMPT;
+    return `${base}${skillList}`;
   }
   if (!workspace) {
     return `${SYSTEM_PROMPT} No workspace is configured for this project, so file tools are ` +
-      "unavailable; you can still use create_ticket to record tickets locally.";
+      `unavailable; you can still use create_ticket to record tickets locally.${skillList}`;
   }
   return `${SYSTEM_PROMPT}\nThe workspace root is: ${workspace}. All tool paths are relative ` +
-    'to this root (for example "src/index.ts"). Do not use absolute paths or "..".';
+    `to this root (for example "src/index.ts"). Do not use absolute paths or "..".${skillList}`;
 }
 
 const TOOL_DEFS: ToolDef[] = [
@@ -164,6 +179,20 @@ const TICKET_TOOL: ToolDef = {
   },
 };
 
+const USE_SKILL_TOOL: ToolDef = {
+  name: "use_skill",
+  description:
+    "Load the full instructions of an available skill by name (read-only). Call this when a " +
+    "listed skill matches the task, then follow the returned instructions.",
+  parameters: {
+    type: "object",
+    properties: {
+      name: { type: "string", description: "Skill name exactly as listed." },
+    },
+    required: ["name"],
+  },
+};
+
 const TICKET_STATUSES = ["Backlog", "To Do", "In Progress", "Test", "Done"] as const;
 const TICKET_PRIORITIES = ["Low", "Medium", "High", "Urgent"] as const;
 const TICKET_TYPES = ["Task", "Bug", "Story"] as const;
@@ -193,6 +222,7 @@ interface Run {
   changes: ChatChange[];
   projectId: string;
   mode: "plan" | "build";
+  skills: Map<string, SkillInfo>;
   createdTickets: CreatedTicket[];
   createdAt: number;
 }
@@ -206,9 +236,16 @@ function pruneRuns(): void {
   }
 }
 
-function toolsFor(workspace: string | null, mode: "plan" | "build"): ToolDef[] {
-  if (mode === "plan") return [];
-  return workspace ? [TICKET_TOOL, ...TOOL_DEFS] : [TICKET_TOOL];
+function toolsFor(
+  workspace: string | null,
+  mode: "plan" | "build",
+  hasSkills: boolean,
+): ToolDef[] {
+  const tools: ToolDef[] = hasSkills ? [USE_SKILL_TOOL] : [];
+  if (mode === "plan") return tools;
+  tools.push(TICKET_TOOL);
+  if (workspace) tools.push(...TOOL_DEFS);
+  return tools;
 }
 
 function summarize(call: ToolCall): string {
@@ -246,6 +283,20 @@ function parseImageDataUrl(data: string): { mediaType: string; base64: string } 
 
 async function executeTool(run: Run, call: ToolCall): Promise<string> {
   const args = safeParse(call.arguments);
+  if (call.name === "use_skill") {
+    const name = String(args.name ?? "").trim().toLowerCase();
+    const skill = run.skills.get(name);
+    if (!skill) {
+      const available = [...run.skills.keys()].join(", ") || "(tidak ada)";
+      return `Skill "${name}" tidak ditemukan. Tersedia: ${available}`;
+    }
+    try {
+      const body = await readSkillBody(skill);
+      return `Skill: ${skill.name} (${skill.source})\n\n${body}`;
+    } catch (error) {
+      return `Gagal memuat skill "${skill.name}": ${(error as Error).message}`;
+    }
+  }
   if (call.name === "create_ticket") {
     const title = String(args.title ?? "").trim().slice(0, 200);
     if (!title) return "Error: title is required.";
@@ -408,7 +459,9 @@ async function executeBatch(run: Run, batch: ToolCall[]): Promise<void> {
             decision === "always";
           result = allowed ? await writeFileWithChange(run, call) : "Ditolak oleh user.";
         }
-      } else if (!run.workspace && call.name !== "create_ticket") {
+      } else if (
+        !run.workspace && call.name !== "create_ticket" && call.name !== "use_skill"
+      ) {
         result = "No workspace configured.";
       } else {
         result = await executeTool(run, call);
@@ -630,22 +683,44 @@ const VARIANT_TEMPERATURE: Record<string, number | undefined> = {
 
 async function advance(run: Run): Promise<ChatResponse> {
   try {
-    const tools = toolsFor(run.workspace, run.mode);
+    const tools = toolsFor(run.workspace, run.mode, run.skills.size > 0);
     for (let step = 0; step < MAX_STEPS; step++) {
       const response = await complete(run.provider, run.turns, tools, run.temperature);
       if (run.mode === "plan") {
-        const message = response.text ||
-          "(Mode plan: tidak ada tool yang dijalankan. Aktifkan mode Build untuk implementasi.)";
-        run.turns.push({ role: "assistant", content: message });
-        await appendChatMessage(run.sessionId, "assistant", message, []);
-        runs.delete(run.id);
-        return {
-          status: "done",
-          message,
-          sessionId: run.sessionId,
-          changes: [],
-          createdTickets: [],
-        };
+        const skillCalls = response.toolCalls.filter((call) => call.name === "use_skill");
+        if (skillCalls.length === 0) {
+          const message = response.text ||
+            "(Mode plan: tidak ada tool yang dijalankan. Aktifkan mode Build untuk implementasi.)";
+          run.turns.push({ role: "assistant", content: message });
+          await appendChatMessage(run.sessionId, "assistant", message, []);
+          runs.delete(run.id);
+          return {
+            status: "done",
+            message,
+            sessionId: run.sessionId,
+            changes: [],
+            createdTickets: [],
+          };
+        }
+        run.turns.push({
+          role: "assistant",
+          content: response.text,
+          toolCalls: response.toolCalls,
+        });
+        for (const call of response.toolCalls) {
+          let result: string;
+          if (call.name === "use_skill") {
+            try {
+              result = await executeTool(run, call);
+            } catch (error) {
+              result = `Error: ${(error as Error).message}`;
+            }
+          } else {
+            result = "Tool tidak tersedia di mode Plan.";
+          }
+          run.turns.push({ role: "tool", toolCallId: call.id, content: result });
+        }
+        continue;
       }
       if (response.toolCalls.length === 0) {
         run.turns.push({ role: "assistant", content: response.text });
@@ -742,6 +817,9 @@ export async function startChat(
     })),
   );
 
+  const skills = await loadEnabledSkills(workspace);
+  const skillMap = new Map(skills.map((skill) => [skill.name, skill]));
+
   const run: Run = {
     id: crypto.randomUUID(),
     provider,
@@ -749,7 +827,7 @@ export async function startChat(
     sessionId: session.id,
     temperature: VARIANT_TEMPERATURE[variant],
     turns: [
-      { role: "system", content: systemPrompt(workspace, mode) },
+      { role: "system", content: systemPrompt(workspace, mode, skills) },
       ...resolved.map((message) => ({
         role: message.role,
         content: message.content,
@@ -763,6 +841,7 @@ export async function startChat(
     changes: [],
     projectId,
     mode,
+    skills: skillMap,
     createdTickets: [],
     createdAt: Date.now(),
   };

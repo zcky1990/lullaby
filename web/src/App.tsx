@@ -650,7 +650,7 @@ export default function App() {
               <GlobalSettingsPanel section={globalSection} onSelect={setGlobalSection} />
             </aside>
             <div className="min-w-0 flex-1 overflow-y-auto p-6">
-              <GlobalSettingsView section={globalSection} />
+              <GlobalSettingsView section={globalSection} projectId={currentId} />
             </div>
           </div>
         );

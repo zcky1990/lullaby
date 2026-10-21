@@ -136,6 +136,11 @@ export type McpServerInput = z.infer<typeof McpServerInput>;
 export const McpSettingsInput = z.object({
   servers: z.array(McpServerInput).max(20),
 });
+
+export const SkillsSettingsInput = z.object({
+  enabled: z.boolean(),
+  disabled: z.array(z.string().trim().min(1).max(120)).max(200),
+});
 export type McpSettingsInput = z.infer<typeof McpSettingsInput>;
 
 export const LocalTicketStatus = z.enum(["Backlog", "To Do", "In Progress", "Test", "Done"]);

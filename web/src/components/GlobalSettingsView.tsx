@@ -23,6 +23,7 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { McpSettings } from "@/components/McpSettings";
+import { SkillsSettings } from "@/components/SkillsSettings";
 import { api } from "@/lib/api";
 
 const THEME_OPTIONS: { id: Theme; label: string; icon: typeof Sun }[] = [
@@ -74,7 +75,13 @@ const EDITOR_THEME_OPTIONS: { id: EditorTheme; label: string; icon: typeof Sun }
   { id: "hc-light", label: "HC Light", icon: Contrast },
 ];
 
-export function GlobalSettingsView({ section }: { section: GlobalSection }) {
+export function GlobalSettingsView({
+  section,
+  projectId,
+}: {
+  section: GlobalSection;
+  projectId: string | null;
+}) {
   if (section === "appearance") {
     return (
       <div className="flex flex-col gap-8">
@@ -85,6 +92,7 @@ export function GlobalSettingsView({ section }: { section: GlobalSection }) {
     );
   }
   if (section === "mcp") return <McpSettings />;
+  if (section === "skills") return <SkillsSettings projectId={projectId} />;
   return <About />;
 }
 

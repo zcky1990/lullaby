@@ -40,6 +40,11 @@ finishing a change.
 - **Tickets**: `local_tickets` (SQLite) are created locally (UI `TicketCreateDialog` + AI tool
   `create_ticket`); `GET /tickets` merges unsynced local tickets with Jira. Syncing is manual
   (`POST /local-tickets/:id/sync` → Jira issue) and sets `jira_key`/`sync_status`.
+- **Skills**: `src/server/skills.ts` discovers `SKILL.md` folders (frontmatter `name`/`description`)
+  from `appDataDir()/skills` (global) and `<workspace>/.agents/skills` (workspace wins on duplicate
+  names). Chat injects the skill list into the system prompt and exposes a read-only `use_skill`
+  tool (progressive disclosure; allowed in Plan mode). Enabled state lives in `app_settings`
+  (`skills_enabled`, `skills_disabled`); UI is Global Settings → Skills.
 - **MCP**: global server config (`McpSettings`) is stored in `app_settings` (`mcp_servers`, JSON;
   stdio command/args/env or http url/headers) via `GET/PUT /api/settings/mcp`. Transport execution
   is not wired yet.

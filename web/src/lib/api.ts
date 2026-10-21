@@ -68,6 +68,23 @@ export interface McpServer {
   enabled: boolean;
 }
 
+export interface SkillInfo {
+  id: string;
+  name: string;
+  description: string;
+  source: "global" | "workspace";
+  path: string;
+  enabled: boolean;
+}
+
+export interface SkillsResponse {
+  enabled: boolean;
+  disabled: string[];
+  globalPath: string;
+  workspacePath: string | null;
+  skills: SkillInfo[];
+}
+
 export interface LocalDocSummary {
   id: string;
   path: string;
@@ -403,6 +420,12 @@ export const api = {
     ),
   testRaw: (body: IntegrationPayload) =>
     request<{ result: TestResult }>("/api/integrations/test", jsonInit("POST", body)),
+  getSkills: (projectId?: string) =>
+    request<SkillsResponse>(
+      `/api/skills${projectId ? `?projectId=${encodeURIComponent(projectId)}` : ""}`,
+    ),
+  saveSkillsSettings: (payload: { enabled: boolean; disabled: string[] }) =>
+    request<{ ok: boolean }>("/api/settings/skills", jsonInit("PUT", payload)),
   getMcpSettings: () => request<{ servers: McpServer[] }>("/api/settings/mcp"),
   saveMcpSettings: (servers: McpServer[]) =>
     request<{ servers: McpServer[] }>("/api/settings/mcp", jsonInit("PUT", { servers })),

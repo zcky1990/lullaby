@@ -15,6 +15,7 @@ import {
   McpSettingsInput,
   ProjectInput,
   ProjectUpdateInput,
+  SkillsSettingsInput,
   UpdateDocumentInput,
 } from "../config/schema.ts";
 import { appDataDir } from "../core/paths.ts";
@@ -59,6 +60,7 @@ import {
   readLocalDocument,
   updateLocalDocument,
 } from "../fs/documents.ts";
+import { globalSkillsDir, listSkills, readSkillsSettings, workspaceSkillsDir } from "./skills.ts";
 import { listDirectory, readWorkspaceFile } from "../fs/workspace.ts";
 import {
   createDocument,
@@ -564,6 +566,37 @@ async function saveMcpSettingsHandler(req: Request): Promise<Response> {
   return json({ servers });
 }
 
+async function skillsHandler(projectId: string | null): Promise<Response> {
+  const project = projectId ? await getProject(projectId) : null;
+  const workspace = project?.workspace_path ?? null;
+  const settings = await readSkillsSettings();
+  const skills = await listSkills(workspace);
+  return json({
+    enabled: settings.enabled,
+    disabled: settings.disabled,
+    globalPath: globalSkillsDir(),
+    workspacePath: workspace ? workspaceSkillsDir(workspace) : null,
+    skills: skills.map((skill) => ({
+      ...skill,
+      enabled: !settings.disabled.includes(skill.id),
+    })),
+  });
+}
+
+async function saveSkillsSettingsHandler(req: Request): Promise<Response> {
+  const parsed = SkillsSettingsInput.safeParse(await readJson(req));
+  if (!parsed.success) {
+    return json({ error: "invalid_input", issues: parsed.error.issues }, 400);
+  }
+  await setAppSetting("skills_enabled", parsed.data.enabled ? "true" : "false");
+  await setAppSetting("skills_disabled", JSON.stringify(parsed.data.disabled));
+  await record("settings.skills_updated", {
+    enabled: parsed.data.enabled,
+    disabled: parsed.data.disabled.length,
+  });
+  return json({ ok: true });
+}
+
 async function testIntegrationHandler(req: Request): Promise<Response> {
   const parsed = IntegrationInput.safeParse(await readJson(req));
   if (!parsed.success) {
@@ -893,6 +926,14 @@ export async function handleRequest(req: Request): Promise<Response> {
   const method = req.method.toUpperCase();
 
   try {
+    if (pathname === "/api/skills" && method === "GET") {
+      return await skillsHandler(url.searchParams.get("projectId"));
+    }
+
+    if (pathname === "/api/settings/skills" && (method === "PUT" || method === "POST")) {
+      return await saveSkillsSettingsHandler(req);
+    }
+
     if (pathname === "/api/settings/mcp") {
       if (method === "GET") return await getMcpSettingsHandler();
       if (method === "PUT" || method === "POST") return await saveMcpSettingsHandler(req);

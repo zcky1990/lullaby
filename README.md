@@ -78,9 +78,16 @@ selector **Variant** — **Low / Medium / High** — yang memetakan ke `temperat
 0.5, high 0.9).
 
 **Mode Plan / Build:** selector **Mode** di composer (tersimpan di `localStorage`). **Plan** hanya
-merencanakan — server tidak mengirim tool apa pun ke LLM dan tidak pernah mengeksekusi tool call
-(bila model tetap memanggil tool, hasilnya diabaikan). **Build** adalah agent penuh: file tools
-(`list_files`/`read_file`/`write_file` + approval) dan `create_ticket`.
+merencanakan — hanya boleh `use_skill` (read-only, bila skill tersedia); write tool tidak dikirim
+dan tool call lain tidak dieksekusi. **Build** adalah agent penuh: `use_skill`, file tools
+(`list_files`/`read_file`/`write_file` + approval), dan `create_ticket`.
+
+**Skills:** AI bisa memilih skill lewat **progressive disclosure**: daftar `name` + `description`
+diberikan di system prompt, lalu model memanggil `use_skill(name)` untuk memuat isi `SKILL.md`
+sebelum mengikuti instruksinya. Skill dibaca dari **global** `appDataDir()/skills` dan **workspace**
+`<workspace>/.agents/skills` (workspace menang bila nama sama). Format: folder berisi `SKILL.md`
+dengan frontmatter `name` dan `description`. Aktif/nonaktif global & per-skill diatur di **Global
+Settings → Skills** (`app_settings`: `skills_enabled`, `skills_disabled`).
 
 **Perubahan file di chat:** setiap `write_file` yang disetujui menghasilkan kartu perubahan berisi
 **path** (klik → tab file dibuka/di-reload di aplikasi), status (baru/diubah), jumlah `+/-`, dan
@@ -112,6 +119,8 @@ Document memakai **panel kiri terpisah** yang **lebarnya bisa di-drag** (tersimp
 | `PUT /api/projects/:id/integrations/:kind`                 | simpan config integrasi (`docmost`/`jira`/`github`) |
 | `POST /api/integrations/test`                              | test koneksi (docmost/jira/github/llm)              |
 | `GET/PUT /api/settings/mcp`                                | baca / simpan konfigurasi server MCP global         |
+| `GET /api/skills?projectId=`                               | daftar skill global + workspace (+ status aktif)    |
+| `PUT /api/settings/skills`                                 | aktif/nonaktif skills global & per-skill            |
 | `GET /api/projects/:id/documents`                          | daftar halaman Docmost                              |
 | `POST /api/projects/:id/documents`                         | buat halaman Docmost (judul, parent opsional)       |
 | `GET /api/projects/:id/local-documents`                    | daftar dokumen lokal (scan document workspace)      |
