@@ -110,41 +110,42 @@ Document memakai **panel kiri terpisah** yang **lebarnya bisa di-drag** (tersimp
 
 ## HTTP API
 
-| Method & path                                              | Fungsi                                              |
-| ---------------------------------------------------------- | --------------------------------------------------- |
-| `GET /api/health`                                          | info app: name, version, dataDir                    |
-| `GET /api/events` · `GET /api/events/recent`               | SSE + riwayat event                                 |
-| `GET /api/projects` · `POST /api/projects`                 | list / buat project                                 |
-| `GET /api/projects/:id` · `PUT /api/projects/:id`          | detail (+ integrations, llmProviders) / update      |
-| `PUT /api/projects/:id/integrations/:kind`                 | simpan config integrasi (`docmost`/`jira`/`github`) |
-| `POST /api/integrations/test`                              | test koneksi (docmost/jira/github/llm)              |
-| `GET/PUT /api/settings/mcp`                                | baca / simpan konfigurasi server MCP global         |
-| `GET /api/skills?projectId=`                               | daftar skill global + workspace (+ status aktif)    |
-| `PUT /api/settings/skills`                                 | aktif/nonaktif skills global & per-skill            |
-| `GET /api/projects/:id/documents`                          | daftar halaman Docmost                              |
-| `POST /api/projects/:id/documents`                         | buat halaman Docmost (judul, parent opsional)       |
-| `GET /api/projects/:id/local-documents`                    | daftar dokumen lokal (scan document workspace)      |
-| `POST /api/projects/:id/local-documents`                   | buat dokumen lokal (`.md`)                          |
-| `GET /api/projects/:id/local-documents/content?path=`      | isi dokumen lokal                                   |
-| `PUT /api/projects/:id/local-documents`                    | simpan/rename dokumen lokal                         |
-| `POST /api/projects/:id/local-documents/sync`              | sync manual dokumen lokal → Docmost                 |
-| `GET /api/projects/:id/documents/:pageId`                  | isi halaman (markdown)                              |
-| `PUT /api/projects/:id/documents/:pageId`                  | edit halaman Docmost (judul/isi)                    |
-| `GET /api/projects/:id/tickets`                            | daftar tiket lokal + Jira (JQL)                     |
-| `GET /api/projects/:id/tickets/:key`                       | detail tiket Jira (deskripsi ADF → teks)            |
-| `POST /api/projects/:id/tickets/:key/transition`           | pindah status tiket Jira (drag Kanban)              |
-| `POST /api/projects/:id/local-tickets`                     | buat tiket **lokal** (belum di Jira)                |
-| `GET/PATCH/DELETE /api/projects/:id/local-tickets/:id`     | detail / ubah (termasuk status) / hapus tiket lokal |
-| `POST /api/projects/:id/local-tickets/:id/sync`            | sync manual tiket lokal → Jira (buat issue)         |
-| `GET /api/projects/:id/llm` · `POST /api/projects/:id/llm` | list / tambah provider LLM                          |
-| `PUT /api/projects/:id/llm/:providerId` · `DELETE ...`     | ubah / hapus provider LLM                           |
-| `POST /api/projects/:id/chat`                              | chat LLM (agent + tools file workspace)             |
-| `POST /api/chat/approve`                                   | setujui/tolak aksi tulis (once/always/deny)         |
-| `GET /api/projects/:id/chat/sessions`                      | daftar sesi chat                                    |
-| `GET/DELETE /api/projects/:id/chat/sessions/:sid`          | muat / hapus sesi chat                              |
-| `GET /api/projects/:id/files?path=`                        | daftar isi folder workspace                         |
-| `GET /api/projects/:id/files/content?path=`                | isi file (maks 200 KB, deteksi biner)               |
-| `GET /*`                                                   | aset client (SPA fallback ke `index.html`)          |
+| Method & path                                              | Fungsi                                                  |
+| ---------------------------------------------------------- | ------------------------------------------------------- |
+| `GET /api/health`                                          | info app: name, version, dataDir                        |
+| `GET /api/events` · `GET /api/events/recent`               | SSE + riwayat event                                     |
+| `GET /api/projects` · `POST /api/projects`                 | list / buat project                                     |
+| `GET /api/projects/:id` · `PUT /api/projects/:id`          | detail (+ integrations, llmProviders) / update          |
+| `PUT /api/projects/:id/integrations/:kind`                 | simpan config integrasi (`docmost`/`jira`/`github`)     |
+| `POST /api/integrations/test`                              | test koneksi (docmost/jira/github/llm)                  |
+| `GET/PUT /api/settings/mcp`                                | baca / simpan MCP (server, enabled, disabled tools)     |
+| `POST /api/settings/mcp/tools`                             | konek ke server MCP & ambil daftar tools (`tools/list`) |
+| `GET /api/skills?projectId=`                               | daftar skill global + workspace (+ status aktif)        |
+| `PUT /api/settings/skills`                                 | aktif/nonaktif skills global & per-skill                |
+| `GET /api/projects/:id/documents`                          | daftar halaman Docmost                                  |
+| `POST /api/projects/:id/documents`                         | buat halaman Docmost (judul, parent opsional)           |
+| `GET /api/projects/:id/local-documents`                    | daftar dokumen lokal (scan document workspace)          |
+| `POST /api/projects/:id/local-documents`                   | buat dokumen lokal (`.md`)                              |
+| `GET /api/projects/:id/local-documents/content?path=`      | isi dokumen lokal                                       |
+| `PUT /api/projects/:id/local-documents`                    | simpan/rename dokumen lokal                             |
+| `POST /api/projects/:id/local-documents/sync`              | sync manual dokumen lokal → Docmost                     |
+| `GET /api/projects/:id/documents/:pageId`                  | isi halaman (markdown)                                  |
+| `PUT /api/projects/:id/documents/:pageId`                  | edit halaman Docmost (judul/isi)                        |
+| `GET /api/projects/:id/tickets`                            | daftar tiket lokal + Jira (JQL)                         |
+| `GET /api/projects/:id/tickets/:key`                       | detail tiket Jira (deskripsi ADF → teks)                |
+| `POST /api/projects/:id/tickets/:key/transition`           | pindah status tiket Jira (drag Kanban)                  |
+| `POST /api/projects/:id/local-tickets`                     | buat tiket **lokal** (belum di Jira)                    |
+| `GET/PATCH/DELETE /api/projects/:id/local-tickets/:id`     | detail / ubah (termasuk status) / hapus tiket lokal     |
+| `POST /api/projects/:id/local-tickets/:id/sync`            | sync manual tiket lokal → Jira (buat issue)             |
+| `GET /api/projects/:id/llm` · `POST /api/projects/:id/llm` | list / tambah provider LLM                              |
+| `PUT /api/projects/:id/llm/:providerId` · `DELETE ...`     | ubah / hapus provider LLM                               |
+| `POST /api/projects/:id/chat`                              | chat LLM (agent + tools file workspace)                 |
+| `POST /api/chat/approve`                                   | setujui/tolak aksi tulis (once/always/deny)             |
+| `GET /api/projects/:id/chat/sessions`                      | daftar sesi chat                                        |
+| `GET/DELETE /api/projects/:id/chat/sessions/:sid`          | muat / hapus sesi chat                                  |
+| `GET /api/projects/:id/files?path=`                        | daftar isi folder workspace                             |
+| `GET /api/projects/:id/files/content?path=`                | isi file (maks 200 KB, deteksi biner)                   |
+| `GET /*`                                                   | aset client (SPA fallback ke `index.html`)              |
 
 ## Skema data (SQLite)
 
@@ -216,9 +217,10 @@ Fondasi (F0) — yang sudah jalan:
 - Integrasi Docmost/Jira/GitHub/LLM: simpan config, health-check, list document/ticket.
 - Multi-provider LLM per project; live activity via SSE.
 
-**Belum termasuk:** eksekusi transport MCP (konfigurasi sudah ada), generate tiket AI dari PRD,
-bulk-sync/update Jira, workflow engine, sandbox coding loop, MCP transport (mode `mcp` tersimpan di
-config tetapi belum dieksekusi), WebSocket (masih SSE), agent roles (Planner/Coder/Verifier).
+**Belum termasuk:** eksekusi tool MCP di chat (discovery & toggle sudah ada), generate tiket AI dari
+PRD, bulk-sync/update Jira, workflow engine, sandbox coding loop, MCP transport (mode `mcp`
+tersimpan di config tetapi belum dieksekusi), WebSocket (masih SSE), agent roles
+(Planner/Coder/Verifier).
 
 ## Kredit / dependensi UI
 

@@ -135,6 +135,8 @@ export type McpServerInput = z.infer<typeof McpServerInput>;
 
 export const McpSettingsInput = z.object({
   servers: z.array(McpServerInput).max(20),
+  enabled: z.boolean().default(true),
+  disabledTools: z.array(z.string().trim().min(1).max(200)).max(1000).default([]),
 });
 
 export const SkillsSettingsInput = z.object({

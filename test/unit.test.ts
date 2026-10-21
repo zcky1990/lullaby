@@ -252,3 +252,18 @@ Deno.test("parseSkillFile falls back to folder name and first paragraph", () => 
   equal(parsed.name, "my-skill");
   equal(parsed.description, "Use this for X.");
 });
+
+Deno.test("McpSettingsInput carries global state defaults", () => {
+  const parsed = McpSettingsInput.parse({
+    servers: [{ name: "fs", transport: "stdio", command: "npx" }],
+  });
+  equal(parsed.enabled, true);
+  equal(parsed.disabledTools.length, 0);
+  const withState = McpSettingsInput.parse({
+    servers: [],
+    enabled: false,
+    disabledTools: ["s1:read"],
+  });
+  equal(withState.enabled, false);
+  equal(withState.disabledTools[0], "s1:read");
+});

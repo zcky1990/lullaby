@@ -68,6 +68,18 @@ export interface McpServer {
   enabled: boolean;
 }
 
+export interface McpTool {
+  name: string;
+  description?: string;
+  inputSchema?: unknown;
+}
+
+export interface McpSettingsResponse {
+  servers: McpServer[];
+  enabled: boolean;
+  disabledTools: string[];
+}
+
 export interface SkillInfo {
   id: string;
   name: string;
@@ -426,7 +438,13 @@ export const api = {
     ),
   saveSkillsSettings: (payload: { enabled: boolean; disabled: string[] }) =>
     request<{ ok: boolean }>("/api/settings/skills", jsonInit("PUT", payload)),
-  getMcpSettings: () => request<{ servers: McpServer[] }>("/api/settings/mcp"),
-  saveMcpSettings: (servers: McpServer[]) =>
-    request<{ servers: McpServer[] }>("/api/settings/mcp", jsonInit("PUT", { servers })),
+  getMcpSettings: () => request<McpSettingsResponse>("/api/settings/mcp"),
+  saveMcpSettings: (payload: {
+    servers: McpServer[];
+    enabled: boolean;
+    disabledTools: string[];
+  }) =>
+    request<McpSettingsResponse>("/api/settings/mcp", jsonInit("PUT", payload)),
+  listMcpTools: (server: McpServer) =>
+    request<{ tools: McpTool[] }>("/api/settings/mcp/tools", jsonInit("POST", { server })),
 };

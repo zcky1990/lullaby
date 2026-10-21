@@ -12,6 +12,7 @@ import {
   LocalDocumentUpdateInput,
   LocalTicketInput,
   LocalTicketUpdateInput,
+  McpServerInput,
   McpSettingsInput,
   ProjectInput,
   ProjectUpdateInput,
@@ -60,6 +61,7 @@ import {
   readLocalDocument,
   updateLocalDocument,
 } from "../fs/documents.ts";
+import { listMcpTools } from "./mcp.ts";
 import { globalSkillsDir, listSkills, readSkillsSettings, workspaceSkillsDir } from "./skills.ts";
 import { listDirectory, readWorkspaceFile } from "../fs/workspace.ts";
 import {
@@ -538,6 +540,16 @@ async function syncLocalDocumentHandler(projectId: string, req: Request): Promis
 
 const MCP_SETTINGS_KEY = "mcp_servers";
 
+function parseStringArray(raw: string | null): string[] {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.map(String) : [];
+  } catch {
+    return [];
+  }
+}
+
 async function getMcpSettingsHandler(): Promise<Response> {
   const raw = await getAppSetting(MCP_SETTINGS_KEY);
   let servers: unknown = [];
@@ -549,7 +561,9 @@ async function getMcpSettingsHandler(): Promise<Response> {
       servers = [];
     }
   }
-  return json({ servers });
+  const enabled = (await getAppSetting("mcp_enabled")) !== "false";
+  const disabledTools = parseStringArray(await getAppSetting("mcp_disabled_tools"));
+  return json({ servers, enabled, disabledTools });
 }
 
 async function saveMcpSettingsHandler(req: Request): Promise<Response> {
@@ -562,8 +576,30 @@ async function saveMcpSettingsHandler(req: Request): Promise<Response> {
     id: server.id ?? crypto.randomUUID(),
   }));
   await setAppSetting(MCP_SETTINGS_KEY, JSON.stringify(servers));
-  await record("settings.mcp_updated", { count: servers.length });
-  return json({ servers });
+  await setAppSetting("mcp_enabled", parsed.data.enabled ? "true" : "false");
+  await setAppSetting("mcp_disabled_tools", JSON.stringify(parsed.data.disabledTools));
+  await record("settings.mcp_updated", {
+    count: servers.length,
+    enabled: parsed.data.enabled,
+  });
+  return json({
+    servers,
+    enabled: parsed.data.enabled,
+    disabledTools: parsed.data.disabledTools,
+  });
+}
+
+async function listMcpToolsHandler(req: Request): Promise<Response> {
+  const body = (await readJson(req)) as { server?: unknown };
+  const parsed = McpServerInput.safeParse(body?.server);
+  if (!parsed.success) {
+    return json({ error: "invalid_input", issues: parsed.error.issues }, 400);
+  }
+  try {
+    return json({ tools: await listMcpTools(parsed.data) });
+  } catch (error) {
+    return json({ error: (error as Error).message }, 502);
+  }
 }
 
 async function skillsHandler(projectId: string | null): Promise<Response> {
@@ -932,6 +968,10 @@ export async function handleRequest(req: Request): Promise<Response> {
 
     if (pathname === "/api/settings/skills" && (method === "PUT" || method === "POST")) {
       return await saveSkillsSettingsHandler(req);
+    }
+
+    if (pathname === "/api/settings/mcp/tools" && method === "POST") {
+      return await listMcpToolsHandler(req);
     }
 
     if (pathname === "/api/settings/mcp") {

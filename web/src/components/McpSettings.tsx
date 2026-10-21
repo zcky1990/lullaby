@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useState } from "react";
-import { Braces, Pencil, Plus, Server, Trash2 } from "lucide-react";
+import { Braces, Pencil, Plus, RefreshCw, Server, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -23,7 +23,7 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { Spinner } from "@/components/ui/spinner";
 import { useTheme } from "@/components/ThemeProvider";
-import { api, type McpServer } from "@/lib/api";
+import { api, type McpServer, type McpTool } from "@/lib/api";
 
 const MonacoViewer = lazy(() => import("@/components/MonacoViewer"));
 
@@ -127,6 +127,12 @@ function serversToJson(servers: McpServer[]): string {
 
 export function McpSettings() {
   const [servers, setServers] = useState<McpServer[]>([]);
+  const [enabled, setEnabled] = useState(true);
+  const [disabledTools, setDisabledTools] = useState<string[]>([]);
+  const [toolsByServer, setToolsByServer] = useState<Record<string, McpTool[]>>({});
+  const [toolState, setToolState] = useState<
+    Record<string, { loading?: boolean; error?: string }>
+  >({});
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | undefined>();
@@ -142,17 +148,31 @@ export function McpSettings() {
   useEffect(() => {
     api
       .getMcpSettings()
-      .then((res) => setServers(res.servers))
+      .then((res) => {
+        setServers(res.servers);
+        setEnabled(res.enabled);
+        setDisabledTools(res.disabledTools);
+      })
       .catch((e) => setError((e as Error).message))
       .finally(() => setLoading(false));
   }, []);
 
-  const persist = async (next: McpServer[]) => {
+  const persist = async (
+    next: McpServer[],
+    nextEnabled = enabled,
+    nextDisabledTools = disabledTools,
+  ) => {
     setBusy(true);
     setError(undefined);
     try {
-      const res = await api.saveMcpSettings(next);
+      const res = await api.saveMcpSettings({
+        servers: next,
+        enabled: nextEnabled,
+        disabledTools: nextDisabledTools,
+      });
       setServers(res.servers);
+      setEnabled(res.enabled);
+      setDisabledTools(res.disabledTools);
     } catch (e) {
       setError((e as Error).message);
       throw e;
@@ -174,6 +194,45 @@ export function McpSettings() {
   const remove = async (server: McpServer) => {
     try {
       await persist(servers.filter((item) => item.id !== server.id));
+      setToolsByServer((current) => {
+        const next = { ...current };
+        delete next[server.id];
+        return next;
+      });
+    } catch {
+      // error shown above
+    }
+  };
+
+  const loadTools = async (server: McpServer) => {
+    setToolState((current) => ({ ...current, [server.id]: { loading: true } }));
+    try {
+      const res = await api.listMcpTools(server);
+      setToolsByServer((current) => ({ ...current, [server.id]: res.tools }));
+      setToolState((current) => ({ ...current, [server.id]: {} }));
+    } catch (e) {
+      setToolState((current) => ({
+        ...current,
+        [server.id]: { error: (e as Error).message },
+      }));
+    }
+  };
+
+  const toggleTool = async (server: McpServer, tool: McpTool) => {
+    const key = `${server.id}:${tool.name}`;
+    const next = disabledTools.includes(key)
+      ? disabledTools.filter((item) => item !== key)
+      : [...disabledTools, key];
+    try {
+      await persist(servers, enabled, next);
+    } catch {
+      // error shown above
+    }
+  };
+
+  const toggleGlobal = async () => {
+    try {
+      await persist(servers, !enabled, disabledTools);
     } catch {
       // error shown above
     }
@@ -184,6 +243,8 @@ export function McpSettings() {
     await persist(
       exists ? servers.map((item) => (item.id === server.id ? server : item)) : [...servers, server],
     );
+    setToolsByServer({});
+    setToolState({});
     setDialogOpen(false);
   };
 
@@ -215,6 +276,8 @@ export function McpSettings() {
         }
       }
       await persist(next);
+      setToolsByServer({});
+      setToolState({});
       setJsonOpen(false);
     } catch (e) {
       setJsonError((e as Error).message);
@@ -234,8 +297,16 @@ export function McpSettings() {
         <Separator />
       </div>
 
-      <div className="flex items-center justify-between gap-2">
-        <span className="text-sm text-muted-foreground">{servers.length} server</span>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-sm text-muted-foreground">{servers.length} server</span>
+          <Badge variant={enabled ? "secondary" : "outline"}>
+            {enabled ? "MCP aktif" : "MCP nonaktif"}
+          </Badge>
+          <Button size="sm" variant="ghost" onClick={toggleGlobal} disabled={busy}>
+            {enabled ? "Nonaktifkan MCP" : "Aktifkan MCP"}
+          </Button>
+        </div>
         <div className="flex items-center gap-2">
           <Button
             size="sm"
@@ -276,6 +347,15 @@ export function McpSettings() {
                   {server.enabled ? "Aktif" : "Nonaktif"}
                 </Badge>
                 <div className="ml-auto flex items-center gap-1">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => loadTools(server)}
+                    disabled={toolState[server.id]?.loading}
+                  >
+                    {toolState[server.id]?.loading ? <Spinner /> : <RefreshCw />}
+                    Tools
+                  </Button>
                   <Button size="sm" variant="ghost" onClick={() => toggle(server)} disabled={busy}>
                     {server.enabled ? "Nonaktifkan" : "Aktifkan"}
                   </Button>
@@ -306,6 +386,42 @@ export function McpSettings() {
                   ? [server.command, ...(server.args ?? [])].join(" ")
                   : server.url}
               </p>
+              {toolState[server.id]?.error ? (
+                <p className="text-xs text-destructive">{toolState[server.id].error}</p>
+              ) : null}
+              {toolsByServer[server.id] ? (
+                <div className="flex max-h-64 flex-col gap-2 overflow-y-auto border-t pt-2">
+                  {toolsByServer[server.id].length === 0 ? (
+                    <p className="text-xs text-muted-foreground">Server tidak menyediakan tool.</p>
+                  ) : (
+                    toolsByServer[server.id].map((tool) => {
+                      const key = `${server.id}:${tool.name}`;
+                      const active = !disabledTools.includes(key);
+                      return (
+                        <div key={tool.name} className="flex items-start gap-2">
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate font-mono text-xs">{tool.name}</p>
+                            {tool.description ? (
+                              <p className="text-xs text-muted-foreground">{tool.description}</p>
+                            ) : null}
+                          </div>
+                          <Badge variant={active ? "secondary" : "outline"}>
+                            {active ? "Aktif" : "Nonaktif"}
+                          </Badge>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            disabled={busy || !enabled || !server.enabled}
+                            onClick={() => toggleTool(server, tool)}
+                          >
+                            {active ? "Nonaktifkan" : "Aktifkan"}
+                          </Button>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              ) : null}
             </div>
           ))}
         </div>

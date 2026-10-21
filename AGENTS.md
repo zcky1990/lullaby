@@ -45,9 +45,11 @@ finishing a change.
   names). Chat injects the skill list into the system prompt and exposes a read-only `use_skill`
   tool (progressive disclosure; allowed in Plan mode). Enabled state lives in `app_settings`
   (`skills_enabled`, `skills_disabled`); UI is Global Settings → Skills.
-- **MCP**: global server config (`McpSettings`) is stored in `app_settings` (`mcp_servers`, JSON;
-  stdio command/args/env or http url/headers) via `GET/PUT /api/settings/mcp`. Transport execution
-  is not wired yet.
+- **MCP**: global server config (`McpSettings`) is stored in `app_settings` (`mcp_servers` JSON;
+  stdio command/args/env or http url/headers) plus `mcp_enabled` and `mcp_disabled_tools`.
+  `POST /api/settings/mcp/tools` connects with `initialize` + `tools/list` (`src/server/mcp.ts`,
+  stdio or http) so each server's tools can be discovered and enabled/disabled. Tool execution from
+  chat is not wired yet.
 - **List/menus**: `ActivityBar` (left rail) opens tabs in the main area (`TabsBar`).
   Workspace/Explorer/Document keep a **separate** side panel in `<aside>` (`WorkspacePanel`,
   `FileTreePanel`, `DocumentPanel`); files/documents open as their own tabs. Project Settings and
