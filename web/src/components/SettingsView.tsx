@@ -41,7 +41,7 @@ interface Props {
   onTestLlm: (payload: LlmProviderPayload) => Promise<TestResult>;
   onSaveLlm: (id: string | null, payload: LlmProviderPayload) => Promise<void>;
   onDeleteLlm: (id: string) => Promise<void>;
-  onUpdateWorkspace: (path: string) => Promise<void>;
+  onUpdateWorkspace: (path: string, documentPath?: string) => Promise<void>;
 }
 
 interface ProviderOption {
@@ -155,7 +155,11 @@ export function SettingsView({
           key={project.id + (project.workspace_path ?? "none")}
           title="Workspace"
         >
-          <WorkspaceSection path={project.workspace_path} onSave={onUpdateWorkspace} />
+          <WorkspaceSection
+            path={project.workspace_path}
+            documentPath={project.document_path}
+            onSave={onUpdateWorkspace}
+          />
         </CollapsibleSection>
       )}
 
@@ -285,20 +289,23 @@ export function SettingsView({
 
 function WorkspaceSection({
   path,
+  documentPath,
   onSave,
 }: {
   path: string | null;
-  onSave: (path: string) => Promise<void>;
+  documentPath: string | null;
+  onSave: (path: string, documentPath?: string) => Promise<void>;
 }) {
   const [value, setValue] = useState(path ?? "");
+  const [docValue, setDocValue] = useState(documentPath ?? "");
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | undefined>();
   const pickable = canPickDirectory();
 
-  const pick = async () => {
+  const pick = async (apply: (path: string) => void) => {
     const chosen = await chooseWorkspaceDirectory();
-    if (chosen) setValue(chosen);
+    if (chosen) apply(chosen);
   };
 
   const save = async () => {
@@ -306,7 +313,7 @@ function WorkspaceSection({
     setSaved(false);
     setError(undefined);
     try {
-      await onSave(value.trim());
+      await onSave(value.trim(), docValue.trim());
       setSaved(true);
     } catch (e) {
       setError((e as Error).message);
@@ -319,10 +326,11 @@ function WorkspaceSection({
     <div className="flex flex-col gap-4">
       <p className="text-sm text-muted-foreground">
         Folder repo/proyek di komputer ini. Menu <span className="font-medium">Explorer</span> muncul
-        setelah workspace diset.
+        setelah workspace diset. <span className="font-medium">Document workspace</span> adalah
+        folder markdown untuk dokumen lokal (bisa disync ke Docmost nanti).
       </p>
       <div className="grid gap-1.5">
-        <Label htmlFor="workspace-path">Path</Label>
+        <Label htmlFor="workspace-path">Path workspace</Label>
         <div className="flex gap-2">
           <Input
             id="workspace-path"
@@ -336,10 +344,34 @@ function WorkspaceSection({
           <Button
             variant="outline"
             size="icon"
-            onClick={pick}
+            onClick={() => pick(setValue)}
             disabled={!pickable}
             title={pickable ? "Pilih folder" : "Folder picker hanya di app desktop"}
             aria-label="Pilih folder workspace"
+          >
+            <FolderOpen />
+          </Button>
+        </div>
+      </div>
+      <div className="grid gap-1.5">
+        <Label htmlFor="document-path">Document workspace</Label>
+        <div className="flex gap-2">
+          <Input
+            id="document-path"
+            value={docValue}
+            placeholder={pickable ? "Folder dokumen lokal…" : "/path/ke/dokumen"}
+            onChange={(e) => {
+              setDocValue(e.target.value);
+              setSaved(false);
+            }}
+          />
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() => pick(setDocValue)}
+            disabled={!pickable}
+            title={pickable ? "Pilih folder" : "Folder picker hanya di app desktop"}
+            aria-label="Pilih folder document workspace"
           >
             <FolderOpen />
           </Button>

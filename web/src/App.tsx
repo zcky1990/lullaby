@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, lazy, Suspense } from "react";
-import { Inbox, MessageSquare, Pencil, Plus, RefreshCw, Save } from "lucide-react";
+import { Inbox, MessageSquare, Pencil, Plus, RefreshCw, Save, Upload } from "lucide-react";
 import type { ActivityEvent } from "@/components/ActivityFeed";
 import { ActivityBar, type Menu } from "@/components/ActivityBar";
 import { ChatSidebar } from "@/components/ChatSidebar";
@@ -42,6 +42,7 @@ import {
   type DocSummary,
   type IntegrationPayload,
   type LlmProviderPayload,
+  type LocalDocSummary,
   type Project,
   type ProjectDetail,
   type TestResult,
@@ -104,6 +105,11 @@ export default function App() {
   const [docsDebug, setDocsDebug] = useState<string | undefined>();
   const [docsLoading, setDocsLoading] = useState(false);
 
+  const [localDocs, setLocalDocs] = useState<LocalDocSummary[]>([]);
+  const [localDocsConfigured, setLocalDocsConfigured] = useState(false);
+  const [localDocsError, setLocalDocsError] = useState<string | undefined>();
+  const [localDocsLoading, setLocalDocsLoading] = useState(false);
+
   const [tickets, setTickets] = useState<TicketSummary[]>([]);
   const [ticketsError, setTicketsError] = useState<string | undefined>();
   const [ticketsLoading, setTicketsLoading] = useState(false);
@@ -163,6 +169,22 @@ export default function App() {
       setDocs([]);
     } finally {
       setDocsLoading(false);
+    }
+  }, []);
+
+  const loadLocalDocuments = useCallback(async (id: string) => {
+    setLocalDocsLoading(true);
+    setLocalDocsError(undefined);
+    try {
+      const res = await api.listLocalDocuments(id);
+      setLocalDocs(res.documents);
+      setLocalDocsConfigured(res.configured);
+      setLocalDocsError(res.error);
+    } catch (error) {
+      setLocalDocsError((error as Error).message);
+      setLocalDocs([]);
+    } finally {
+      setLocalDocsLoading(false);
     }
   }, []);
 
@@ -245,6 +267,36 @@ export default function App() {
     [currentId, tabs, focusTab, patchTab],
   );
 
+  const openLocalDocument = useCallback(
+    async (path: string, title: string) => {
+      if (!currentId) return;
+      setMenu("document");
+      const id = `doclocal:${currentId}:${path}`;
+      const existing = tabs.find(
+        (tab) => tab.id === id || (tab.source === "local" && tab.ref === path),
+      );
+      if (existing && !existing.error) {
+        setActiveTabId(existing.id);
+        return;
+      }
+      focusTab({ id, kind: "document", title, ref: path, source: "local", loading: true });
+      try {
+        const res = await api.getLocalDocument(currentId, path);
+        patchTab(id, {
+          content: res.document.content,
+          title: res.document.title,
+          ref: res.document.path,
+          syncStatus: res.document.syncStatus,
+          pageId: res.document.pageId,
+          loading: false,
+        });
+      } catch (error) {
+        patchTab(id, { loading: false, error: (error as Error).message });
+      }
+    },
+    [currentId, tabs, focusTab, patchTab],
+  );
+
   const openFile = useCallback(
     async (path: string, reload = false) => {
       if (!currentId) return;
@@ -294,6 +346,60 @@ export default function App() {
     [currentId, patchTab, loadDocuments],
   );
 
+  const createLocalDocument = useCallback(
+    async (title: string) => {
+      if (!currentId) return;
+      const { document } = await api.createLocalDocument(currentId, { title });
+      await loadLocalDocuments(currentId);
+      await openLocalDocument(document.path, document.title);
+    },
+    [currentId, loadLocalDocuments, openLocalDocument],
+  );
+
+  const patchLocalDocTab = useCallback((path: string, patch: Partial<EditorTab>) => {
+    setTabs((current) =>
+      current.map((tab) =>
+        tab.kind === "document" && tab.source === "local" && tab.ref === path
+          ? { ...tab, ...patch }
+          : tab
+      ),
+    );
+  }, []);
+
+  const saveLocalDocument = useCallback(
+    async (path: string, payload: { title?: string; content: string }) => {
+      if (!currentId) return;
+      const { document } = await api.updateLocalDocument(currentId, {
+        path,
+        title: payload.title,
+        content: payload.content,
+      });
+      patchLocalDocTab(path, {
+        ref: document.path,
+        title: document.title,
+        content: document.content,
+        syncStatus: document.syncStatus,
+      });
+      await loadLocalDocuments(currentId);
+    },
+    [currentId, patchLocalDocTab, loadLocalDocuments],
+  );
+
+  const syncLocalDocument = useCallback(
+    async (path: string) => {
+      if (!currentId) return;
+      const { document } = await api.syncLocalDocument(currentId, path);
+      patchLocalDocTab(path, {
+        ref: document.path,
+        title: document.title,
+        syncStatus: document.syncStatus,
+        pageId: document.pageId,
+      });
+      await loadLocalDocuments(currentId);
+    },
+    [currentId, patchLocalDocTab, loadLocalDocuments],
+  );
+
   useEffect(() => {
     loadProjects().catch(console.error);
   }, [loadProjects]);
@@ -315,6 +421,9 @@ export default function App() {
     setDetailTicket(null);
     setCreateTicketOpen(false);
     setSettingsSection("workspace");
+    setLocalDocs([]);
+    setLocalDocsConfigured(false);
+    setLocalDocsError(undefined);
     const workspaceTab: EditorTab = {
       id: `workspace:${currentId}`,
       kind: "workspace",
@@ -328,9 +437,12 @@ export default function App() {
 
   useEffect(() => {
     if (!currentId) return;
-    if (menu === "document") loadDocuments(currentId).catch(console.error);
+    if (menu === "document") {
+      loadDocuments(currentId).catch(console.error);
+      loadLocalDocuments(currentId).catch(console.error);
+    }
     if (menu === "ticket") loadTickets(currentId).catch(console.error);
-  }, [menu, currentId, loadDocuments, loadTickets]);
+  }, [menu, currentId, loadDocuments, loadLocalDocuments, loadTickets]);
 
   useEffect(() => {
     if (menu === "settings" && !currentId) setMenu("workspace");
@@ -449,11 +561,15 @@ export default function App() {
     await loadTickets(currentId);
   };
 
-  const updateWorkspace = async (path: string) => {
+  const updateWorkspace = async (path: string, documentPath?: string) => {
     if (!currentId) return;
-    const { project } = await api.updateProject(currentId, { workspacePath: path });
+    const { project } = await api.updateProject(currentId, {
+      workspacePath: path,
+      documentPath,
+    });
     setProjects((current) => current.map((p) => (p.id === project.id ? project : p)));
     await loadDetail(currentId);
+    await loadLocalDocuments(currentId);
   };
 
   const renderTab = (tab: EditorTab) => {
@@ -524,7 +640,15 @@ export default function App() {
           </div>
         );
       case "document":
-        return <DocumentTab key={tab.id} tab={tab} onSave={saveDocument} />;
+        return (
+          <DocumentTab
+            key={tab.id}
+            tab={tab}
+            onSave={saveDocument}
+            onSaveLocal={saveLocalDocument}
+            onSyncLocal={syncLocalDocument}
+          />
+        );
       case "file":
         return <FileTab tab={tab} />;
     }
@@ -571,6 +695,13 @@ export default function App() {
               onSelect={openDocument}
               onRefresh={() => currentId && loadDocuments(currentId)}
               onCreate={createDocument}
+              localDocuments={localDocs}
+              localConfigured={localDocsConfigured}
+              localLoading={localDocsLoading}
+              localError={localDocsError}
+              onSelectLocal={openLocalDocument}
+              onRefreshLocal={() => currentId && loadLocalDocuments(currentId)}
+              onCreateLocal={createLocalDocument}
             />
           )}
           <div
@@ -726,9 +857,13 @@ function FileTab({ tab }: { tab: EditorTab }) {
 function DocumentTab({
   tab,
   onSave,
+  onSaveLocal,
+  onSyncLocal,
 }: {
   tab: EditorTab;
   onSave: (pageId: string, payload: { title?: string; content: string }) => Promise<void>;
+  onSaveLocal: (path: string, payload: { title?: string; content: string }) => Promise<void>;
+  onSyncLocal: (path: string) => Promise<void>;
 }) {
   const { resolvedEditorTheme } = useTheme();
   const [editing, setEditing] = useState(false);
@@ -736,19 +871,36 @@ function DocumentTab({
   const [draftContent, setDraftContent] = useState(tab.content ?? "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | undefined>();
+  const [syncing, setSyncing] = useState(false);
+  const [syncError, setSyncError] = useState<string | undefined>();
 
-  const pageId = tab.ref ?? "";
+  const docRef = tab.ref ?? "";
+  const isLocal = tab.source === "local";
 
   const save = async () => {
     setBusy(true);
     setError(undefined);
     try {
-      await onSave(pageId, { title: draftTitle.trim() || undefined, content: draftContent });
+      const payload = { title: draftTitle.trim() || undefined, content: draftContent };
+      if (isLocal) await onSaveLocal(docRef, payload);
+      else await onSave(docRef, payload);
       setEditing(false);
     } catch (e) {
       setError((e as Error).message);
     } finally {
       setBusy(false);
+    }
+  };
+
+  const sync = async () => {
+    setSyncing(true);
+    setSyncError(undefined);
+    try {
+      await onSyncLocal(docRef);
+    } catch (e) {
+      setSyncError((e as Error).message);
+    } finally {
+      setSyncing(false);
     }
   };
 
@@ -781,10 +933,42 @@ function DocumentTab({
             className="max-w-md"
           />
         ) : (
-          <h1 className="truncate text-base font-semibold">{tab.title}</h1>
+          <div className="flex min-w-0 items-center gap-2">
+            <h1 className="truncate text-base font-semibold">{tab.title}</h1>
+            {isLocal ? (
+              <Badge
+                variant={
+                  tab.syncStatus === "synced"
+                    ? "secondary"
+                    : tab.syncStatus === "error"
+                    ? "destructive"
+                    : "outline"
+                }
+              >
+                {tab.syncStatus === "synced"
+                  ? "Synced"
+                  : tab.syncStatus === "error"
+                  ? "Sync error"
+                  : "Local"}
+              </Badge>
+            ) : null}
+          </div>
         )}
         <div className="flex shrink-0 items-center gap-2">
           {error ? <span className="text-xs text-destructive">{error}</span> : null}
+          {syncError ? <span className="text-xs text-destructive">{syncError}</span> : null}
+          {isLocal && !editing ? (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={sync}
+              disabled={syncing}
+              data-icon="inline-start"
+            >
+              {syncing ? <Spinner /> : <Upload />}
+              {tab.syncStatus === "synced" ? "Sync ulang" : "Sync ke Docmost"}
+            </Button>
+          ) : null}
           {editing ? (
             <>
               <Button size="sm" variant="ghost" onClick={cancel} disabled={busy}>
@@ -808,7 +992,7 @@ function DocumentTab({
         {editing ? (
           <Suspense fallback={<Skeleton className="h-full w-full rounded-none" />}>
             <MonacoViewer
-              path={`${pageId}.md`}
+              path={isLocal ? docRef : `${docRef}.md`}
               language="markdown"
               content={draftContent}
               theme={resolvedEditorTheme}

@@ -113,6 +113,11 @@ Document memakai **panel kiri terpisah** yang **lebarnya bisa di-drag** (tersimp
 | `POST /api/integrations/test`                              | test koneksi (docmost/jira/github/llm)              |
 | `GET /api/projects/:id/documents`                          | daftar halaman Docmost                              |
 | `POST /api/projects/:id/documents`                         | buat halaman Docmost (judul, parent opsional)       |
+| `GET /api/projects/:id/local-documents`                    | daftar dokumen lokal (scan document workspace)      |
+| `POST /api/projects/:id/local-documents`                   | buat dokumen lokal (`.md`)                          |
+| `GET /api/projects/:id/local-documents/content?path=`      | isi dokumen lokal                                   |
+| `PUT /api/projects/:id/local-documents`                    | simpan/rename dokumen lokal                         |
+| `POST /api/projects/:id/local-documents/sync`              | sync manual dokumen lokal → Docmost                 |
 | `GET /api/projects/:id/documents/:pageId`                  | isi halaman (markdown)                              |
 | `PUT /api/projects/:id/documents/:pageId`                  | edit halaman Docmost (judul/isi)                    |
 | `GET /api/projects/:id/tickets`                            | daftar tiket lokal + Jira (JQL)                     |
@@ -141,6 +146,7 @@ Document memakai **panel kiri terpisah** yang **lebarnya bisa di-drag** (tersimp
 | `chat_sessions`        | sesi chat per project: `title`, `created_at`, `updated_at`                                                 |
 | `chat_messages`        | pesan per sesi: `role` (user/assistant), `content`, `changes` (JSON diff), `created_at`                    |
 | `local_tickets`        | tiket lokal: `title`, `description`, `status`, `priority`, `type`, `jira_key`, `sync_status`, `sync_error` |
+| `local_documents`      | metadata sync dokumen lokal: `path`, `page_id`, `sync_status`, `sync_error`                                |
 | `events`               | stream event (audit/activity)                                                                              |
 
 ## Konfigurasi & data
@@ -176,7 +182,11 @@ Fondasi (F0) — yang sudah jalan:
 
 - **Workspace**: project CRUD + workspace folder (native picker), overview project.
 - **Explorer**: file tree folder workspace + viewer kode **Monaco** (read-only).
-- **Document**: tree halaman Docmost collapsible (children di-load saat expand) + isi markdown.
+- **Document**: pilih sumber **Local** atau **Docmost**. Local memakai folder **Document workspace**
+  (Project Settings → Workspace): daftar file `.md`, buat/rename, edit markdown, dan **sync manual**
+  ke Docmost (badge Local/Synced/Error; sync pertama membuat page lalu update konten, sync
+  berikutnya update page yang sama). Docmost tetap menampilkan tree halaman collapsible (children
+  di-load saat expand).
 - **Ticket**: **Kanban** full-width dengan kolom tetap **Backlog / To Do / In Progress / Test /
   Done** (kosong tetap tampil, card seragam), **drag antar kolom** = update status lokal atau Jira
   transition, **klik card** = dialog detail, **Tiket baru** membuat tiket lokal, **sync manual** ke

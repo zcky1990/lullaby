@@ -25,6 +25,7 @@ const httpUrl = z
 export const ProjectInput = z.object({
   name: z.string().trim().min(1).max(120),
   workspacePath: optionalText,
+  documentPath: optionalText,
   docmostSpaceId: optionalText,
   jiraProjectKey: optionalText,
   githubRepo: optionalText,
@@ -119,6 +120,20 @@ export type LocalTicketInput = z.infer<typeof LocalTicketInput>;
 
 export const LocalTicketUpdateInput = LocalTicketInput.partial();
 export type LocalTicketUpdateInput = z.infer<typeof LocalTicketUpdateInput>;
+
+export const LocalDocumentInput = z.object({
+  title: z.string().trim().min(1).max(200),
+});
+
+export const LocalDocumentUpdateInput = z.object({
+  path: z.string().trim().min(1).max(500),
+  title: z.string().trim().max(200).optional(),
+  content: z.string().max(500_000).optional(),
+});
+
+export const LocalDocumentSyncInput = z.object({
+  path: z.string().trim().min(1).max(500),
+});
 
 export const CreateDocumentInput = z.object({
   title: z.string().trim().min(1).max(200),

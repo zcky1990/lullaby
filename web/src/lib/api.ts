@@ -2,6 +2,7 @@ export interface Project {
   id: string;
   name: string;
   workspace_path: string | null;
+  document_path: string | null;
   docmost_space_id: string | null;
   jira_project_key: string | null;
   github_repo: string | null;
@@ -53,6 +54,26 @@ export interface DocContent {
   id: string;
   title?: string;
   content: string;
+}
+
+export interface LocalDocSummary {
+  id: string;
+  path: string;
+  title: string;
+  syncStatus: "local" | "synced" | "error";
+  pageId?: string;
+  syncError?: string;
+}
+
+export interface LocalDocContent extends LocalDocSummary {
+  content: string;
+}
+
+export interface LocalDocumentsResponse {
+  configured: boolean;
+  path?: string;
+  error?: string;
+  documents: LocalDocSummary[];
 }
 
 export interface TicketSummary {
@@ -238,7 +259,10 @@ export const api = {
   listProjects: () => request<{ projects: Project[] }>("/api/projects"),
   createProject: (input: { name: string; workspacePath?: string }) =>
     request<{ project: Project }>("/api/projects", jsonInit("POST", input)),
-  updateProject: (id: string, input: { name?: string; workspacePath?: string }) =>
+  updateProject: (
+    id: string,
+    input: { name?: string; workspacePath?: string; documentPath?: string },
+  ) =>
     request<{ project: Project }>(`/api/projects/${id}`, jsonInit("PUT", input)),
   listFiles: (projectId: string, path: string) =>
     request<FilesResponse>(`/api/projects/${projectId}/files?path=${encodeURIComponent(path)}`),
@@ -266,6 +290,30 @@ export const api = {
     request<{ document: DocContent }>(
       `/api/projects/${projectId}/documents/${encodeURIComponent(pageId)}`,
       jsonInit("PUT", payload),
+    ),
+  listLocalDocuments: (projectId: string) =>
+    request<LocalDocumentsResponse>(`/api/projects/${projectId}/local-documents`),
+  getLocalDocument: (projectId: string, path: string) =>
+    request<{ document: LocalDocContent }>(
+      `/api/projects/${projectId}/local-documents/content?path=${encodeURIComponent(path)}`,
+    ),
+  createLocalDocument: (projectId: string, payload: { title: string }) =>
+    request<{ document: LocalDocContent }>(
+      `/api/projects/${projectId}/local-documents`,
+      jsonInit("POST", payload),
+    ),
+  updateLocalDocument: (
+    projectId: string,
+    payload: { path: string; title?: string; content?: string },
+  ) =>
+    request<{ document: LocalDocContent }>(
+      `/api/projects/${projectId}/local-documents`,
+      jsonInit("PUT", payload),
+    ),
+  syncLocalDocument: (projectId: string, path: string) =>
+    request<{ document: LocalDocContent }>(
+      `/api/projects/${projectId}/local-documents/sync`,
+      jsonInit("POST", { path }),
     ),
   listTickets: (projectId: string) =>
     request<TicketsResponse>(`/api/projects/${projectId}/tickets`),

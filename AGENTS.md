@@ -33,6 +33,10 @@ finishing a change.
 - **Tabs**: the main area is tabbed (`TabsBar`); each activity-bar menu is a **singleton tab** whose
   content embeds its own side panel (Workspace/Explorer/Document/Settings use a two-pane layout;
   Ticket = Kanban; Global = one page). State lives in `App.tsx` (tab list, and file/doc selection).
+- **Documents**: `DocumentPanel` switches between **Local** (`.md` files under
+  `projects.document_path`) and Docmost. Local docs are renamed/saved on disk; manual sync
+  (`POST /local-documents/sync`) creates/updates the Docmost page and stores `page_id` in
+  `local_documents`.
 - **Tickets**: `local_tickets` (SQLite) are created locally (UI `TicketCreateDialog` + AI tool
   `create_ticket`); `GET /tickets` merges unsynced local tickets with Jira. Syncing is manual
   (`POST /local-tickets/:id/sync` → Jira issue) and sets `jira_key`/`sync_status`.

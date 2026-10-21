@@ -21,6 +21,9 @@ export interface EditorTab {
   content?: string;
   binary?: boolean;
   size?: number;
+  source?: "local" | "docmost";
+  syncStatus?: "local" | "synced" | "error";
+  pageId?: string;
 }
 
 const ICONS: Record<TabKind, typeof FileIcon> = {

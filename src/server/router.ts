@@ -7,6 +7,9 @@ import {
   type IntegrationKind,
   JiraConfig,
   LlmProviderInput,
+  LocalDocumentInput,
+  LocalDocumentSyncInput,
+  LocalDocumentUpdateInput,
   LocalTicketInput,
   LocalTicketUpdateInput,
   ProjectInput,
@@ -32,17 +35,27 @@ import {
   listChatSessions,
   listIntegrations,
   listLlmProviders,
+  listLocalDocumentMeta,
   listLocalTickets,
   listProjects,
   type LocalTicketRow,
+  markLocalDocumentSynced,
+  markLocalDocumentSyncError,
   markLocalTicketSynced,
   markLocalTicketSyncError,
+  moveLocalDocumentMeta,
   recentEvents,
   updateLlmProvider,
   updateLocalTicket,
   updateProject,
   upsertIntegration,
 } from "../db/db.ts";
+import {
+  createLocalDocument,
+  listLocalDocuments,
+  readLocalDocument,
+  updateLocalDocument,
+} from "../fs/documents.ts";
 import { listDirectory, readWorkspaceFile } from "../fs/workspace.ts";
 import {
   createDocument,
@@ -368,6 +381,154 @@ async function deleteChatSessionHandler(projectId: string, sessionId: string): P
   }
   await deleteChatSession(sessionId);
   return json({ ok: true });
+}
+
+function localDocumentPayload(
+  doc: { path: string; title: string },
+  meta?: { page_id: string | null; sync_status: string; sync_error: string | null },
+) {
+  return {
+    id: doc.path,
+    path: doc.path,
+    title: doc.title,
+    syncStatus: meta?.sync_status ?? "local",
+    pageId: meta?.page_id ?? undefined,
+    syncError: meta?.sync_error ?? undefined,
+  };
+}
+
+async function listLocalDocumentsHandler(projectId: string): Promise<Response> {
+  const project = await getProject(projectId);
+  if (!project) return json({ error: "project_not_found" }, 404);
+  const root = project.document_path?.trim();
+  if (!root) return json({ configured: false, documents: [] });
+
+  try {
+    const [entries, meta] = await Promise.all([
+      listLocalDocuments(root),
+      listLocalDocumentMeta(projectId),
+    ]);
+    const byPath = new Map(meta.map((row) => [row.path, row]));
+    return json({
+      configured: true,
+      path: root,
+      documents: entries.map((entry) => localDocumentPayload(entry, byPath.get(entry.path))),
+    });
+  } catch (error) {
+    return json({
+      configured: true,
+      path: root,
+      error: `Gagal membaca document workspace: ${(error as Error).message}`,
+      documents: [],
+    });
+  }
+}
+
+async function getLocalDocumentHandler(projectId: string, path: string): Promise<Response> {
+  const project = await getProject(projectId);
+  if (!project) return json({ error: "project_not_found" }, 404);
+  const root = project.document_path?.trim();
+  if (!root) return json({ error: "Document workspace belum diatur." }, 400);
+
+  try {
+    const doc = await readLocalDocument(root, path);
+    const meta = (await listLocalDocumentMeta(projectId)).find((row) => row.path === doc.path);
+    return json({ document: { ...doc, ...localDocumentPayload(doc, meta) } });
+  } catch (error) {
+    return json({ error: (error as Error).message }, 404);
+  }
+}
+
+async function createLocalDocumentHandler(projectId: string, req: Request): Promise<Response> {
+  const project = await getProject(projectId);
+  if (!project) return json({ error: "project_not_found" }, 404);
+  const root = project.document_path?.trim();
+  if (!root) return json({ error: "Document workspace belum diatur." }, 400);
+
+  const parsed = LocalDocumentInput.safeParse(await readJson(req));
+  if (!parsed.success) {
+    return json({ error: "invalid_input", issues: parsed.error.issues }, 400);
+  }
+  try {
+    const doc = await createLocalDocument(root, parsed.data.title);
+    await record("document.created_local", { projectId, path: doc.path });
+    return json({ document: { ...doc, ...localDocumentPayload(doc) } }, 201);
+  } catch (error) {
+    return json({ error: (error as Error).message }, 400);
+  }
+}
+
+async function updateLocalDocumentHandler(projectId: string, req: Request): Promise<Response> {
+  const project = await getProject(projectId);
+  if (!project) return json({ error: "project_not_found" }, 404);
+  const root = project.document_path?.trim();
+  if (!root) return json({ error: "Document workspace belum diatur." }, 400);
+
+  const parsed = LocalDocumentUpdateInput.safeParse(await readJson(req));
+  if (!parsed.success) {
+    return json({ error: "invalid_input", issues: parsed.error.issues }, 400);
+  }
+  try {
+    const doc = await updateLocalDocument(root, parsed.data.path, {
+      title: parsed.data.title,
+      content: parsed.data.content,
+    });
+    if (doc.path !== parsed.data.path) {
+      await moveLocalDocumentMeta(projectId, parsed.data.path, doc.path);
+    }
+    const meta = (await listLocalDocumentMeta(projectId)).find((row) => row.path === doc.path);
+    return json({ document: { ...doc, ...localDocumentPayload(doc, meta) } });
+  } catch (error) {
+    return json({ error: (error as Error).message }, 400);
+  }
+}
+
+async function syncLocalDocumentHandler(projectId: string, req: Request): Promise<Response> {
+  const project = await getProject(projectId);
+  if (!project) return json({ error: "project_not_found" }, 404);
+  const root = project.document_path?.trim();
+  if (!root) return json({ error: "Document workspace belum diatur." }, 400);
+
+  const parsed = LocalDocumentSyncInput.safeParse(await readJson(req));
+  if (!parsed.success) {
+    return json({ error: "invalid_input", issues: parsed.error.issues }, 400);
+  }
+
+  const ctx = await integrationContext(projectId, "docmost");
+  if (!ctx) return json({ error: "Integrasi Docmost belum dikonfigurasi." }, 400);
+  const parsedCfg = DocmostConfig.safeParse(ctx.config);
+  if (!parsedCfg.success) return json({ error: "Konfigurasi Docmost tidak valid." }, 400);
+  const spaceId = parsedCfg.data.spaceId?.trim() || project.docmost_space_id?.trim();
+  if (!spaceId) return json({ error: "Space ID Docmost belum diisi." }, 400);
+
+  try {
+    const doc = await readLocalDocument(root, parsed.data.path);
+    const meta = (await listLocalDocumentMeta(projectId)).find((row) => row.path === doc.path);
+    let pageId = meta?.page_id ?? "";
+
+    if (pageId) {
+      await updateDocument(parsedCfg.data, {
+        pageId,
+        title: doc.title,
+        content: doc.content,
+      });
+    } else {
+      const created = await createDocument(parsedCfg.data, { spaceId, title: doc.title });
+      pageId = created.id;
+      await updateDocument(parsedCfg.data, { pageId, title: doc.title, content: doc.content });
+    }
+
+    await markLocalDocumentSynced(projectId, doc.path, pageId);
+    await record("document.synced", { projectId, path: doc.path, pageId });
+    const updatedMeta = (await listLocalDocumentMeta(projectId)).find((row) =>
+      row.path === doc.path
+    );
+    return json({ document: { ...doc, ...localDocumentPayload(doc, updatedMeta) } });
+  } catch (error) {
+    const message = (error as Error).message;
+    await markLocalDocumentSyncError(projectId, parsed.data.path, message);
+    return json({ error: message }, 502);
+  }
 }
 
 async function testIntegrationHandler(req: Request): Promise<Response> {
@@ -730,6 +891,28 @@ export async function handleRequest(req: Request): Promise<Response> {
     const fileContent = pathname.match(/^\/api\/projects\/([^/]+)\/files\/content$/);
     if (fileContent && method === "GET") {
       return await fileContentHandler(fileContent[1], url.searchParams.get("path") ?? "");
+    }
+
+    const localDocContent = pathname.match(
+      /^\/api\/projects\/([^/]+)\/local-documents\/content$/,
+    );
+    if (localDocContent && method === "GET") {
+      const path = url.searchParams.get("path") ?? "";
+      return await getLocalDocumentHandler(localDocContent[1], path);
+    }
+
+    const localDocSync = pathname.match(/^\/api\/projects\/([^/]+)\/local-documents\/sync$/);
+    if (localDocSync && method === "POST") {
+      return await syncLocalDocumentHandler(localDocSync[1], req);
+    }
+
+    const localDocs = pathname.match(/^\/api\/projects\/([^/]+)\/local-documents$/);
+    if (localDocs) {
+      if (method === "GET") return await listLocalDocumentsHandler(localDocs[1]);
+      if (method === "POST") return await createLocalDocumentHandler(localDocs[1], req);
+      if (method === "PUT" || method === "PATCH") {
+        return await updateLocalDocumentHandler(localDocs[1], req);
+      }
     }
 
     const documents = pathname.match(/^\/api\/projects\/([^/]+)\/documents$/);

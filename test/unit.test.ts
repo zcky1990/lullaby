@@ -1,4 +1,4 @@
-import { equal, throws } from "node:assert/strict";
+import { equal, rejects, throws } from "node:assert/strict";
 import {
   ChatInput,
   JiraConfig,
@@ -8,6 +8,13 @@ import {
   ProjectInput,
 } from "../src/config/schema.ts";
 import { htmlToAdf, htmlToPlainText, sanitizeHtml } from "../src/core/html.ts";
+import {
+  createLocalDocument,
+  listLocalDocuments,
+  readLocalDocument,
+  slugifyDocumentTitle,
+  updateLocalDocument,
+} from "../src/fs/documents.ts";
 import { diffLines } from "../src/server/diff.ts";
 
 Deno.test("ProjectInput trims and drops empty optional fields", () => {
@@ -15,6 +22,8 @@ Deno.test("ProjectInput trims and drops empty optional fields", () => {
   const parsed = ProjectInput.parse({ name: "  Checkout ", docmostSpaceId: "" });
   equal(parsed.name, "Checkout");
   equal(parsed.docmostSpaceId, undefined);
+  const withDocs = ProjectInput.parse({ name: "Docs", documentPath: "/tmp/docs" });
+  equal(withDocs.documentPath, "/tmp/docs");
 });
 
 Deno.test("JiraConfig applies defaults and validates input", () => {
@@ -167,4 +176,41 @@ Deno.test("ChatInput supports plan and build modes", () => {
   equal(ChatInput.parse(base).mode, "build");
   equal(ChatInput.parse({ ...base, mode: "plan" }).mode, "plan");
   throws(() => ChatInput.parse({ ...base, mode: "design" }));
+});
+
+Deno.test("local documents create, list, rename, and guard paths", async () => {
+  const dir = await Deno.makeTempDir();
+  try {
+    equal(slugifyDocumentTitle("Hello World!"), "hello-world");
+    equal(slugifyDocumentTitle("!!!"), "document");
+
+    const created = await createLocalDocument(dir, "Hello World");
+    equal(created.path, "hello-world.md");
+    equal(created.title, "Hello World");
+
+    const list = await listLocalDocuments(dir);
+    equal(list.length, 1);
+    equal(list[0].path, "hello-world.md");
+
+    const updated = await updateLocalDocument(dir, created.path, {
+      title: "Judul Baru",
+      content: "# Judul Baru\n\nisi dokumen",
+    });
+    equal(updated.path, "judul-baru.md");
+    equal(updated.content.includes("isi dokumen"), true);
+
+    const after = await listLocalDocuments(dir);
+    equal(after[0].path, "judul-baru.md");
+    equal(after[0].title, "Judul Baru");
+
+    const read = await readLocalDocument(dir, "judul-baru.md");
+    equal(read.title, "Judul Baru");
+
+    const second = await createLocalDocument(dir, "Hello World");
+    equal(second.path, "hello-world.md");
+
+    await rejects(readLocalDocument(dir, "../escape.md"), /di luar/);
+  } finally {
+    await Deno.remove(dir, { recursive: true });
+  }
 });

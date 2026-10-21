@@ -7,6 +7,7 @@ export interface ProjectRow {
   id: string;
   name: string;
   workspace_path: string | null;
+  document_path: string | null;
   docmost_space_id: string | null;
   jira_project_key: string | null;
   github_repo: string | null;
@@ -55,6 +56,7 @@ CREATE TABLE IF NOT EXISTS projects (
   id               TEXT PRIMARY KEY,
   name             TEXT NOT NULL,
   workspace_path   TEXT,
+  document_path    TEXT,
   docmost_space_id TEXT,
   jira_project_key TEXT,
   github_repo      TEXT,
@@ -110,6 +112,17 @@ CREATE TABLE IF NOT EXISTS chat_messages (
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+CREATE TABLE IF NOT EXISTS local_documents (
+  project_id  TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  path        TEXT NOT NULL,
+  page_id     TEXT,
+  sync_status TEXT NOT NULL DEFAULT 'local',
+  sync_error  TEXT,
+  synced_at   TEXT,
+  updated_at  TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (project_id, path)
+);
+
 CREATE TABLE IF NOT EXISTS local_tickets (
   id          TEXT PRIMARY KEY,
   project_id  TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
@@ -138,6 +151,7 @@ function ensureColumn(db: DatabaseSync, table: string, column: string, ddl: stri
 
 function migrate(db: DatabaseSync): void {
   ensureColumn(db, "projects", "workspace_path", "workspace_path TEXT");
+  ensureColumn(db, "projects", "document_path", "document_path TEXT");
   ensureColumn(db, "llm_providers", "api_key", "api_key TEXT");
   ensureColumn(db, "chat_messages", "changes", "changes TEXT");
 
@@ -212,6 +226,7 @@ export interface CreateProjectInput {
   id: string;
   name: string;
   workspacePath?: string;
+  documentPath?: string;
   docmostSpaceId?: string;
   jiraProjectKey?: string;
   githubRepo?: string;
@@ -220,12 +235,13 @@ export interface CreateProjectInput {
 export async function createProject(input: CreateProjectInput): Promise<ProjectRow> {
   const db = await getDb();
   db.prepare(
-    `INSERT INTO projects (id, name, workspace_path, docmost_space_id, jira_project_key, github_repo)
-     VALUES (?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO projects (id, name, workspace_path, document_path, docmost_space_id, jira_project_key, github_repo)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     input.id,
     input.name,
     input.workspacePath ?? null,
+    input.documentPath ?? null,
     input.docmostSpaceId ?? null,
     input.jiraProjectKey ?? null,
     input.githubRepo ?? null,
@@ -237,6 +253,7 @@ export async function createProject(input: CreateProjectInput): Promise<ProjectR
 export interface UpdateProjectInput {
   name?: string;
   workspacePath?: string | null;
+  documentPath?: string | null;
   docmostSpaceId?: string | null;
   jiraProjectKey?: string | null;
   githubRepo?: string | null;
@@ -251,12 +268,13 @@ export async function updateProject(
   const db = await getDb();
   db.prepare(
     `UPDATE projects SET
-       name = ?, workspace_path = ?, docmost_space_id = ?, jira_project_key = ?, github_repo = ?,
-       updated_at = datetime('now')
+       name = ?, workspace_path = ?, document_path = ?, docmost_space_id = ?,
+       jira_project_key = ?, github_repo = ?, updated_at = datetime('now')
      WHERE id = ?`,
   ).run(
     input.name ?? existing.name,
     input.workspacePath !== undefined ? input.workspacePath : existing.workspace_path,
+    input.documentPath !== undefined ? input.documentPath : existing.document_path,
     input.docmostSpaceId !== undefined ? input.docmostSpaceId : existing.docmost_space_id,
     input.jiraProjectKey !== undefined ? input.jiraProjectKey : existing.jira_project_key,
     input.githubRepo !== undefined ? input.githubRepo : existing.github_repo,
@@ -615,4 +633,80 @@ export async function markLocalTicketSyncError(id: string, message: string): Pro
     "UPDATE local_tickets SET sync_status = 'error', sync_error = ?, updated_at = datetime('now') " +
       "WHERE id = ?",
   ).run(message, id);
+}
+
+export interface LocalDocumentMetaRow {
+  project_id: string;
+  path: string;
+  page_id: string | null;
+  sync_status: string;
+  sync_error: string | null;
+  synced_at: string | null;
+  updated_at: string;
+}
+
+export async function listLocalDocumentMeta(projectId: string): Promise<LocalDocumentMetaRow[]> {
+  const db = await getDb();
+  return rows<LocalDocumentMetaRow>(
+    db.prepare("SELECT * FROM local_documents WHERE project_id = ?").all(projectId),
+  );
+}
+
+export async function markLocalDocumentSynced(
+  projectId: string,
+  path: string,
+  pageId: string,
+): Promise<void> {
+  const db = await getDb();
+  db.prepare(
+    "INSERT INTO local_documents (project_id, path, page_id, sync_status, sync_error, synced_at, updated_at) " +
+      "VALUES (?, ?, ?, 'synced', NULL, datetime('now'), datetime('now')) " +
+      "ON CONFLICT(project_id, path) DO UPDATE SET page_id = excluded.page_id, " +
+      "sync_status = 'synced', sync_error = NULL, synced_at = datetime('now'), " +
+      "updated_at = datetime('now')",
+  ).run(projectId, path, pageId);
+}
+
+export async function markLocalDocumentSyncError(
+  projectId: string,
+  path: string,
+  message: string,
+): Promise<void> {
+  const db = await getDb();
+  db.prepare(
+    "INSERT INTO local_documents (project_id, path, sync_status, sync_error, updated_at) " +
+      "VALUES (?, ?, 'error', ?, datetime('now')) " +
+      "ON CONFLICT(project_id, path) DO UPDATE SET sync_status = 'error', " +
+      "sync_error = excluded.sync_error, updated_at = datetime('now')",
+  ).run(projectId, path, message);
+}
+
+export async function moveLocalDocumentMeta(
+  projectId: string,
+  from: string,
+  to: string,
+): Promise<void> {
+  if (from === to) return;
+  const db = await getDb();
+  const existing = db
+    .prepare("SELECT * FROM local_documents WHERE project_id = ? AND path = ?")
+    .get(projectId, from) as LocalDocumentMetaRow | undefined;
+  db.prepare("DELETE FROM local_documents WHERE project_id = ? AND path = ?").run(projectId, from);
+  if (!existing) return;
+  db.prepare(
+    "INSERT INTO local_documents (project_id, path, page_id, sync_status, sync_error, synced_at, updated_at) " +
+      "VALUES (?, ?, ?, ?, ?, ?, datetime('now'))",
+  ).run(
+    projectId,
+    to,
+    existing.page_id,
+    existing.sync_status,
+    existing.sync_error,
+    existing.synced_at,
+  );
+}
+
+export async function deleteLocalDocumentMeta(projectId: string, path: string): Promise<void> {
+  const db = await getDb();
+  db.prepare("DELETE FROM local_documents WHERE project_id = ? AND path = ?").run(projectId, path);
 }
