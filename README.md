@@ -57,7 +57,7 @@ Shell ala VSCode: **activity bar** (kiri) + **panel** terpisah (Workspace/Explor
 | Menu                 | Muncul bila             | Isi                                                                                                                                                           |
 | -------------------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Workspace**        | selalu                  | daftar/buat project (nama + workspace folder opsional), overview project                                                                                      |
-| **Explorer**         | project punya workspace | file tree folder workspace + viewer kode **Monaco** (read-only)                                                                                               |
+| **Explorer**         | project punya workspace | file tree folder workspace + editor kode **Monaco** (bisa diedit, simpan dengan tombol/card `Cmd/Ctrl+S`)                                                     |
 | **Document**         | selalu                  | tree halaman Docmost (collapsible, lazy children, **+** tambah) + render **markdown** + **Edit** (judul/isi via Monaco)                                       |
 | **Ticket**           | selalu                  | **Kanban** tiket lokal + Jira (kolom = status, drag = transition/update); **Tiket baru** (lokal) + sync manual; klik card → detail; filter assignee + refresh |
 | **Project Settings** | ada project             | Workspace, Integrations (Document/Ticket/Code, `+` pilih tipe), LLM Providers — form **collapsible**                                                          |
@@ -195,7 +195,9 @@ kecuali `/api/health`. `baseUrl` integrasi dibatasi `http(s)` (menolak `file://`
 Fondasi (F0) — yang sudah jalan:
 
 - **Workspace**: project CRUD + workspace folder (native picker), overview project.
-- **Explorer**: file tree folder workspace + viewer kode **Monaco** (read-only).
+- **Explorer**: file tree folder workspace + editor kode **Monaco** yang **bisa diedit** (indikator
+  dirty di tab/header, tombol **Simpan** atau `Cmd/Ctrl+S`; file ditulis lewat
+  `PUT /api/projects/:id/files/content` dengan guard path workspace).
 - **Document**: pilih sumber **Local** atau **Docmost**. Local memakai folder **Document workspace**
   (Project Settings → Workspace): daftar file `.md`, buat/rename, edit markdown, dan **sync manual**
   ke Docmost (badge Local/Synced/Error; sync pertama membuat page lalu update konten, sync

@@ -1,12 +1,14 @@
 import { equal, rejects, throws } from "node:assert/strict";
 import {
   ChatInput,
+  GenerateTicketsInput,
   JiraConfig,
   LlmProviderInput,
   LocalTicketInput,
   LocalTicketUpdateInput,
   McpSettingsInput,
   ProjectInput,
+  UpdateFileInput,
 } from "../src/config/schema.ts";
 import { htmlToAdf, htmlToPlainText, sanitizeHtml } from "../src/core/html.ts";
 import {
@@ -266,4 +268,17 @@ Deno.test("McpSettingsInput carries global state defaults", () => {
   });
   equal(withState.enabled, false);
   equal(withState.disabledTools[0], "s1:read");
+});
+
+Deno.test("GenerateTicketsInput requires title and defaults variant", () => {
+  const parsed = GenerateTicketsInput.parse({ title: " PRD ", content: "isi" });
+  equal(parsed.title, "PRD");
+  equal(parsed.variant, "medium");
+  throws(() => GenerateTicketsInput.parse({ title: "", content: "x" }));
+});
+
+Deno.test("UpdateFileInput validates editor writes", () => {
+  const parsed = UpdateFileInput.parse({ path: " src/a.ts ", content: "x" });
+  equal(parsed.path, "src/a.ts");
+  throws(() => UpdateFileInput.parse({ path: "", content: "x" }));
 });

@@ -36,7 +36,9 @@ finishing a change.
 - **Documents**: `DocumentPanel` switches between **Local** (`.md` files under
   `projects.document_path`) and Docmost. Local docs are renamed/saved on disk; manual sync
   (`POST /local-documents/sync`) creates/updates the Docmost page and stores `page_id` in
-  `local_documents`.
+  `local_documents`. `Generate ticket` in the document tab calls `POST /generate-tickets`
+  (`generateTicketsFromDocument`) which uses the first LLM provider and only the `create_ticket`
+  tool.
 - **Tickets**: `local_tickets` (SQLite) are created locally (UI `TicketCreateDialog` + AI tool
   `create_ticket`); `GET /tickets` merges unsynced local tickets with Jira. Syncing is manual
   (`POST /local-tickets/:id/sync` → Jira issue) and sets `jira_key`/`sync_status`.
@@ -70,7 +72,10 @@ finishing a change.
   header.
 - **Filesystem reads must go through `src/fs/workspace.ts`** (path-traversal guarded, capped size).
   Writes (chat `write_file`) go through `writeWorkspaceFile` and require **user approval**
-  (`src/server/chat.ts`: `once` / `always` / `deny`).
+  (`src/server/chat.ts`: `once` / `always` / `deny`). Direct editor saves use
+  `PUT /api/projects/:id/files/content` (also `writeWorkspaceFile`, no approval; user is editing).
+  The Explorer Monaco editor is editable; tabs track a `dirty` flag and save via button or
+  `Cmd/Ctrl+S`.
 - Persistence uses `node:sqlite` (`src/db/db.ts`); keep queries parameterized and add columns via
   `ensureColumn` migrations.
 

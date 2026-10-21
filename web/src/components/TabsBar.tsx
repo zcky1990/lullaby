@@ -25,6 +25,7 @@ export interface EditorTab {
   syncStatus?: "local" | "synced" | "error";
   pageId?: string;
   preview?: boolean;
+  dirty?: boolean;
 }
 
 const ICONS: Record<TabKind, typeof FileIcon> = {
@@ -66,6 +67,7 @@ export function TabsBar({ tabs, activeId, onSelect, onClose }: Props) {
             >
               <Icon className="size-3.5 shrink-0" />
               <span className="truncate">{tab.title}</span>
+              {tab.dirty ? <span className="size-1.5 shrink-0 rounded-full bg-primary" /> : null}
             </button>
             <button
               type="button"

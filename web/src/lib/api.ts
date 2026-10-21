@@ -311,6 +311,11 @@ export const api = {
     request<FileContentResponse>(
       `/api/projects/${projectId}/files/content?path=${encodeURIComponent(path)}`,
     ),
+  writeFile: (projectId: string, path: string, content: string) =>
+    request<{ ok: boolean; path: string; size: number }>(
+      `/api/projects/${projectId}/files/content`,
+      jsonInit("PUT", { path, content }),
+    ),
   projectDetail: (id: string) => request<ProjectDetail>(`/api/projects/${id}`),
   listDocuments: (projectId: string, pageId?: string) =>
     request<DocumentsResponse>(
@@ -358,6 +363,14 @@ export const api = {
     ),
   listTickets: (projectId: string) =>
     request<TicketsResponse>(`/api/projects/${projectId}/tickets`),
+  generateTickets: (
+    projectId: string,
+    payload: { title: string; content: string; providerId?: string; variant?: string },
+  ) =>
+    request<{ tickets: CreatedTicket[]; message: string }>(
+      `/api/projects/${projectId}/generate-tickets`,
+      jsonInit("POST", payload),
+    ),
   getTicket: (projectId: string, key: string) =>
     request<{ ticket: TicketDetail }>(
       `/api/projects/${projectId}/tickets/${encodeURIComponent(key)}`,

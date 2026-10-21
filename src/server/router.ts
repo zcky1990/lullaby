@@ -3,6 +3,7 @@ import {
   ChatInput,
   CreateDocumentInput,
   DocmostConfig,
+  GenerateTicketsInput,
   IntegrationInput,
   type IntegrationKind,
   JiraConfig,
@@ -18,6 +19,7 @@ import {
   ProjectUpdateInput,
   SkillsSettingsInput,
   UpdateDocumentInput,
+  UpdateFileInput,
 } from "../config/schema.ts";
 import { appDataDir } from "../core/paths.ts";
 import { log } from "../core/logger.ts";
@@ -63,7 +65,7 @@ import {
 } from "../fs/documents.ts";
 import { listMcpTools } from "./mcp.ts";
 import { globalSkillsDir, listSkills, readSkillsSettings, workspaceSkillsDir } from "./skills.ts";
-import { listDirectory, readWorkspaceFile } from "../fs/workspace.ts";
+import { listDirectory, readWorkspaceFile, writeWorkspaceFile } from "../fs/workspace.ts";
 import {
   createDocument,
   getDocument,
@@ -71,7 +73,12 @@ import {
   updateDocument,
 } from "../integrations/docmost.ts";
 import { createTicket, getTicket, listTickets, transitionTicket } from "../integrations/jira.ts";
-import { approveChat, startChat, type VisibleMessage } from "./chat.ts";
+import {
+  approveChat,
+  generateTicketsFromDocument,
+  startChat,
+  type VisibleMessage,
+} from "./chat.ts";
 import { testIntegration } from "../integrations/index.ts";
 import { publish } from "./bus.ts";
 import { APP_TOKEN_COOKIE, APP_TOKEN_HEADER, appToken } from "./session.ts";
@@ -163,6 +170,24 @@ async function fileContentHandler(projectId: string, rel: string): Promise<Respo
   if (!project.workspace_path) return json({ error: "no_workspace" }, 400);
   try {
     return json({ path: rel, ...(await readWorkspaceFile(project.workspace_path, rel)) });
+  } catch (error) {
+    return json({ error: (error as Error).message }, 400);
+  }
+}
+
+async function writeFileHandler(projectId: string, req: Request): Promise<Response> {
+  const project = await getProject(projectId);
+  if (!project) return json({ error: "project_not_found" }, 404);
+  if (!project.workspace_path) return json({ error: "no_workspace" }, 400);
+
+  const parsed = UpdateFileInput.safeParse(await readJson(req));
+  if (!parsed.success) {
+    return json({ error: "invalid_input", issues: parsed.error.issues }, 400);
+  }
+  try {
+    await writeWorkspaceFile(project.workspace_path, parsed.data.path, parsed.data.content);
+    await record("file.written", { projectId, path: parsed.data.path });
+    return json({ ok: true, path: parsed.data.path, size: parsed.data.content.length });
   } catch (error) {
     return json({ error: (error as Error).message }, 400);
   }
@@ -602,6 +627,36 @@ async function listMcpToolsHandler(req: Request): Promise<Response> {
   }
 }
 
+async function generateTicketsHandler(projectId: string, req: Request): Promise<Response> {
+  const project = await getProject(projectId);
+  if (!project) return json({ error: "project_not_found" }, 404);
+
+  const parsed = GenerateTicketsInput.safeParse(await readJson(req));
+  if (!parsed.success) {
+    return json({ error: "invalid_input", issues: parsed.error.issues }, 400);
+  }
+
+  let provider = parsed.data.providerId ? await getLlmProvider(parsed.data.providerId) : null;
+  if (!provider || provider.project_id !== projectId) {
+    provider = (await listLlmProviders(projectId))[0] ?? null;
+  }
+  if (!provider) return json({ error: "Belum ada provider LLM di project ini." }, 400);
+
+  try {
+    const result = await generateTicketsFromDocument(
+      projectId,
+      provider,
+      parsed.data.title,
+      parsed.data.content,
+      parsed.data.variant,
+    );
+    await record("tickets.generated", { projectId, count: result.tickets.length });
+    return json(result);
+  } catch (error) {
+    return json({ error: (error as Error).message }, 502);
+  }
+}
+
 async function skillsHandler(projectId: string | null): Promise<Response> {
   const project = projectId ? await getProject(projectId) : null;
   const workspace = project?.workspace_path ?? null;
@@ -1011,6 +1066,9 @@ export async function handleRequest(req: Request): Promise<Response> {
     if (fileContent && method === "GET") {
       return await fileContentHandler(fileContent[1], url.searchParams.get("path") ?? "");
     }
+    if (fileContent && (method === "PUT" || method === "POST")) {
+      return await writeFileHandler(fileContent[1], req);
+    }
 
     const localDocContent = pathname.match(
       /^\/api\/projects\/([^/]+)\/local-documents\/content$/,
@@ -1051,6 +1109,11 @@ export async function handleRequest(req: Request): Promise<Response> {
       if (method === "PUT") {
         return await updateDocumentHandler(documentItem[1], documentItem[2], req);
       }
+    }
+
+    const generateTickets = pathname.match(/^\/api\/projects\/([^/]+)\/generate-tickets$/);
+    if (generateTickets && method === "POST") {
+      return await generateTicketsHandler(generateTickets[1], req);
     }
 
     const localTicketSync = pathname.match(

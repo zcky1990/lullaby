@@ -1,5 +1,16 @@
 import { useCallback, useEffect, useMemo, useState, lazy, Suspense } from "react";
-import { Code2, Eye, Inbox, MessageSquare, Pencil, Plus, RefreshCw, Save, Upload } from "lucide-react";
+import {
+  Code2,
+  Eye,
+  Inbox,
+  MessageSquare,
+  Pencil,
+  Plus,
+  RefreshCw,
+  Save,
+  Sparkles,
+  Upload,
+} from "lucide-react";
 import type { ActivityEvent } from "@/components/ActivityFeed";
 import { ActivityBar, type Menu } from "@/components/ActivityBar";
 import { ChatSidebar } from "@/components/ChatSidebar";
@@ -40,6 +51,7 @@ import { cn } from "@/lib/utils";
 import {
   api,
   type DocSummary,
+  type CreatedTicket,
   type IntegrationPayload,
   type LlmProviderPayload,
   type LocalDocSummary,
@@ -338,6 +350,29 @@ export default function App() {
     [currentId, tabs, focusTab, patchTab],
   );
 
+  const saveFile = useCallback(
+    async (path: string, content: string) => {
+      if (!currentId) return;
+      await api.writeFile(currentId, path, content);
+      patchTab(`file:${currentId}:${path}`, { content, dirty: false });
+    },
+    [currentId, patchTab],
+  );
+
+  useEffect(() => {
+    const handler = (event: KeyboardEvent) => {
+      if (!(event.metaKey || event.ctrlKey) || event.shiftKey) return;
+      if (event.key.toLowerCase() !== "s") return;
+      const tab = tabs.find((item) => item.id === activeTabId);
+      if (!tab || tab.kind !== "file" || tab.preview) return;
+      event.preventDefault();
+      if (!tab.dirty) return;
+      void saveFile(tab.ref ?? tab.title, tab.content ?? "").catch(() => {});
+    };
+    window.addEventListener("keydown", handler, { capture: true });
+    return () => window.removeEventListener("keydown", handler, { capture: true });
+  }, [tabs, activeTabId, saveFile]);
+
   const createDocument = useCallback(
     async (title: string, parentPageId?: string) => {
       if (!currentId) return;
@@ -369,6 +404,16 @@ export default function App() {
       await openLocalDocument(document.path, document.title);
     },
     [currentId, loadLocalDocuments, openLocalDocument],
+  );
+
+  const generateTicketsFromDocument = useCallback(
+    async (title: string, content: string) => {
+      if (!currentId) throw new Error("Pilih project dulu.");
+      const result = await api.generateTickets(currentId, { title, content });
+      await loadTickets(currentId);
+      return result;
+    },
+    [currentId, loadTickets],
   );
 
   const patchLocalDocTab = useCallback((path: string, patch: Partial<EditorTab>) => {
@@ -662,6 +707,8 @@ export default function App() {
             onSave={saveDocument}
             onSaveLocal={saveLocalDocument}
             onSyncLocal={syncLocalDocument}
+            onGenerateTickets={generateTicketsFromDocument}
+            onOpenTickets={() => openSingleton("ticket", "Ticket Board")}
           />
         );
       case "file":
@@ -669,6 +716,8 @@ export default function App() {
           <FileTab
             key={tab.id}
             tab={tab}
+            onChange={(content) => patchTab(tab.id, { content, dirty: true })}
+            onSave={() => saveFile(tab.ref ?? tab.title, tab.content ?? "")}
             onTogglePreview={() => patchTab(tab.id, { preview: !tab.preview })}
           />
         );
@@ -861,12 +910,18 @@ function StatCard({ label, value }: { label: string; value: number }) {
 
 function FileTab({
   tab,
+  onChange,
+  onSave,
   onTogglePreview,
 }: {
   tab: EditorTab;
+  onChange: (content: string) => void;
+  onSave: () => Promise<void>;
   onTogglePreview: () => void;
 }) {
   const { resolvedEditorTheme } = useTheme();
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | undefined>();
   const path = tab.ref ?? tab.title;
   const isMarkdown = /\.(md|markdown|mdx)$/i.test(path);
 
@@ -876,28 +931,54 @@ function FileTab({
     return <p className="p-6 text-sm text-muted-foreground">File biner (tidak ditampilkan).</p>;
   }
 
-  if (!isMarkdown) {
-    return (
-      <Suspense fallback={<Skeleton className="h-full w-full rounded-none" />}>
-        <MonacoViewer path={path} content={tab.content ?? ""} theme={resolvedEditorTheme} />
-      </Suspense>
-    );
-  }
+  const save = async () => {
+    setSaving(true);
+    setSaveError(undefined);
+    try {
+      await onSave();
+    } catch (e) {
+      setSaveError((e as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <div className="flex h-full flex-col">
       <div className="flex items-center justify-between gap-2 border-b px-4 py-2">
-        <span className="truncate font-mono text-xs text-muted-foreground">{path}</span>
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={onTogglePreview}
-          title="Cmd/Ctrl+Shift+V"
-          data-icon="inline-start"
-        >
-          {tab.preview ? <Code2 /> : <Eye />}
-          {tab.preview ? "Kode" : "Preview"}
-        </Button>
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="truncate font-mono text-xs text-muted-foreground">{path}</span>
+          {tab.dirty ? (
+            <span className="size-1.5 shrink-0 rounded-full bg-primary" title="Belum disimpan" />
+          ) : null}
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          {saveError ? <span className="text-xs text-destructive">{saveError}</span> : null}
+          {isMarkdown ? (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={onTogglePreview}
+              title="Cmd/Ctrl+Shift+V"
+              data-icon="inline-start"
+            >
+              {tab.preview ? <Code2 /> : <Eye />}
+              {tab.preview ? "Kode" : "Preview"}
+            </Button>
+          ) : null}
+          {!tab.preview ? (
+            <Button
+              size="sm"
+              onClick={save}
+              disabled={saving || !tab.dirty}
+              title="Cmd/Ctrl+S"
+              data-icon="inline-start"
+            >
+              {saving ? <Spinner /> : <Save />}
+              Simpan
+            </Button>
+          ) : null}
+        </div>
       </div>
       <div className="min-h-0 flex-1">
         {tab.preview ? (
@@ -917,7 +998,13 @@ function FileTab({
           </div>
         ) : (
           <Suspense fallback={<Skeleton className="h-full w-full rounded-none" />}>
-            <MonacoViewer path={path} content={tab.content ?? ""} theme={resolvedEditorTheme} />
+            <MonacoViewer
+              path={path}
+              content={tab.content ?? ""}
+              theme={resolvedEditorTheme}
+              readOnly={false}
+              onChange={onChange}
+            />
           </Suspense>
         )}
       </div>
@@ -930,11 +1017,18 @@ function DocumentTab({
   onSave,
   onSaveLocal,
   onSyncLocal,
+  onGenerateTickets,
+  onOpenTickets,
 }: {
   tab: EditorTab;
   onSave: (pageId: string, payload: { title?: string; content: string }) => Promise<void>;
   onSaveLocal: (path: string, payload: { title?: string; content: string }) => Promise<void>;
   onSyncLocal: (path: string) => Promise<void>;
+  onGenerateTickets: (
+    title: string,
+    content: string,
+  ) => Promise<{ tickets: CreatedTicket[]; message: string }>;
+  onOpenTickets: () => void;
 }) {
   const { resolvedEditorTheme } = useTheme();
   const [editing, setEditing] = useState(false);
@@ -944,6 +1038,9 @@ function DocumentTab({
   const [error, setError] = useState<string | undefined>();
   const [syncing, setSyncing] = useState(false);
   const [syncError, setSyncError] = useState<string | undefined>();
+  const [generating, setGenerating] = useState(false);
+  const [generateError, setGenerateError] = useState<string | undefined>();
+  const [generated, setGenerated] = useState<CreatedTicket[] | null>(null);
 
   const docRef = tab.ref ?? "";
   const isLocal = tab.source === "local";
@@ -972,6 +1069,20 @@ function DocumentTab({
       setSyncError((e as Error).message);
     } finally {
       setSyncing(false);
+    }
+  };
+
+  const generate = async () => {
+    setGenerating(true);
+    setGenerateError(undefined);
+    setGenerated(null);
+    try {
+      const result = await onGenerateTickets(tab.title, tab.content ?? "");
+      setGenerated(result.tickets);
+    } catch (e) {
+      setGenerateError((e as Error).message);
+    } finally {
+      setGenerating(false);
     }
   };
 
@@ -1028,6 +1139,19 @@ function DocumentTab({
         <div className="flex shrink-0 items-center gap-2">
           {error ? <span className="text-xs text-destructive">{error}</span> : null}
           {syncError ? <span className="text-xs text-destructive">{syncError}</span> : null}
+          {!editing ? (
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={generate}
+              disabled={generating || !(tab.content ?? "").trim()}
+              data-icon="inline-start"
+              title="Buat tiket lokal dengan AI dari dokumen ini"
+            >
+              {generating ? <Spinner /> : <Sparkles />}
+              Generate ticket
+            </Button>
+          ) : null}
           {isLocal && !editing ? (
             <Button
               size="sm"
@@ -1058,6 +1182,31 @@ function DocumentTab({
           )}
         </div>
       </div>
+
+      {generateError ? (
+        <p className="border-b px-4 py-2 text-xs text-destructive">{generateError}</p>
+      ) : null}
+      {generated ? (
+        <div className="flex flex-wrap items-center gap-2 border-b px-4 py-2 text-xs">
+          {generated.length ? (
+            <>
+              <span className="text-muted-foreground">
+                {generated.length} tiket lokal dibuat:
+              </span>
+              {generated.map((ticket) => (
+                <Badge key={ticket.id} variant="outline">
+                  {ticket.key}
+                </Badge>
+              ))}
+            </>
+          ) : (
+            <span className="text-muted-foreground">AI tidak membuat tiket.</span>
+          )}
+          <Button size="sm" variant="ghost" onClick={onOpenTickets}>
+            Lihat board
+          </Button>
+        </div>
+      ) : null}
 
       <div className="min-h-0 flex-1">
         {editing ? (

@@ -94,6 +94,19 @@ export const ChatInput = z.object({
 });
 export type ChatInput = z.infer<typeof ChatInput>;
 
+export const UpdateFileInput = z.object({
+  path: z.string().trim().min(1).max(1000),
+  content: z.string().max(2_000_000),
+});
+
+export const GenerateTicketsInput = z.object({
+  title: z.string().trim().min(1).max(200),
+  content: z.string().max(200_000),
+  providerId: z.string().trim().optional(),
+  variant: ChatVariant.default("medium"),
+});
+export type GenerateTicketsInput = z.infer<typeof GenerateTicketsInput>;
+
 export const ChatApproveInput = z.object({
   runId: z.string().trim().min(1),
   id: z.string().trim().min(1),
