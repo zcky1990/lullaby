@@ -3,6 +3,7 @@ import { createContext, type ReactNode, useContext, useEffect, useState } from "
 export type Theme = "light" | "dark" | "system";
 export type ResolvedTheme = "light" | "dark";
 export type EditorTheme = "auto" | "vs" | "vs-dark" | "hc-black" | "hc-light";
+export type ThemePreset = "shadcn" | "claude" | "supabase";
 export type AppFont = "system" | "inter" | "manrope" | "jetbrains";
 export type EditorFont = "jetbrains" | "fira" | "menlo" | "consolas" | "monospace";
 export type IconSize = "sm" | "md" | "lg";
@@ -10,6 +11,7 @@ export type IconWeight = "light" | "regular" | "bold";
 
 const STORAGE_KEY = "rnd.theme:v1";
 const EDITOR_KEY = "rnd.editorTheme:v1";
+const COLOR_THEME_KEY = "rnd.colorTheme:v1";
 const APP_FONT_KEY = "rnd.appFont:v1";
 const EDITOR_FONT_KEY = "rnd.editorFont:v1";
 const EDITOR_FONT_SIZE_KEY = "rnd.editorFontSize:v1";
@@ -45,6 +47,8 @@ interface ThemeContextValue {
   setEditorFont: (font: EditorFont) => void;
   editorFontSize: number;
   setEditorFontSize: (size: number) => void;
+  colorTheme: ThemePreset;
+  setColorTheme: (theme: ThemePreset) => void;
   iconSize: IconSize;
   setIconSize: (size: IconSize) => void;
   iconWeight: IconWeight;
@@ -64,6 +68,8 @@ const ThemeContext = createContext<ThemeContextValue>({
   setEditorFont: () => {},
   editorFontSize: 13,
   setEditorFontSize: () => {},
+  colorTheme: "shadcn",
+  setColorTheme: () => {},
   iconSize: "md",
   setIconSize: () => {},
   iconWeight: "regular",
@@ -121,6 +127,9 @@ function readNumber(key: string, allowed: readonly number[], fallback: number): 
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setThemeState] = useState<Theme>(readTheme);
   const [editorTheme, setEditorThemeState] = useState<EditorTheme>(readEditorTheme);
+  const [colorTheme, setColorThemeState] = useState<ThemePreset>(() =>
+    readString(COLOR_THEME_KEY, ["shadcn", "claude", "supabase"] as const, "shadcn")
+  );
   const [appFont, setAppFontState] = useState<AppFont>(() =>
     readString(APP_FONT_KEY, ["system", "inter", "manrope", "jetbrains"] as const, "system")
   );
@@ -160,6 +169,10 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   }, [resolved]);
 
   useEffect(() => {
+    document.documentElement.dataset.theme = colorTheme;
+  }, [colorTheme]);
+
+  useEffect(() => {
     document.documentElement.style.setProperty("--app-font", APP_FONT_STACKS[appFont]);
   }, [appFont]);
 
@@ -184,6 +197,15 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     setEditorThemeState(next);
     try {
       localStorage.setItem(EDITOR_KEY, next);
+    } catch {
+      // ignore
+    }
+  };
+
+  const setColorTheme = (next: ThemePreset) => {
+    setColorThemeState(next);
+    try {
+      localStorage.setItem(COLOR_THEME_KEY, next);
     } catch {
       // ignore
     }
@@ -252,6 +274,8 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
         setEditorFont,
         editorFontSize,
         setEditorFontSize,
+        colorTheme,
+        setColorTheme,
         iconSize,
         setIconSize,
         iconWeight,

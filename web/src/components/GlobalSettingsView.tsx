@@ -10,6 +10,7 @@ import {
   type IconSize,
   type IconWeight,
   type Theme,
+  type ThemePreset,
 } from "@/components/ThemeProvider";
 import {
   Select,
@@ -28,6 +29,12 @@ const THEME_OPTIONS: { id: Theme; label: string; icon: typeof Sun }[] = [
   { id: "light", label: "Light", icon: Sun },
   { id: "dark", label: "Dark", icon: Moon },
   { id: "system", label: "System", icon: Monitor },
+];
+
+const COLOR_THEME_OPTIONS: { id: ThemePreset; label: string; description: string }[] = [
+  { id: "shadcn", label: "shadcn", description: "Neutral hitam-putih (default)" },
+  { id: "claude", label: "Claude", description: "Krem hangat dengan aksen terracotta" },
+  { id: "supabase", label: "Supabase", description: "Hijau emerald dengan nuansa gelap" },
 ];
 
 const APP_FONT_OPTIONS: { id: AppFont; label: string }[] = [
@@ -114,11 +121,31 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
 }
 
 function Appearance() {
-  const { theme, setTheme, appFont, setAppFont } = useTheme();
+  const { theme, setTheme, appFont, setAppFont, colorTheme, setColorTheme } = useTheme();
   return (
-    <Section title="Appearance" description="Tema dan font aplikasi.">
+    <Section title="Appearance" description="Tema warna dan font aplikasi.">
       <div className="flex flex-col gap-4">
-        <Field label="Theme">
+        <Field label="Color theme">
+          <ToggleGroup
+            type="single"
+            variant="outline"
+            value={colorTheme}
+            onValueChange={(value) => value && setColorTheme(value as ThemePreset)}
+            className="w-fit"
+          >
+            {COLOR_THEME_OPTIONS.map((option) => (
+              <ToggleGroupItem
+                key={option.id}
+                value={option.id}
+                aria-label={option.label}
+                title={option.description}
+              >
+                {option.label}
+              </ToggleGroupItem>
+            ))}
+          </ToggleGroup>
+        </Field>
+        <Field label="Mode">
           <ToggleGroup
             type="single"
             variant="outline"
