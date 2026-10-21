@@ -54,14 +54,14 @@ setiap kali UI berubah. Task `dev`/`desktop`/`start` sudah menjalankannya otomat
 Shell ala VSCode: **activity bar** (kiri) + **panel** terpisah (Workspace/Explorer/Document) +
 **area konten bertab**. Memilih file/dokumen/menu membuka **tab** di area konten.
 
-| Menu                 | Muncul bila             | Isi                                                                                                                                                           |
-| -------------------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Workspace**        | selalu                  | daftar/buat project (nama + workspace folder opsional), overview project                                                                                      |
-| **Explorer**         | project punya workspace | file tree folder workspace + editor kode **Monaco** (bisa diedit, simpan dengan tombol/card `Cmd/Ctrl+S`)                                                     |
-| **Document**         | selalu                  | tree halaman Docmost (collapsible, lazy children, **+** tambah) + render **markdown** + **Edit** (judul/isi via Monaco)                                       |
-| **Ticket**           | selalu                  | **Kanban** tiket lokal + Jira (kolom = status, drag = transition/update); **Tiket baru** (lokal) + sync manual; klik card → detail; filter assignee + refresh |
-| **Project Settings** | ada project             | Workspace, Integrations (Document/Ticket/Code, `+` pilih tipe), LLM Providers — form **collapsible**                                                          |
-| **Global Settings**  | selalu                  | satu halaman: **Appearance & Editor** (tema/font app, tema/font/ukuran Monaco, ukuran & ketebalan ikon) · MCP · About                                         |
+| Menu                 | Muncul bila             | Isi                                                                                                                                                                                     |
+| -------------------- | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Workspace**        | selalu                  | daftar/buat project (nama + workspace folder opsional), overview project                                                                                                                |
+| **Explorer**         | project punya workspace | file tree folder workspace + editor kode **Monaco** (bisa diedit, simpan dengan tombol/card `Cmd/Ctrl+S`)                                                                               |
+| **Document**         | selalu                  | tree halaman Docmost (collapsible, lazy children, **+** tambah) + render **markdown** + **Edit** (judul/isi via Monaco)                                                                 |
+| **Ticket**           | selalu                  | **Kanban** tiket lokal + Jira; **Tiket baru** (lokal); klik card → detail (edit tiket lokal, hapus yang belum synced, sync manual); drag = update/transition; filter assignee + refresh |
+| **Project Settings** | ada project             | Workspace, Integrations (Document/Ticket/Code, `+` pilih tipe), LLM Providers — form **collapsible**                                                                                    |
+| **Global Settings**  | selalu                  | satu halaman: **Appearance & Editor** (tema/font app, tema/font/ukuran Monaco, ukuran & ketebalan ikon) · MCP · About                                                                   |
 
 **Chat LLM:** tombol **Chat** di header membuka sidebar kanan. Chat bisa memakai **tools** untuk
 membaca (`list_files`, `read_file`) dan **menulis** (`write_file`) file di folder workspace project
@@ -205,11 +205,13 @@ Fondasi (F0) — yang sudah jalan:
   di-load saat expand).
 - **Ticket**: **Kanban** full-width dengan kolom tetap **Backlog / To Do / In Progress / Test /
   Done** (kosong tetap tampil, card seragam), **drag antar kolom** = update status lokal atau Jira
-  transition, **klik card** = dialog detail, **Tiket baru** membuat tiket lokal, **sync manual** ke
-  Jira dari detail (badge Local/Synced/Sync error), **filter assignee** + refresh di header. Tiket
-  lokal disimpan di tabel `local_tickets`; `GET /tickets` menggabungkan tiket lokal yang belum
-  synced dengan tiket Jira (yang sudah synced tidak diduplikasi). AI punya tool `create_ticket` yang
-  selalu membuat tiket **lokal** (tidak langsung POST ke Jira).
+  transition, **klik card** = dialog detail, **Tiket baru** membuat tiket lokal, tiket lokal bisa
+  **diedit** (judul, deskripsi rich text, status, prioritas, tipe) dan **dihapus** selama belum
+  synced (tiket yang sudah punya `jira_key` ditolak dihapus), **sync manual** ke Jira dari detail
+  (badge Local/Synced/Sync error), **filter assignee** + refresh di header. Tiket lokal disimpan di
+  tabel `local_tickets`; `GET /tickets` menggabungkan tiket lokal yang belum synced dengan tiket
+  Jira (yang sudah synced tidak diduplikasi). AI punya tool `create_ticket` yang selalu membuat
+  tiket **lokal** (tidak langsung POST ke Jira).
 - **Project Settings**: layout **section** (bukan card) dengan tombol `+` pilih tipe integrasi
   (Document/Ticket/Code), LLM Providers, Workspace, Activity.
 - **Global Settings**: **Appearance & Editor** (tema app + tema Monaco dalam satu section) · **MCP**

@@ -40,7 +40,9 @@ finishing a change.
   (`generateTicketsFromDocument`) which uses the first LLM provider and only the `create_ticket`
   tool.
 - **Tickets**: `local_tickets` (SQLite) are created locally (UI `TicketCreateDialog` + AI tool
-  `create_ticket`); `GET /tickets` merges unsynced local tickets with Jira. Syncing is manual
+  `create_ticket`); `GET /tickets` merges unsynced local tickets with Jira. Local tickets are
+  editable from `TicketDetailDialog` (`PATCH /local-tickets/:id`, rich text description) and can be
+  deleted only while unsynced (`DELETE` rejects tickets with `jira_key`). Syncing is manual
   (`POST /local-tickets/:id/sync` → Jira issue) and sets `jira_key`/`sync_status`.
 - **Skills**: `src/server/skills.ts` discovers `SKILL.md` folders (frontmatter `name`/`description`)
   from `appDataDir()/skills` (global) and `<workspace>/.agents/skills` (workspace wins on duplicate

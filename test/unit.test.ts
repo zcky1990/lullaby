@@ -282,3 +282,8 @@ Deno.test("UpdateFileInput validates editor writes", () => {
   equal(parsed.path, "src/a.ts");
   throws(() => UpdateFileInput.parse({ path: "", content: "x" }));
 });
+
+Deno.test("LocalTicketUpdateInput allows clearing priority", () => {
+  const parsed = LocalTicketUpdateInput.parse({ priority: null });
+  equal(parsed.priority, null);
+});

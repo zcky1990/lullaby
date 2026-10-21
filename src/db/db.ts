@@ -543,7 +543,7 @@ export interface LocalTicketInput {
   title: string;
   description?: string;
   status?: string;
-  priority?: string;
+  priority?: string | null;
   type?: string;
   assignee?: string;
   labels?: string[];

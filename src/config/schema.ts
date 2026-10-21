@@ -168,7 +168,7 @@ export const LocalTicketInput = z.object({
   title: z.string().trim().min(1).max(200),
   description: z.string().max(20_000).optional(),
   status: LocalTicketStatus.default("Backlog"),
-  priority: LocalTicketPriority.optional(),
+  priority: LocalTicketPriority.nullable().optional(),
   type: LocalTicketType.default("Task"),
   assignee: z.string().trim().max(120).optional(),
   labels: z.array(z.string().trim().min(1).max(50)).max(20).optional(),

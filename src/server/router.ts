@@ -936,6 +936,9 @@ async function deleteLocalTicketHandler(projectId: string, id: string): Promise<
   if (!ticket || ticket.project_id !== projectId) {
     return json({ error: "ticket_not_found" }, 404);
   }
+  if (ticket.jira_key) {
+    return json({ error: "Tiket sudah synced ke Jira; hapus lewat Jira." }, 400);
+  }
   await deleteLocalTicket(id);
   await record("ticket.deleted_local", { projectId, id });
   return json({ ok: true });
