@@ -31,8 +31,10 @@ finishing a change.
   `Mermaid` (mermaid lib, theme follows `ThemeProvider`), and styles with the Tailwind `prose`
   plugin.
 - **Tabs**: the main area is tabbed (`TabsBar`); each activity-bar menu is a **singleton tab** whose
-  content embeds its own side panel (Workspace/Explorer/Document/Settings use a two-pane layout;
-  Ticket = Kanban; Global = one page). State lives in `App.tsx` (tab list, and file/doc selection).
+  content embeds its own side panel (Workspace/Explorer/Document/Settings/Ticket use a two-pane
+  layout; Ticket keeps create/filter/refresh in its sidebar; Global = one page). State lives in
+  `App.tsx` (tab list, and file/doc selection). All activity-bar menus use the outer `<aside>`;
+  Global Settings keeps its section nav in that panel instead of inside the tab.
 - **Documents**: `DocumentPanel` switches between **Local** (`.md` files under
   `projects.document_path`) and Docmost. Local docs are renamed/saved on disk; manual sync
   (`POST /local-documents/sync`) creates/updates the Docmost page and stores `page_id` in
@@ -55,10 +57,11 @@ finishing a change.
   stdio or http) so each server's tools can be discovered and enabled/disabled. Tool execution from
   chat is not wired yet.
 - **List/menus**: `ActivityBar` (left rail) opens tabs in the main area (`TabsBar`).
-  Workspace/Explorer/Document/Project Settings keep a **separate** side panel in `<aside>`
-  (`WorkspacePanel`, `FileTreePanel`, `DocumentPanel`, `SettingsPanel`); files/documents open as
-  their own tabs. Global Settings has no outer panel — its `GlobalSettingsPanel` lives inside the
-  tab. In Project Settings each form/section is a **`Collapsible`** (`CollapsibleSection`).
+  Workspace/Explorer/Document/Project Settings/Ticket keep a **separate** side panel in `<aside>`
+  (`WorkspacePanel`, `FileTreePanel`, `DocumentPanel`, `SettingsPanel`, `TicketPanel`);
+  files/documents open as their own tabs. Global Settings has no outer panel — its
+  `GlobalSettingsPanel` lives inside the tab. In Project Settings each form/section is a
+  **`Collapsible`** (`CollapsibleSection`).
 - UI build outputs are embedded (`scripts/build-assets.ts` -> `src/ui/assets.generated.ts`) so the
   desktop binary is self-contained; never read UI files from disk at runtime.
 - Integration credentials (API token/key) are entered as normal text and stored **in the integration
@@ -72,11 +75,11 @@ finishing a change.
   open, everything else requires the cookie (set when the HTML shell is served) or the `x-app-token`
   header.
 - **Filesystem reads must go through `src/fs/workspace.ts`** (path-traversal guarded, capped size).
-  Writes (chat `write_file`) go through `writeWorkspaceFile` and require **user approval**
-  (`src/server/chat.ts`: `once` / `always` / `deny`). Direct editor saves use
-  `PUT /api/projects/:id/files/content` (also `writeWorkspaceFile`, no approval; user is editing).
-  The Explorer Monaco editor is editable; tabs track a `dirty` flag and save via button or
-  `Cmd/Ctrl+S`.
+  Writes (chat `write_file`) create **pending hunk changes** in `src/server/chat.ts`; the UI
+  accepts/rejects each hunk (`POST /api/chat/change`) or all (`/api/chat/change-all`) before
+  `writeWorkspaceFile` runs. Direct editor saves use `PUT /api/projects/:id/files/content` (also
+  `writeWorkspaceFile`, no approval; user is editing). The Explorer Monaco editor is editable; tabs
+  track a `dirty` flag and save via button or `Cmd/Ctrl+S`.
 - Persistence uses `node:sqlite` (`src/db/db.ts`); keep queries parameterized and add columns via
   `ensureColumn` migrations.
 
@@ -102,7 +105,7 @@ finishing a change.
 - `src/secrets` — legacy env/keychain helper (unused; kept for reference/tests).
 - `src/integrations` — docmost/jira/github/llm clients + health-check.
 - `src/server` — router, SSE, event bus, static asset serving, chat agent engine (`chat.ts`:
-  tool-calling, plan/build modes, file write approval, chat sessions, diff tracking, image/text
+  tool-calling, plan/build modes, per-hunk write review, chat sessions, diff tracking, image/text
   attachments; `diff.ts`: line diff).
 - `src/desktop` — window, bindings, native dialogs.
 - `src/ui/assets.generated.ts` — generated embedded client bundle.

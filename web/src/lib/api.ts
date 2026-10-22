@@ -183,6 +183,31 @@ export interface FileChange {
   removed: number;
 }
 
+export interface DiffHunkLine {
+  type: " " | "+" | "-";
+  text: string;
+  oldLine: number | null;
+  newLine: number | null;
+}
+
+export interface PendingHunk {
+  oldStart: number;
+  oldLines: number;
+  newStart: number;
+  newLines: number;
+  lines: DiffHunkLine[];
+  decision: "pending" | "accepted" | "rejected";
+}
+
+export interface PendingFileChange {
+  callId: string;
+  path: string;
+  action: "create" | "update";
+  added: number;
+  removed: number;
+  hunks: PendingHunk[];
+}
+
 export interface CreatedTicket {
   id: string;
   key: string;
@@ -201,6 +226,7 @@ export type ChatResponse =
     status: "approval_required";
     runId: string;
     pending: ChatPending[];
+    pendingChanges: PendingFileChange[];
     sessionId: string;
     changes: FileChange[];
     createdTickets: CreatedTicket[];
@@ -432,6 +458,10 @@ export const api = {
   ) => request<ChatResponse>(`/api/projects/${projectId}/chat`, jsonInit("POST", payload)),
   chatApprove: (payload: { runId: string; id: string; action: "once" | "always" | "deny" }) =>
     request<ChatResponse>("/api/chat/approve", jsonInit("POST", payload)),
+  chatChange: (payload: { runId: string; callId: string; hunk: number; accept: boolean }) =>
+    request<ChatResponse>("/api/chat/change", jsonInit("POST", payload)),
+  chatChangeAll: (payload: { runId: string; accept: boolean }) =>
+    request<ChatResponse>("/api/chat/change-all", jsonInit("POST", payload)),
   listChatSessions: (projectId: string) =>
     request<{ sessions: ChatSession[] }>(`/api/projects/${projectId}/chat/sessions`),
   getChatSession: (projectId: string, sessionId: string) =>

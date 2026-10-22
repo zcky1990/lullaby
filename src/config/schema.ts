@@ -107,6 +107,20 @@ export const GenerateTicketsInput = z.object({
 });
 export type GenerateTicketsInput = z.infer<typeof GenerateTicketsInput>;
 
+export const ChatChangeInput = z.object({
+  runId: z.string().trim().min(1),
+  callId: z.string().trim().min(1),
+  hunk: z.number().int().min(0),
+  accept: z.boolean(),
+});
+export type ChatChangeInput = z.infer<typeof ChatChangeInput>;
+
+export const ChatChangeAllInput = z.object({
+  runId: z.string().trim().min(1),
+  accept: z.boolean(),
+});
+export type ChatChangeAllInput = z.infer<typeof ChatChangeAllInput>;
+
 export const ChatApproveInput = z.object({
   runId: z.string().trim().min(1),
   id: z.string().trim().min(1),

@@ -1,5 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { FileCode2, FileText, Paperclip, Plus, Send, Trash2, X } from "lucide-react";
+import { ChangeReview } from "@/components/ChangeReview";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -20,6 +21,7 @@ import {
   type ChatSession,
   type FileChange,
   type LlmProvider,
+  type PendingFileChange,
 } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
@@ -51,6 +53,7 @@ interface AttachmentDraft {
 interface PendingState {
   runId: string;
   items: ChatPending[];
+  changes: PendingFileChange[];
 }
 
 const VARIANTS = [
@@ -240,7 +243,11 @@ export function ChatSidebar({
     }
     if (response.status === "approval_required") {
       if (response.sessionId) setSessionId(response.sessionId);
-      setPending({ runId: response.runId, items: response.pending });
+      setPending({
+        runId: response.runId,
+        items: response.pending,
+        changes: response.pendingChanges ?? [],
+      });
       refreshSessions().catch(console.error);
       return;
     }
@@ -293,6 +300,34 @@ export function ChatSidebar({
           ...(index === next.length - 1 && outgoing.length ? { attachments: outgoing } : {}),
         })),
       });
+      handleResponse(response);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const decideChange = async (callId: string, hunk: number, accept: boolean) => {
+    if (!pending) return;
+    setSending(true);
+    setError(undefined);
+    try {
+      const response = await api.chatChange({ runId: pending.runId, callId, hunk, accept });
+      handleResponse(response);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const decideAllChanges = async (accept: boolean) => {
+    if (!pending) return;
+    setSending(true);
+    setError(undefined);
+    try {
+      const response = await api.chatChangeAll({ runId: pending.runId, accept });
       handleResponse(response);
     } catch (e) {
       setError((e as Error).message);
@@ -495,7 +530,14 @@ export function ChatSidebar({
       </div>
 
       <div className="flex flex-col gap-2 border-t p-3">
-        {pending ? (
+        {pending && pending.changes.length > 0 ? (
+          <ChangeReview
+            changes={pending.changes}
+            busy={sending}
+            onDecision={decideChange}
+            onAll={decideAllChanges}
+          />
+        ) : pending ? (
           <div className="flex flex-col gap-2 rounded-md border bg-card p-3">
             <p className="text-xs font-medium">Persetujuan diperlukan</p>
             <p className="text-sm">

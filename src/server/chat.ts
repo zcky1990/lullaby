@@ -13,7 +13,7 @@ import {
   writeWorkspaceFile,
 } from "../fs/workspace.ts";
 import { request } from "../integrations/http.ts";
-import { diffLines } from "./diff.ts";
+import { applyHunks, type DiffHunk, diffHunks, diffLines } from "./diff.ts";
 import { loadEnabledSkills, readSkillBody, type SkillInfo } from "./skills.ts";
 
 export interface ChatAttachment {
@@ -56,6 +56,19 @@ export interface CreatedTicket {
   title: string;
 }
 
+export interface PendingHunk extends DiffHunk {
+  decision: "pending" | "accepted" | "rejected";
+}
+
+export interface PendingFileChange {
+  callId: string;
+  path: string;
+  action: "create" | "update";
+  added: number;
+  removed: number;
+  hunks: PendingHunk[];
+}
+
 export type ChatResponse =
   | {
     status: "done";
@@ -68,6 +81,7 @@ export type ChatResponse =
     status: "approval_required";
     runId: string;
     pending: PendingApproval[];
+    pendingChanges: PendingFileChange[];
     sessionId: string;
     changes: ChatChange[];
     createdTickets: CreatedTicket[];
@@ -217,6 +231,8 @@ interface Run {
   turns: ChatTurn[];
   pendingBatch: ToolCall[];
   pending: ToolCall[];
+  pendingChanges: Map<string, PendingChange>;
+  batchResults: Map<string, string>;
   decisions: Map<string, "once" | "always" | "deny">;
   alwaysAllow: Set<string>;
   changes: ChatChange[];
@@ -225,6 +241,18 @@ interface Run {
   skills: Map<string, SkillInfo>;
   createdTickets: CreatedTicket[];
   createdAt: number;
+}
+
+interface PendingChange {
+  call: ToolCall;
+  path: string;
+  action: "create" | "update";
+  before: string;
+  after: string;
+  hunks: DiffHunk[];
+  added: number;
+  removed: number;
+  decisions: Map<number, boolean>;
 }
 
 const runs = new Map<string, Run>();
@@ -681,6 +709,165 @@ const VARIANT_TEMPERATURE: Record<string, number | undefined> = {
   high: 0.9,
 };
 
+async function prepareWriteChange(
+  run: Run,
+  call: ToolCall,
+): Promise<{ change?: PendingChange; result: string }> {
+  if (!run.workspace) return { result: "No workspace configured." };
+  const args = safeParse(call.arguments);
+  const path = typeof args.path === "string" ? args.path : "";
+  const after = String(args.content ?? "");
+
+  let before = "";
+  let exists = false;
+  try {
+    const file = await readWorkspaceFile(run.workspace, path);
+    exists = true;
+    before = file.binary ? "" : file.content;
+  } catch {
+    exists = false;
+  }
+
+  const result = diffHunks(before, after);
+  if (result.hunks.length === 0) return { result: "Tidak ada perubahan." };
+  return {
+    change: {
+      call,
+      path,
+      action: exists ? "update" : "create",
+      before,
+      after,
+      hunks: result.hunks,
+      added: result.added,
+      removed: result.removed,
+      decisions: new Map(),
+    },
+    result: "",
+  };
+}
+
+function serializePendingChanges(run: Run): PendingFileChange[] {
+  return [...run.pendingChanges.values()].map((change) => ({
+    callId: change.call.id,
+    path: change.path,
+    action: change.action,
+    added: change.added,
+    removed: change.removed,
+    hunks: change.hunks.map((hunk, index) => ({
+      ...hunk,
+      decision: change.decisions.has(index)
+        ? (change.decisions.get(index) ? "accepted" : "rejected")
+        : "pending",
+    })),
+  }));
+}
+
+function approvalResponse(run: Run): ChatResponse {
+  const changes = serializePendingChanges(run);
+  return {
+    status: "approval_required",
+    runId: run.id,
+    sessionId: run.sessionId,
+    changes: run.changes,
+    createdTickets: run.createdTickets,
+    pendingChanges: changes,
+    pending: changes.map((change) => ({
+      id: change.callId,
+      tool: "write_file",
+      summary: `write_file(${change.path})`,
+    })),
+  };
+}
+
+async function settle(run: Run): Promise<ChatResponse> {
+  for (const change of [...run.pendingChanges.values()]) {
+    if (change.decisions.size < change.hunks.length) continue;
+    const accepted = new Set(
+      [...change.decisions.entries()].filter(([, value]) => value).map(([index]) => index),
+    );
+    let result: string;
+    if (accepted.size === 0) {
+      result = `Semua perubahan ${change.path} ditolak.`;
+    } else if (!run.workspace) {
+      result = "No workspace configured.";
+    } else {
+      try {
+        const content = applyHunks(
+          change.before,
+          change.hunks,
+          accepted,
+          change.after.endsWith("\n"),
+        );
+        await writeWorkspaceFile(run.workspace, change.path, content);
+        const diff = diffLines(change.before, content);
+        const applied: ChatChange = {
+          path: change.path,
+          action: change.action,
+          diff: diff.diff,
+          added: diff.added,
+          removed: diff.removed,
+        };
+        const index = run.changes.findIndex((item) => item.path === change.path);
+        if (index >= 0) run.changes[index] = applied;
+        else run.changes.push(applied);
+        result = `Wrote ${change.path} (${accepted.size}/${change.hunks.length} hunks, ` +
+          `+${diff.added}/-${diff.removed})`;
+      } catch (error) {
+        result = `Error: ${(error as Error).message}`;
+      }
+    }
+    run.batchResults.set(change.call.id, result);
+    run.pendingChanges.delete(change.call.id);
+  }
+
+  if (run.pendingChanges.size > 0) return approvalResponse(run);
+
+  for (const call of run.pendingBatch) {
+    run.turns.push({
+      role: "tool",
+      toolCallId: call.id,
+      content: run.batchResults.get(call.id) ?? "Tidak dijalankan.",
+    });
+  }
+  run.pendingBatch = [];
+  run.batchResults.clear();
+  return await advance(run);
+}
+
+export async function decideChatChange(
+  runId: string,
+  callId: string,
+  hunk: number,
+  accept: boolean,
+): Promise<ChatResponse> {
+  pruneRuns();
+  const run = runs.get(runId);
+  if (!run) return { status: "error", error: "run_not_found" };
+  const change = run.pendingChanges.get(callId);
+  if (!change) return { status: "error", error: "change_not_found" };
+  if (hunk < 0 || hunk >= change.hunks.length) {
+    return { status: "error", error: "hunk_not_found" };
+  }
+  change.decisions.set(hunk, accept);
+  return await settle(run);
+}
+
+export async function decideAllChatChanges(
+  runId: string,
+  accept: boolean,
+): Promise<ChatResponse> {
+  pruneRuns();
+  const run = runs.get(runId);
+  if (!run) return { status: "error", error: "run_not_found" };
+  if (run.pendingChanges.size === 0) return { status: "error", error: "change_not_found" };
+  for (const change of run.pendingChanges.values()) {
+    for (let index = 0; index < change.hunks.length; index++) {
+      change.decisions.set(index, accept);
+    }
+  }
+  return await settle(run);
+}
+
 async function advance(run: Run): Promise<ChatResponse> {
   try {
     const tools = toolsFor(run.workspace, run.mode, run.skills.size > 0);
@@ -741,28 +928,46 @@ async function advance(run: Run): Promise<ChatResponse> {
         toolCalls: response.toolCalls,
       });
 
-      const needsApproval = response.toolCalls.filter(
-        (call) => WRITE_TOOLS.has(call.name) && !run.alwaysAllow.has(call.name),
-      );
-      if (needsApproval.length > 0) {
-        run.pendingBatch = response.toolCalls;
-        run.pending = needsApproval;
-        run.decisions = new Map();
-        return {
-          status: "approval_required",
-          runId: run.id,
-          sessionId: run.sessionId,
-          changes: run.changes,
-          createdTickets: run.createdTickets,
-          pending: needsApproval.map((call) => ({
-            id: call.id,
-            tool: call.name,
-            summary: summarize(call),
-          })),
-        };
+      const batch = response.toolCalls;
+      run.pendingBatch = batch;
+      run.batchResults = new Map();
+      let hasReviews = false;
+
+      for (const call of batch) {
+        let result: string;
+        try {
+          if (WRITE_TOOLS.has(call.name) && !run.alwaysAllow.has(call.name)) {
+            const prepared = await prepareWriteChange(run, call);
+            if (prepared.change) {
+              run.pendingChanges.set(call.id, prepared.change);
+              hasReviews = true;
+              continue;
+            }
+            result = prepared.result;
+          } else if (WRITE_TOOLS.has(call.name)) {
+            result = await writeFileWithChange(run, call);
+          } else if (!run.workspace && call.name !== "create_ticket" && call.name !== "use_skill") {
+            result = "No workspace configured.";
+          } else {
+            result = await executeTool(run, call);
+          }
+        } catch (error) {
+          result = `Error: ${(error as Error).message}`;
+        }
+        run.batchResults.set(call.id, result);
       }
 
-      await executeBatch(run, response.toolCalls);
+      if (hasReviews) return approvalResponse(run);
+
+      for (const call of batch) {
+        run.turns.push({
+          role: "tool",
+          toolCallId: call.id,
+          content: run.batchResults.get(call.id) ?? "Tidak dijalankan.",
+        });
+      }
+      run.pendingBatch = [];
+      run.batchResults.clear();
     }
     const message = "(berhenti: batas langkah tercapai)";
     await appendChatMessage(run.sessionId, "assistant", message, run.changes);
@@ -810,6 +1015,8 @@ export async function generateTicketsFromDocument(
     ],
     pendingBatch: [],
     pending: [],
+    pendingChanges: new Map(),
+    batchResults: new Map(),
     decisions: new Map(),
     alwaysAllow: new Set(),
     changes: [],
@@ -907,6 +1114,8 @@ export async function startChat(
     ],
     pendingBatch: [],
     pending: [],
+    pendingChanges: new Map(),
+    batchResults: new Map(),
     decisions: new Map(),
     alwaysAllow: new Set(),
     changes: [],
@@ -943,6 +1152,7 @@ export async function approveChat(
       sessionId: run.sessionId,
       changes: run.changes,
       createdTickets: run.createdTickets,
+      pendingChanges: serializePendingChanges(run),
       pending: run.pending.map((call) => ({
         id: call.id,
         tool: call.name,

@@ -55,21 +55,23 @@ Shell ala VSCode: **activity bar** (kiri, ikon 48px dengan indikator aktif) + **
 (Workspace/Explorer/Document) + **status bar** biru di bawah (branch/project/file/encoding) + **area
 konten bertab**. Memilih file/dokumen/menu membuka **tab** di area konten.
 
-| Menu                 | Muncul bila             | Isi                                                                                                                                                                                     |
-| -------------------- | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Workspace**        | selalu                  | daftar/buat project (nama + workspace folder opsional), overview project                                                                                                                |
-| **Explorer**         | project punya workspace | file tree folder workspace + editor kode **Monaco** (bisa diedit, simpan dengan tombol/card `Cmd/Ctrl+S`)                                                                               |
-| **Document**         | selalu                  | tree halaman Docmost (collapsible, lazy children, **+** tambah) + render **markdown** + **Edit** (judul/isi via Monaco)                                                                 |
-| **Ticket**           | selalu                  | **Kanban** tiket lokal + Jira; **Tiket baru** (lokal); klik card → detail (edit tiket lokal, hapus yang belum synced, sync manual); drag = update/transition; filter assignee + refresh |
-| **Project Settings** | ada project             | Workspace, Integrations (Document/Ticket/Code, `+` pilih tipe), LLM Providers — form **collapsible**                                                                                    |
-| **Global Settings**  | selalu                  | satu halaman: **Appearance & Editor** (tema/font app, tema/font/ukuran Monaco, ukuran & ketebalan ikon) · MCP · About                                                                   |
+| Menu                 | Muncul bila             | Isi                                                                                                                                                                            |
+| -------------------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Workspace**        | selalu                  | daftar/buat project (nama + workspace folder opsional), overview project                                                                                                       |
+| **Explorer**         | project punya workspace | file tree folder workspace + editor kode **Monaco** (bisa diedit, simpan dengan tombol/card `Cmd/Ctrl+S`)                                                                      |
+| **Document**         | selalu                  | tree halaman Docmost (collapsible, lazy children, **+** tambah) + render **markdown** + **Edit** (judul/isi via Monaco)                                                        |
+| **Ticket**           | selalu                  | **Kanban** tiket lokal + Jira; **sidebar** berisi **Tiket baru** (lokal), **filter assignee**, dan **Refresh**; klik card → detail (edit/hapus/sync); drag = update/transition |
+| **Project Settings** | ada project             | Workspace, Integrations (Document/Ticket/Code, `+` pilih tipe), LLM Providers — form **collapsible**                                                                           |
+| **Global Settings**  | selalu                  | satu halaman: **Appearance & Editor** (tema/font app, tema/font/ukuran Monaco, ukuran & ketebalan ikon) · MCP · About                                                          |
 
 **Chat LLM:** tombol **Chat** di header membuka sidebar kanan. Chat bisa memakai **tools** untuk
 membaca (`list_files`, `read_file`) dan **menulis** (`write_file`) file di folder workspace project
 (**root = `workspace_path` yang di-set saat membuat project / Settings → Workspace**; semua path
-tool relatif terhadap root itu, `..`/path di luar ditolak). Setiap aksi tulis meminta
-**persetujuan**: **Allow once**, **Always allow**, atau **No** (selama run berjalan). Backend
-memakai tool-calling OpenAI-compatible (`/chat/completions`) atau Anthropic (`/messages`).
+tool relatif terhadap root itu, `..`/path di luar ditolak). Setiap `write_file` **tidak langsung
+ditulis**: backend membuat **pending change** berisi hunk diff; UI menampilkan kartu perubahan
+dengan nomor baris dan tombol **Accept/Reject per hunk**, plus **Accept all** / **Revert all**. File
+baru ditulis setelah hunk diputuskan (hanya hunk yang di-accept yang diterapkan). Backend memakai
+tool-calling OpenAI-compatible (`/chat/completions`) atau Anthropic (`/messages`).
 
 **Sesi chat** disimpan di SQLite (`chat_sessions`/`chat_messages`). Sidebar punya pemilih sesi (chat
 baru + riwayat), bisa **memuat** sesi lama dan **menghapus** sesi. Judul sesi diambil dari pesan
@@ -90,10 +92,12 @@ sebelum mengikuti instruksinya. Skill dibaca dari **global** `appDataDir()/skill
 dengan frontmatter `name` dan `description`. Aktif/nonaktif global & per-skill diatur di **Global
 Settings → Skills** (`app_settings`: `skills_enabled`, `skills_disabled`).
 
-**Perubahan file di chat:** setiap `write_file` yang disetujui menghasilkan kartu perubahan berisi
-**path** (klik → tab file dibuka/di-reload di aplikasi), status (baru/diubah), jumlah `+/-`, dan
-**diff** berwarna. Diff ikut disimpan di kolom `chat_messages.changes` sehingga tetap tampil saat
-sesi dimuat ulang.
+**Perubahan file di chat:** review perubahan memakai tampilan ala code block: header file (**path**,
+status baru/diubah, `+/-`), lalu hunk dengan nomor baris lama/baru dan warna hijau/merah. Setiap
+hunk bisa **Accept** atau **Reject**; **Accept all** menerapkan semua hunk, **Revert all** menolak
+semua (file tidak berubah). Setelah selesai, diff yang benar-benar diterapkan disimpan di
+`chat_messages.changes` dan tetap tampil saat sesi dimuat ulang; path bisa diklik untuk membuka tab
+file.
 
 **Lampiran chat:** composer (ikon lampiran berada **di dalam kotak chat**, seperti Cursor) mendukung
 **gambar** (dikirim sebagai vision content: `image_url` untuk OpenAI-compatible, blok `image` base64
@@ -105,9 +109,8 @@ file teks ≤ 200 KB (body API ≤ 26 MB).
 **Editor tabs (ala VS Code):** memilih file (Explorer), dokumen (Document), atau menu
 (Workspace/Ticket/Project Settings/Global Settings) membuka **tab** di area konten. Tab bisa diklik
 ulang dan **ditutup** (`×`); menutup tab terakhir menampilkan empty state. Workspace/Explorer/
-Document/**Project Settings** memakai **panel kiri terpisah** yang **lebarnya bisa di-drag**
-(tersimpan di `localStorage` `rnd.panelWidth:v1`), sedangkan **Global Settings** menaruh sidebar-nya
-(section nav) di dalam tab.
+Document/**Project Settings**/**Ticket**/**Global Settings** memakai **panel kiri terpisah** yang
+**lebarnya bisa di-drag** (tersimpan di `localStorage` `rnd.panelWidth:v1`).
 
 ## HTTP API
 
@@ -209,10 +212,11 @@ Fondasi (F0) — yang sudah jalan:
   transition, **klik card** = dialog detail, **Tiket baru** membuat tiket lokal, tiket lokal bisa
   **diedit** (judul, deskripsi rich text, status, prioritas, tipe) dan **dihapus** selama belum
   synced (tiket yang sudah punya `jira_key` ditolak dihapus), **sync manual** ke Jira dari detail
-  (badge Local/Synced/Sync error), **filter assignee** + refresh di header. Tiket lokal disimpan di
-  tabel `local_tickets`; `GET /tickets` menggabungkan tiket lokal yang belum synced dengan tiket
-  Jira (yang sudah synced tidak diduplikasi). AI punya tool `create_ticket` yang selalu membuat
-  tiket **lokal** (tidak langsung POST ke Jira).
+  (badge Local/Synced/Sync error). Kontrol **Tiket baru**, **filter assignee**, dan **Refresh** ada
+  di **sidebar kiri** (panel Ticket), bukan di header board. Tiket lokal disimpan di tabel
+  `local_tickets`; `GET /tickets` menggabungkan tiket lokal yang belum synced dengan tiket Jira
+  (yang sudah synced tidak diduplikasi). AI punya tool `create_ticket` yang selalu membuat tiket
+  **lokal** (tidak langsung POST ke Jira).
 - **Project Settings**: layout **section** (bukan card) dengan tombol `+` pilih tipe integrasi
   (Document/Ticket/Code), LLM Providers, Workspace, Activity.
 - **Global Settings**: **Appearance & Editor** (tema app + tema Monaco dalam satu section) · **MCP**

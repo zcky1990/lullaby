@@ -40,6 +40,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { type EditorTab, type TabKind, TabsBar } from "@/components/TabsBar";
 import { TicketCreateDialog } from "@/components/TicketCreateDialog";
+import { TicketPanel } from "@/components/TicketPanel";
 import { TicketDetailDialog } from "@/components/TicketDetailDialog";
 import { TicketKanban } from "@/components/TicketKanban";
 import { useTheme } from "@/components/ThemeProvider";
@@ -657,11 +658,7 @@ export default function App() {
             error={ticketsError}
             tickets={tickets}
             visibleTickets={visibleTickets}
-            assignees={assignees}
-            hasUnassigned={hasUnassigned}
             assigneeFilter={assigneeFilter}
-            onFilter={setAssigneeFilter}
-            onRefresh={() => currentId && loadTickets(currentId)}
             boardKey={`${currentId}:${assigneeFilter}:${visibleTickets
               .map((ticket) => `${ticket.key}.${ticket.status ?? ""}`)
               .join(",")}`}
@@ -670,7 +667,6 @@ export default function App() {
               setDetailTicket(ticket);
               setDetailOpen(true);
             }}
-            onCreate={() => setCreateTicketOpen(true)}
             onError={setTicketsError}
           />
         );
@@ -692,13 +688,8 @@ export default function App() {
         );
       case "global":
         return (
-          <div className="flex h-full">
-            <aside className="flex w-56 shrink-0 flex-col border-r bg-[var(--sidebar)]">
-              <GlobalSettingsPanel section={globalSection} onSelect={setGlobalSection} />
-            </aside>
-            <div className="min-w-0 flex-1 overflow-y-auto p-6">
-              <GlobalSettingsView section={globalSection} projectId={currentId} />
-            </div>
+          <div className="h-full overflow-y-auto p-6">
+            <GlobalSettingsView section={globalSection} projectId={currentId} />
           </div>
         );
       case "document":
@@ -739,7 +730,9 @@ export default function App() {
       {(menu === "workspace" ||
         menu === "files" ||
         menu === "document" ||
-        menu === "settings") && (
+        menu === "settings" ||
+        menu === "ticket" ||
+        menu === "global") && (
         <aside
           style={{ width: panelWidth }}
           className="relative flex shrink-0 flex-col border-r bg-[var(--sidebar)]"
@@ -761,6 +754,22 @@ export default function App() {
           )}
           {menu === "settings" && (
             <SettingsPanel section={settingsSection} onSelect={setSettingsSection} />
+          )}
+          {menu === "global" && (
+            <GlobalSettingsPanel section={globalSection} onSelect={setGlobalSection} />
+          )}
+          {menu === "ticket" && (
+            <TicketPanel
+              count={tickets.length}
+              loading={ticketsLoading}
+              assignees={assignees}
+              hasUnassigned={hasUnassigned}
+              assigneeFilter={assigneeFilter}
+              onFilter={setAssigneeFilter}
+              onRefresh={() => currentId && loadTickets(currentId)}
+              onCreate={() => setCreateTicketOpen(true)}
+              canCreate={!!currentId}
+            />
           )}
           {menu === "document" && (
             <DocumentPanel
@@ -1316,12 +1325,7 @@ function TicketTab({
   error,
   tickets,
   visibleTickets,
-  assignees,
-  hasUnassigned,
   assigneeFilter,
-  onFilter,
-  onRefresh,
-  onCreate,
   boardKey,
   onMove,
   onOpenDetail,
@@ -1332,12 +1336,7 @@ function TicketTab({
   error?: string;
   tickets: TicketSummary[];
   visibleTickets: TicketSummary[];
-  assignees: string[];
-  hasUnassigned: boolean;
   assigneeFilter: string;
-  onFilter: (value: string) => void;
-  onRefresh: () => void;
-  onCreate: () => void;
   boardKey: string;
   onMove: (key: string, from: string, to: string) => Promise<void>;
   onOpenDetail: (ticket: TicketSummary) => void;
@@ -1347,41 +1346,6 @@ function TicketTab({
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-between gap-2">
-        <Button size="sm" onClick={onCreate} data-icon="inline-start">
-          <Plus />
-          Tiket baru
-        </Button>
-        <div className="flex items-center gap-2">
-        <Select value={assigneeFilter} onValueChange={onFilter}>
-          <SelectTrigger size="sm" className="w-56" aria-label="Filter assignee">
-            <SelectValue placeholder="Semua user" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectGroup>
-              <SelectItem value="all">Semua user</SelectItem>
-              {hasUnassigned ? <SelectItem value="none">Tanpa assignee</SelectItem> : null}
-              {assignees.map((assignee) => (
-                <SelectItem key={assignee} value={assignee}>
-                  {assignee}
-                </SelectItem>
-              ))}
-            </SelectGroup>
-          </SelectContent>
-        </Select>
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={onRefresh}
-          disabled={loading}
-          data-icon="inline-start"
-        >
-          {loading ? <Spinner /> : <RefreshCw />}
-          Refresh
-        </Button>
-        </div>
-      </div>
-
       {error && tickets.length > 0 ? (
         <p className="text-xs text-destructive">Jira: {error}</p>
       ) : null}

@@ -1,5 +1,7 @@
 import {
   ChatApproveInput,
+  ChatChangeAllInput,
+  ChatChangeInput,
   ChatInput,
   CreateDocumentInput,
   DocmostConfig,
@@ -75,6 +77,8 @@ import {
 import { createTicket, getTicket, listTickets, transitionTicket } from "../integrations/jira.ts";
 import {
   approveChat,
+  decideAllChatChanges,
+  decideChatChange,
   generateTicketsFromDocument,
   startChat,
   type VisibleMessage,
@@ -355,6 +359,29 @@ async function chatHandler(projectId: string, req: Request): Promise<Response> {
     parsed.data.mode,
   );
   await record("chat.message", { projectId, providerId: provider.id });
+  return json(result);
+}
+
+async function chatChangeHandler(req: Request): Promise<Response> {
+  const parsed = ChatChangeInput.safeParse(await readJson(req));
+  if (!parsed.success) {
+    return json({ error: "invalid_input", issues: parsed.error.issues }, 400);
+  }
+  const result = await decideChatChange(
+    parsed.data.runId,
+    parsed.data.callId,
+    parsed.data.hunk,
+    parsed.data.accept,
+  );
+  return json(result);
+}
+
+async function chatChangeAllHandler(req: Request): Promise<Response> {
+  const parsed = ChatChangeAllInput.safeParse(await readJson(req));
+  if (!parsed.success) {
+    return json({ error: "invalid_input", issues: parsed.error.issues }, 400);
+  }
+  const result = await decideAllChatChanges(parsed.data.runId, parsed.data.accept);
   return json(result);
 }
 
@@ -1190,6 +1217,14 @@ export async function handleRequest(req: Request): Promise<Response> {
 
     const chatRoute = pathname.match(/^\/api\/projects\/([^/]+)\/chat$/);
     if (chatRoute && method === "POST") return await chatHandler(chatRoute[1], req);
+
+    if (pathname === "/api/chat/change" && method === "POST") {
+      return await chatChangeHandler(req);
+    }
+
+    if (pathname === "/api/chat/change-all" && method === "POST") {
+      return await chatChangeAllHandler(req);
+    }
 
     if (pathname === "/api/chat/approve" && method === "POST") {
       return await chatApproveHandler(req);

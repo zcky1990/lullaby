@@ -18,7 +18,7 @@ import {
   slugifyDocumentTitle,
   updateLocalDocument,
 } from "../src/fs/documents.ts";
-import { diffLines } from "../src/server/diff.ts";
+import { applyHunks, diffHunks, diffLines } from "../src/server/diff.ts";
 import { parseSkillFile } from "../src/server/skills.ts";
 
 Deno.test("ProjectInput trims and drops empty optional fields", () => {
@@ -286,4 +286,30 @@ Deno.test("UpdateFileInput validates editor writes", () => {
 Deno.test("LocalTicketUpdateInput allows clearing priority", () => {
   const parsed = LocalTicketUpdateInput.parse({ priority: null });
   equal(parsed.priority, null);
+});
+
+Deno.test("diffHunks splits distant changes and applyHunks accepts a subset", () => {
+  const before = Array.from({ length: 20 }, (_, index) => `line${index + 1}`).join("\n") + "\n";
+  const changed = before.replace("line1", "LINE1").replace("line20", "LINE20");
+  const result = diffHunks(before, changed);
+  equal(result.hunks.length, 2);
+
+  const onlyFirst = applyHunks(before, result.hunks, new Set([0]), true);
+  equal(onlyFirst.includes("LINE1"), true);
+  equal(onlyFirst.includes("line20"), true);
+  equal(onlyFirst.includes("LINE20"), false);
+
+  const all = applyHunks(before, result.hunks, new Set([0, 1]), true);
+  equal(all, changed);
+
+  const none = applyHunks(before, result.hunks, new Set(), true);
+  equal(none, before);
+});
+
+Deno.test("diffHunks handles new files", () => {
+  const result = diffHunks("", "alpha\nbeta\n");
+  equal(result.hunks.length, 1);
+  equal(result.added, 2);
+  const applied = applyHunks("", result.hunks, new Set([0]), true);
+  equal(applied, "alpha\nbeta\n");
 });
