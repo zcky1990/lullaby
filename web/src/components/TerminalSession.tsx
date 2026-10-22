@@ -1,8 +1,10 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { FitAddon } from "@xterm/addon-fit";
+import { SearchAddon } from "@xterm/addon-search";
 import { Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
 import { EDITOR_FONT_STACKS, useTheme } from "@/components/ThemeProvider";
+import { registerFinder } from "@/lib/find";
 
 const DARK_THEME = {
   background: "#1e1e1e",
@@ -61,7 +63,11 @@ interface Props {
 export function TerminalSession({ projectId, active, onStatus }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const fitRef = useRef<FitAddon | null>(null);
+  const searchRef = useRef<SearchAddon | null>(null);
   const termRef = useRef<Terminal | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [findOpen, setFindOpen] = useState(false);
+  const [query, setQuery] = useState("");
   const statusRef = useRef(onStatus);
   statusRef.current = onStatus;
   const { resolved, editorFont, editorFontSize } = useTheme();
@@ -76,7 +82,10 @@ export function TerminalSession({ projectId, active, onStatus }: Props) {
       theme: resolved === "dark" ? DARK_THEME : LIGHT_THEME,
     });
     const fit = new FitAddon();
+    const search = new SearchAddon();
     term.loadAddon(fit);
+    term.loadAddon(search);
+    searchRef.current = search;
     term.open(hostRef.current);
     fit.fit();
     termRef.current = term;
@@ -137,6 +146,7 @@ export function TerminalSession({ projectId, active, onStatus }: Props) {
       term.dispose();
       termRef.current = null;
       fitRef.current = null;
+      searchRef.current = null;
     };
   }, [projectId]);
 
@@ -154,5 +164,61 @@ export function TerminalSession({ projectId, active, onStatus }: Props) {
     return () => cancelAnimationFrame(frame);
   }, [active]);
 
-  return <div ref={hostRef} className="h-full w-full" />;
+  const find = (backwards: boolean) => {
+    const value = query.trim();
+    if (!value) return;
+    if (backwards) searchRef.current?.findPrevious(value, { incremental: true });
+    else searchRef.current?.findNext(value, { incremental: true });
+  };
+
+  useEffect(() => {
+    if (!active) return;
+    return registerFinder((context) => {
+      if (!context.preferTerminal) return false;
+      setFindOpen(true);
+      requestAnimationFrame(() => {
+        inputRef.current?.focus();
+        inputRef.current?.select();
+      });
+      return true;
+    });
+  }, [active]);
+
+  return (
+    <div className="relative h-full w-full">
+      <div ref={hostRef} className="h-full w-full" />
+      {findOpen ? (
+        <div
+          data-terminal-find
+          className="absolute top-2 right-2 z-10 flex w-64 flex-col gap-1 rounded-md border bg-popover p-2 shadow-md"
+        >
+          <input
+            ref={inputRef}
+            value={query}
+            onChange={(event) => {
+              setQuery(event.target.value);
+              if (event.target.value) {
+                searchRef.current?.findNext(event.target.value, { incremental: true });
+              }
+            }}
+            onKeyDown={(event) => {
+              if (event.key === "Escape") {
+                event.preventDefault();
+                setFindOpen(false);
+                termRef.current?.focus();
+              } else if (event.key === "Enter") {
+                event.preventDefault();
+                find(event.shiftKey);
+              }
+            }}
+            placeholder="Find in terminal"
+            className="border-input focus-visible:border-ring focus-visible:ring-ring/50 h-8 w-full rounded-sm border bg-transparent px-2 text-xs outline-none focus-visible:ring-[3px]"
+          />
+          <span className="text-[10px] text-muted-foreground">
+            Enter next · Shift+Enter previous · Esc close
+          </span>
+        </div>
+      ) : null}
+    </div>
+  );
 }

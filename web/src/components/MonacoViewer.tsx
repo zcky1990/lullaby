@@ -1,8 +1,11 @@
+import { useEffect, useRef } from "react";
 import Editor from "@monaco-editor/react";
+import type { editor as MonacoEditor } from "monaco-editor";
 import "@/lib/monaco";
 import { Skeleton } from "@/components/ui/skeleton";
 import { languageForPath } from "@/lib/languages";
 import { EDITOR_FONT_STACKS, useTheme } from "@/components/ThemeProvider";
+import { registerFinder } from "@/lib/find";
 
 interface Props {
   path: string;
@@ -24,6 +27,22 @@ export default function MonacoViewer({
   onChange,
 }: Props) {
   const { editorFont, editorFontSize } = useTheme();
+  const editorRef = useRef<MonacoEditor.IStandaloneCodeEditor | null>(null);
+
+  useEffect(
+    () =>
+      registerFinder((context) => {
+        if (context.preferTerminal) return false;
+        const editor = editorRef.current;
+        const dom = editor?.getDomNode();
+        if (!editor || !dom || !dom.isConnected) return false;
+        editor.focus();
+        void editor.getAction("actions.find")?.run();
+        return true;
+      }),
+    [],
+  );
+
   return (
     <Editor
       height={height}
@@ -32,6 +51,9 @@ export default function MonacoViewer({
       value={content}
       theme={theme}
       loading={<Skeleton className="h-full w-full rounded-none" />}
+      onMount={(editor) => {
+        editorRef.current = editor;
+      }}
       onChange={(value) => onChange?.(value ?? "")}
       options={{
         readOnly,

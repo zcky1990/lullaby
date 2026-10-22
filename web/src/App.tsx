@@ -51,6 +51,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { triggerFind } from "@/lib/find";
 import { CHANGES_APPLIED_EVENT, REVIEW_EVENT, type ReviewDetail } from "@/lib/review-events";
 import { cn } from "@/lib/utils";
 import {
@@ -423,6 +424,16 @@ export default function App() {
     },
     [currentId, patchTab],
   );
+
+  useEffect(() => {
+    const handler = (event: KeyboardEvent) => {
+      if (!(event.metaKey || event.ctrlKey) || event.shiftKey || event.altKey) return;
+      if (event.key.toLowerCase() !== "f") return;
+      if (triggerFind()) event.preventDefault();
+    };
+    window.addEventListener("keydown", handler, { capture: true });
+    return () => window.removeEventListener("keydown", handler, { capture: true });
+  }, []);
 
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {

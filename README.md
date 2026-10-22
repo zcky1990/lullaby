@@ -187,6 +187,10 @@ Level disimpan di `localStorage` (`rnd.zoom:v1`).
 **Preview markdown**: saat tab file `.md` aktif, `Cmd/Ctrl` + `Shift` + `V` men-toggle antara editor
 Monaco dan preview markdown (tombol **Preview/Kode** juga tersedia di header tab file).
 
+**Find**: `Cmd/Ctrl` + `F` membuka find di editor Monaco aktif (dipanggil dari mana saja, fokus
+otomatis ke editor). Saat fokus berada di terminal, shortcut yang sama membuka find terminal (Enter
+= next, Shift+Enter = previous, Esc = tutup).
+
 ## Permissions & keamanan
 
 Task menjalankan Deno dengan `--allow-read --allow-write --allow-net --allow-env --allow-run`.
