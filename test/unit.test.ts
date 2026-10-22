@@ -8,6 +8,7 @@ import {
   LocalTicketUpdateInput,
   McpSettingsInput,
   ProjectInput,
+  RoleInput,
   UpdateFileInput,
 } from "../src/config/schema.ts";
 import { htmlToAdf, htmlToPlainText, sanitizeHtml } from "../src/core/html.ts";
@@ -312,4 +313,16 @@ Deno.test("diffHunks handles new files", () => {
   equal(result.added, 2);
   const applied = applyHunks("", result.hunks, new Set([0]), true);
   equal(applied, "alpha\nbeta\n");
+});
+
+Deno.test("RoleInput validates persona and provider id", () => {
+  const parsed = RoleInput.parse({ name: "Backend", persona: "Senior backend" });
+  equal(parsed.name, "Backend");
+  throws(() => RoleInput.parse({ name: "X", persona: "" }));
+  const withProvider = RoleInput.parse({
+    name: "X",
+    persona: "p",
+    providerId: "prov-1",
+  });
+  equal(withProvider.providerId, "prov-1");
 });

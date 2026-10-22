@@ -67,6 +67,15 @@ export interface McpServer {
   enabled: boolean;
 }
 
+export interface Role {
+  id: string;
+  name: string;
+  description?: string;
+  persona: string;
+  providerId?: string;
+  updatedAt: string;
+}
+
 export interface GitFile {
   path: string;
   status: string;
@@ -467,6 +476,14 @@ export const api = {
     ),
   testIntegration: (payload: IntegrationPayload) =>
     request<{ result: TestResult }>("/api/integrations/test", jsonInit("POST", payload)),
+  listRoles: () => request<{ roles: Role[] }>("/api/roles"),
+  createRole: (payload: { name: string; description?: string; persona: string; providerId?: string }) =>
+    request<{ role: Role }>("/api/roles", jsonInit("POST", payload)),
+  updateRole: (
+    id: string,
+    payload: { name: string; description?: string; persona: string; providerId?: string },
+  ) => request<{ role: Role }>(`/api/roles/${id}`, jsonInit("PUT", payload)),
+  deleteRole: (id: string) => request<{ ok: boolean }>(`/api/roles/${id}`, { method: "DELETE" }),
   listLlm: () => request<{ providers: LlmProvider[] }>("/api/llm"),
   createLlm: (payload: LlmProviderPayload) =>
     request<{ provider: LlmProvider }>("/api/llm", jsonInit("POST", payload)),
@@ -479,6 +496,7 @@ export const api = {
     payload: {
       providerId?: string;
       sessionId?: string;
+      roleId?: string;
       variant?: string;
       mode?: ChatMode;
       messages: { role: string; content: string; attachments?: ChatAttachment[] }[];

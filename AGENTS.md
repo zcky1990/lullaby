@@ -62,6 +62,10 @@ finishing a change.
   instances (xterm.js + fit addon, termcn-inspired styling); sessions stay mounted while the panel
   is hidden, and the panel height persists. WebSocket auth uses the same session cookie as the HTTP
   API.
+- **Roles**: global `roles` table (`name`, `description`, `persona`, `provider_id`), CRUD via
+  `/api/roles`. Chat sends `roleId`; `chatHandler` uses the role's provider (falling back to the
+  request/first provider) and prepends the persona to the system prompt. UI: Global Settings → Roles
+  and a role selector in the chat composer (model select locks when the role has a provider).
 - **LLM providers are global**: `llm_providers` has no `project_id` (existing per-project rows are
   migrated into the global table at startup). Project Settings no longer manages them; Global
   Settings → LLM Providers does, via `GET/POST /api/llm` and `PUT/DELETE /api/llm/:id`. Chat and

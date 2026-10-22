@@ -94,6 +94,16 @@ CREATE TABLE IF NOT EXISTS llm_providers (
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+CREATE TABLE IF NOT EXISTS roles (
+  id          TEXT PRIMARY KEY,
+  name        TEXT NOT NULL,
+  description TEXT,
+  persona     TEXT NOT NULL DEFAULT '',
+  provider_id TEXT,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE TABLE IF NOT EXISTS chat_sessions (
   id         TEXT PRIMARY KEY,
   project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
@@ -750,4 +760,69 @@ export async function setAppSetting(key: string, value: string): Promise<void> {
     "INSERT INTO app_settings (key, value, updated_at) VALUES (?, ?, datetime('now')) " +
       "ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now')",
   ).run(key, value);
+}
+
+export interface RoleRow {
+  id: string;
+  name: string;
+  description: string | null;
+  persona: string;
+  provider_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface RoleInput {
+  name: string;
+  description?: string;
+  persona: string;
+  providerId?: string;
+}
+
+export async function listRoles(): Promise<RoleRow[]> {
+  const db = await getDb();
+  return rows<RoleRow>(db.prepare("SELECT * FROM roles ORDER BY created_at").all());
+}
+
+export async function getRole(id: string): Promise<RoleRow | null> {
+  const db = await getDb();
+  const row = db.prepare("SELECT * FROM roles WHERE id = ?").get(id);
+  return (row as RoleRow | undefined) ?? null;
+}
+
+export async function createRole(input: RoleInput): Promise<RoleRow> {
+  const db = await getDb();
+  const id = crypto.randomUUID();
+  db.prepare(
+    "INSERT INTO roles (id, name, description, persona, provider_id) VALUES (?, ?, ?, ?, ?)",
+  ).run(
+    id,
+    input.name,
+    input.description ?? null,
+    input.persona,
+    input.providerId ?? null,
+  );
+  return (await getRole(id))!;
+}
+
+export async function updateRole(id: string, input: RoleInput): Promise<RoleRow | null> {
+  const db = await getDb();
+  const existing = await getRole(id);
+  if (!existing) return null;
+  db.prepare(
+    "UPDATE roles SET name = ?, description = ?, persona = ?, provider_id = ?, " +
+      "updated_at = datetime('now') WHERE id = ?",
+  ).run(
+    input.name,
+    input.description ?? null,
+    input.persona,
+    input.providerId ?? null,
+    id,
+  );
+  return await getRole(id);
+}
+
+export async function deleteRole(id: string): Promise<void> {
+  const db = await getDb();
+  db.prepare("DELETE FROM roles WHERE id = ?").run(id);
 }

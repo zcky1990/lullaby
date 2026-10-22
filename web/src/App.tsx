@@ -69,6 +69,7 @@ import {
   type LocalDocSummary,
   type PendingFileChange,
   type Project,
+  type Role,
   type ProjectDetail,
   type TestResult,
   type TicketSummary,
@@ -123,6 +124,8 @@ export default function App() {
   const [activity, setActivity] = useState<ActivityEvent[]>([]);
   const [addingProvider, setAddingProvider] = useState(false);
   const [llmProviders, setLlmProviders] = useState<LlmProvider[]>([]);
+  const [roles, setRoles] = useState<Role[]>([]);
+  const [addingRole, setAddingRole] = useState(false);
 
   const [tabs, setTabs] = useState<EditorTab[]>([]);
   const [activeTabId, setActiveTabId] = useState<string | null>(null);
@@ -194,6 +197,15 @@ export default function App() {
     try {
       const result = await api.listLlm();
       setLlmProviders(result.providers);
+    } catch (error) {
+      console.error(error);
+    }
+  }, []);
+
+  const loadRoles = useCallback(async () => {
+    try {
+      const result = await api.listRoles();
+      setRoles(result.roles);
     } catch (error) {
       console.error(error);
     }
@@ -619,7 +631,8 @@ export default function App() {
   useEffect(() => {
     loadProjects().catch(console.error);
     loadLlmProviders().catch(console.error);
-  }, [loadProjects, loadLlmProviders]);
+    loadRoles().catch(console.error);
+  }, [loadProjects, loadLlmProviders, loadRoles]);
 
   useEffect(() => {
     if (!currentId) return;
@@ -763,6 +776,21 @@ export default function App() {
       })
     ).result;
 
+  const saveRole = async (
+    id: string | null,
+    payload: { name: string; description?: string; persona: string; providerId?: string },
+  ) => {
+    if (id) await api.updateRole(id, payload);
+    else await api.createRole(payload);
+    setAddingRole(false);
+    await loadRoles();
+  };
+
+  const deleteRole = async (id: string) => {
+    await api.deleteRole(id);
+    await loadRoles();
+  };
+
   const saveLlm = async (id: string | null, payload: LlmProviderPayload) => {
     if (id) await api.updateLlm(id, payload);
     else await api.createLlm(payload);
@@ -854,6 +882,11 @@ export default function App() {
               onTestLlm={testLlm}
               onSaveLlm={saveLlm}
               onDeleteLlm={deleteLlm}
+              roles={roles}
+              addingRole={addingRole}
+              onAddRole={setAddingRole}
+              onSaveRole={saveRole}
+              onDeleteRole={deleteRole}
             />
           </div>
         );
@@ -1045,6 +1078,7 @@ export default function App() {
       <ChatSidebar
         projectId={currentId}
         providers={llmProviders}
+        roles={roles}
         onClose={() => setChatOpen(false)}
         onTicketsChanged={() => currentId && loadTickets(currentId)}
         hidden={!chatOpen}

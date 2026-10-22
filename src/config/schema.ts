@@ -76,9 +76,21 @@ export const ChatAttachmentInput = z
   });
 export type ChatAttachmentInput = z.infer<typeof ChatAttachmentInput>;
 
+export const RoleInput = z.object({
+  name: z.string().trim().min(1).max(80),
+  description: z.string().trim().max(300).optional(),
+  persona: z.string().trim().min(1).max(8000),
+  providerId: z.preprocess(
+    (value) => (value === "" ? undefined : value),
+    z.string().trim().max(80).optional(),
+  ),
+});
+export type RoleInput = z.infer<typeof RoleInput>;
+
 export const ChatInput = z.object({
   providerId: z.string().trim().optional(),
   sessionId: z.string().trim().optional(),
+  roleId: z.string().trim().optional(),
   variant: ChatVariant.default("medium"),
   mode: ChatMode.default("build"),
   messages: z

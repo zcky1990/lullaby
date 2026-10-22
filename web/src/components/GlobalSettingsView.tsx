@@ -24,8 +24,15 @@ import { Separator } from "@/components/ui/separator";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { LlmProvidersSettings } from "@/components/LlmProvidersSettings";
 import { McpSettings } from "@/components/McpSettings";
+import { RolesSettings } from "@/components/RolesSettings";
 import { SkillsSettings } from "@/components/SkillsSettings";
-import { api, type LlmProvider, type LlmProviderPayload, type TestResult } from "@/lib/api";
+import {
+  api,
+  type LlmProvider,
+  type LlmProviderPayload,
+  type Role,
+  type TestResult,
+} from "@/lib/api";
 
 const THEME_OPTIONS: { id: Theme; label: string; icon: typeof Sun }[] = [
   { id: "light", label: "Light", icon: Sun },
@@ -86,6 +93,11 @@ export function GlobalSettingsView({
   onTestLlm,
   onSaveLlm,
   onDeleteLlm,
+  roles,
+  addingRole,
+  onAddRole,
+  onSaveRole,
+  onDeleteRole,
 }: {
   section: GlobalSection;
   projectId: string | null;
@@ -95,6 +107,16 @@ export function GlobalSettingsView({
   onTestLlm: (payload: LlmProviderPayload) => Promise<TestResult>;
   onSaveLlm: (id: string | null, payload: LlmProviderPayload) => Promise<void>;
   onDeleteLlm: (id: string) => Promise<void>;
+  roles: Role[];
+  addingRole: boolean;
+  onAddRole: (value: boolean) => void;
+  onSaveRole: (id: string | null, payload: {
+    name: string;
+    description?: string;
+    persona: string;
+    providerId?: string;
+  }) => Promise<void>;
+  onDeleteRole: (id: string) => Promise<void>;
 }) {
   if (section === "appearance") {
     return (
@@ -114,6 +136,18 @@ export function GlobalSettingsView({
         onTestLlm={onTestLlm}
         onSaveLlm={onSaveLlm}
         onDeleteLlm={onDeleteLlm}
+      />
+    );
+  }
+  if (section === "roles") {
+    return (
+      <RolesSettings
+        roles={roles}
+        providers={llmProviders}
+        addingRole={addingRole}
+        onAddRole={onAddRole}
+        onSaveRole={onSaveRole}
+        onDeleteRole={onDeleteRole}
       />
     );
   }

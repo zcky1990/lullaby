@@ -145,6 +145,7 @@ Document/**Project Settings**/**Ticket**/**Global Settings** memakai **panel kir
 | `POST /api/projects/:id/local-tickets/:id/sync`            | sync manual tiket lokal → Jira (buat issue)             |
 | `GET /api/llm` · `POST /api/llm`                           | list / tambah provider LLM **global**                   |
 | `PUT /api/llm/:providerId` · `DELETE /api/llm/:providerId` | ubah / hapus provider LLM global                        |
+| `GET/POST /api/roles` · `PUT/DELETE /api/roles/:id`        | CRUD role (persona + provider LLM default)              |
 | `POST /api/projects/:id/chat`                              | chat LLM (agent + tools file workspace)                 |
 | `POST /api/chat/approve`                                   | setujui/tolak aksi tulis (once/always/deny)             |
 | `GET /api/projects/:id/chat/sessions`                      | daftar sesi chat                                        |
@@ -160,6 +161,7 @@ Document/**Project Settings**/**Ticket**/**Global Settings** memakai **panel kir
 | `projects`             | `name`, `workspace_path`, target (`docmost_space_id`, `jira_project_key`, `github_repo`)                   |
 | `project_integrations` | per `(project, kind)`: `mode`, `config` (JSON, termasuk token)                                             |
 | `llm_providers`        | provider LLM **global**: `name`, `provider`, `model`, `base_url`, `api_key`, `mode`                        |
+| `roles`                | role global: `name`, `description`, `persona`, `provider_id` (LLM default role)                            |
 | `chat_sessions`        | sesi chat per project: `title`, `created_at`, `updated_at`                                                 |
 | `chat_messages`        | pesan per sesi: `role` (user/assistant), `content`, `changes` (JSON diff), `created_at`                    |
 | `local_tickets`        | tiket lokal: `title`, `description`, `status`, `priority`, `type`, `jira_key`, `sync_status`, `sync_error` |
@@ -235,8 +237,10 @@ Fondasi (F0) — yang sudah jalan:
 - **Project Settings**: layout **section** (bukan card) dengan tombol `+` pilih tipe integrasi
   (Document/Ticket/Code), Workspace, Activity.
 - **Global Settings**: **Appearance & Editor** · **LLM Providers** (global, dipakai semua project) ·
-  **MCP** · **Skills** · About. MCP ditambah/diedit lewat **editor JSON** (format `mcpServers`,
-  seperti `mcp.json` Cursor) untuk server global stdio (command/args/env) atau http (url/headers),
+  **Roles** · **MCP** · **Skills** · About. Role = **persona** + **provider LLM** opsional; saat
+  role dipilih di composer chat, persona masuk system prompt dan provider role otomatis dipakai
+  (selector model terkunci). MCP ditambah/diedit lewat **editor JSON** (format `mcpServers`, seperti
+  `mcp.json` Cursor) untuk server global stdio (command/args/env) atau http (url/headers),
   aktif/nonaktif; disimpan di `app_settings` (SQLite).
 - Integrasi Docmost/Jira/GitHub/LLM: simpan config, health-check, list document/ticket.
 - Multi-provider LLM **global** (dipakai semua project untuk chat & generate ticket); live activity

@@ -124,20 +124,23 @@ function systemPrompt(
   workspace: string | null,
   mode: "plan" | "build",
   skills: SkillInfo[],
+  persona?: string,
 ): string {
   const skillList = skillPrompt(skills);
+  let prompt: string;
   if (mode === "plan") {
-    const base = workspace
+    prompt = workspace
       ? `${PLAN_PROMPT}\nThe workspace root is: ${workspace}. Paths in your plan are relative to it.`
       : PLAN_PROMPT;
-    return `${base}${skillList}`;
+  } else if (!workspace) {
+    prompt = `${SYSTEM_PROMPT} No workspace is configured for this project, so file tools are ` +
+      `unavailable; you can still use create_ticket to record tickets locally.`;
+  } else {
+    prompt = `${SYSTEM_PROMPT}\nThe workspace root is: ${workspace}. All tool paths are relative ` +
+      `to this root (for example "src/index.ts"). Do not use absolute paths or "..".`;
   }
-  if (!workspace) {
-    return `${SYSTEM_PROMPT} No workspace is configured for this project, so file tools are ` +
-      `unavailable; you can still use create_ticket to record tickets locally.${skillList}`;
-  }
-  return `${SYSTEM_PROMPT}\nThe workspace root is: ${workspace}. All tool paths are relative ` +
-    `to this root (for example "src/index.ts"). Do not use absolute paths or "..".${skillList}`;
+  const withPersona = persona?.trim() ? `${persona.trim()}\n\n${prompt}` : prompt;
+  return `${withPersona}${skillList}`;
 }
 
 const TOOL_DEFS: ToolDef[] = [
@@ -1066,6 +1069,7 @@ export async function startChat(
   sessionId?: string,
   variant: string = "medium",
   mode: "plan" | "build" = "build",
+  rolePersona?: string,
 ): Promise<ChatResponse> {
   pruneRuns();
 
@@ -1105,7 +1109,7 @@ export async function startChat(
     sessionId: session.id,
     temperature: VARIANT_TEMPERATURE[variant],
     turns: [
-      { role: "system", content: systemPrompt(workspace, mode, skills) },
+      { role: "system", content: systemPrompt(workspace, mode, skills, rolePersona) },
       ...resolved.map((message) => ({
         role: message.role,
         content: message.content,

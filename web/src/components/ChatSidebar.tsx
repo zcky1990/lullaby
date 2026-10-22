@@ -1,5 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { FileCode2, FileText, Paperclip, Plus, Send, Trash2, X } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -21,6 +22,7 @@ import {
   type FileChange,
   type LlmProvider,
   type PendingFileChange,
+  type Role,
 } from "@/lib/api";
 import { CHAT_RESPONSE_EVENT, dispatchChangesApplied, dispatchReview } from "@/lib/review-events";
 import { cn } from "@/lib/utils";
@@ -108,6 +110,7 @@ async function readAttachment(file: File): Promise<AttachmentDraft> {
 interface Props {
   projectId: string | null;
   providers: LlmProvider[];
+  roles?: Role[];
   onClose: () => void;
   onTicketsChanged?: () => void;
   hidden?: boolean;
@@ -116,12 +119,20 @@ interface Props {
 export function ChatSidebar({
   projectId,
   providers,
+  roles = [],
   onClose,
   onTicketsChanged,
   hidden,
 }: Props) {
   const [providerId, setProviderId] = useState(providers[0]?.id ?? "");
   const [variant, setVariant] = useState("medium");
+  const [roleId, setRoleId] = useState<string | null>(() => {
+    try {
+      return localStorage.getItem("rnd.chatRole:v1");
+    } catch {
+      return null;
+    }
+  });
   const [mode, setMode] = useState<ChatMode>(() => {
     try {
       return localStorage.getItem("rnd.chatMode:v1") === "plan" ? "plan" : "build";
@@ -144,6 +155,31 @@ export function ChatSidebar({
   useEffect(() => {
     if (!providerId && providers[0]) setProviderId(providers[0].id);
   }, [providers, providerId]);
+
+  const activeRole = roles.find((role) => role.id === roleId) ?? null;
+  const roleProviderId =
+    activeRole?.providerId && providers.some((provider) => provider.id === activeRole.providerId)
+      ? activeRole.providerId
+      : null;
+
+  useEffect(() => {
+    if (roleId && roles.length > 0 && !roles.some((role) => role.id === roleId)) {
+      setRoleId(null);
+    }
+  }, [roles, roleId]);
+
+  useEffect(() => {
+    if (roleProviderId) setProviderId(roleProviderId);
+  }, [roleProviderId]);
+
+  useEffect(() => {
+    try {
+      if (roleId) localStorage.setItem("rnd.chatRole:v1", roleId);
+      else localStorage.removeItem("rnd.chatRole:v1");
+    } catch {
+      // ignore storage errors
+    }
+  }, [roleId]);
 
   useEffect(() => {
     try {
@@ -286,14 +322,12 @@ export function ChatSidebar({
     setError(undefined);
     const content = text || "Lihat lampiran.";
     const outgoing: ChatAttachment[] = attachments.map((item) =>
-      item.type === "workspace"
-        ? { type: "workspace", name: item.name, path: item.path ?? "" }
-        : {
-          type: item.type,
-          name: item.name,
-          mime: item.mime,
-          data: item.data ?? "",
-        }
+      item.type === "workspace" ? { type: "workspace", name: item.name, path: item.path ?? "" } : {
+        type: item.type,
+        name: item.name,
+        mime: item.mime,
+        data: item.data ?? "",
+      }
     );
     const shown: DisplayAttachment[] = attachments.map((item) => ({
       name: item.name,
@@ -310,6 +344,7 @@ export function ChatSidebar({
       const response = await api.chat(projectId, {
         providerId: providerId || undefined,
         sessionId: sessionId ?? undefined,
+        roleId: roleId ?? undefined,
         variant,
         mode,
         messages: next.map((entry, index) => ({
@@ -411,11 +446,13 @@ export function ChatSidebar({
         if (event.dataTransfer.files.length) void handleFiles(Array.from(event.dataTransfer.files));
       }}
     >
-      {dragging ? (
-        <div className="pointer-events-none absolute inset-2 z-10 flex items-center justify-center rounded-lg border-2 border-dashed border-primary/60 bg-background/85">
-          <p className="text-sm font-medium">Lepaskan file di sini</p>
-        </div>
-      ) : null}
+      {dragging
+        ? (
+          <div className="pointer-events-none absolute inset-2 z-10 flex items-center justify-center rounded-lg border-2 border-dashed border-primary/60 bg-background/85">
+            <p className="text-sm font-medium">Lepaskan file di sini</p>
+          </div>
+        )
+        : null}
 
       <div className="flex items-center justify-between gap-3 border-b px-3 py-2 max-h-[40px] h-[40px]">
         <div className="flex items-center gap-1 w-3/4">
@@ -425,7 +462,7 @@ export function ChatSidebar({
             </SelectTrigger>
             <SelectContent>
               <SelectGroup>
-                <SelectItem value="new" >
+                <SelectItem value="new">
                   <div className="flex items-center gap-2">
                     <Plus />
                     Chat baru
@@ -455,149 +492,212 @@ export function ChatSidebar({
       </div>
 
       <div ref={scrollRef} className="flex-1 overflow-y-auto p-3">
-        {entries.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            Mulai chat dengan LLM. Lampirkan gambar/file teks atau seret file ke sini. Aplikasi
-            dapat membaca/menulis file di workspace — setiap edit akan meminta persetujuan Anda.
-          </p>
-        ) : (
-          <div className="flex flex-col gap-3">
-            {entries.map((entry, index) => (
-              <div
-                key={index}
-                className={cn(
-                  "text-md",
-                  entry.role === "user"
-                    ? "max-w-[85%] self-end rounded-lg border border-muted-foreground/10 px-3 py-2 text-primary"
-                    : "w-full self-start",
-                )}
-              >
-                {entry.attachments?.length ? (
-                  <div className="mb-2 flex flex-wrap gap-1.5">
-                    {entry.attachments.map((item, itemIndex) =>
-                      item.type === "image" && item.preview ? (
-                        <img
-                          key={itemIndex}
-                          src={item.preview}
-                          alt={item.name}
-                          className="max-h-40 rounded-md border border-black/10 object-contain"
-                        />
-                      ) : (
-                        <span
-                          key={itemIndex}
-                          className="flex items-center gap-1 rounded bg-black/10 px-1.5 py-0.5 text-[11px]"
-                          title={item.path ?? item.name}
-                        >
-                          {item.type === "workspace" ? (
-                            <FileCode2 className="size-3" />
-                          ) : (
-                            <FileText className="size-3" />
-                          )}
-                          {item.type === "workspace" ? item.path : item.name}
-                        </span>
-                      ),
-                    )}
+        {entries.length === 0
+          ? (
+            <p className="text-sm text-muted-foreground">
+              Mulai chat dengan LLM. Lampirkan gambar/file teks atau seret file ke sini. Aplikasi
+              dapat membaca/menulis file di workspace — setiap edit akan meminta persetujuan Anda.
+            </p>
+          )
+          : (
+            <div className="flex flex-col gap-3">
+              {entries.map((entry, index) => (
+                <div
+                  key={index}
+                  className={cn(
+                    "text-md",
+                    entry.role === "user"
+                      ? "max-w-[85%] self-end rounded-lg border border-muted-foreground/10 px-3 py-2 text-primary"
+                      : "w-full self-start",
+                  )}
+                >
+                  {entry.attachments?.length
+                    ? (
+                      <div className="mb-2 flex flex-wrap gap-1.5">
+                        {entry.attachments.map((item, itemIndex) =>
+                          item.type === "image" && item.preview
+                            ? (
+                              <img
+                                key={itemIndex}
+                                src={item.preview}
+                                alt={item.name}
+                                className="max-h-40 rounded-md border border-black/10 object-contain"
+                              />
+                            )
+                            : (
+                              <span
+                                key={itemIndex}
+                                className="flex items-center gap-1 rounded bg-black/10 px-1.5 py-0.5 text-[11px]"
+                                title={item.path ?? item.name}
+                              >
+                                {item.type === "workspace"
+                                  ? <FileCode2 className="size-3" />
+                                  : <FileText className="size-3" />}
+                                {item.type === "workspace" ? item.path : item.name}
+                              </span>
+                            )
+                        )}
+                      </div>
+                    )
+                    : null}
+                  {entry.role === "assistant"
+                    ? (
+                      entry.content
+                        ? (
+                          <Suspense fallback={<Skeleton className="h-4 w-32" />}>
+                            <MarkdownView content={entry.content} />
+                          </Suspense>
+                        )
+                        : null
+                    )
+                    : <span className="whitespace-pre-wrap">{entry.content}</span>}
+                </div>
+              ))}
+              {sending
+                ? (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Spinner />
+                    Bekerja…
                   </div>
-                ) : null}
-                {entry.role === "assistant" ? (
-                  entry.content ? (
-                    <Suspense fallback={<Skeleton className="h-4 w-32" />}>
-                      <MarkdownView content={entry.content} />
-                    </Suspense>
-                  ) : null
-                ) : (
-                  <span className="whitespace-pre-wrap">{entry.content}</span>
-                )}
-              </div>
-            ))}
-            {sending ? (
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Spinner />
-                Bekerja…
-              </div>
-            ) : null}
-          </div>
-        )}
+                )
+                : null}
+            </div>
+          )}
       </div>
 
       <div className="flex flex-col gap-2 border-t p-3">
-        {pending && pending.changes.length > 0 ? (
-          <div className="flex flex-col gap-2 rounded-md border bg-card p-3">
-            <p className="text-xs font-medium">Perubahan menunggu review</p>
-            <p className="text-xs text-muted-foreground">
-              Diff dan tombol accept/reject tersedia di tab editor.
-            </p>
-            <Button
-              size="sm"
-              variant="outline"
-              className="self-start"
-              onClick={() => dispatchReview(pending.runId, pending.changes)}
-            >
-              Buka review
-            </Button>
-          </div>
-        ) : pending ? (
-          <div className="flex flex-col gap-2 rounded-md border bg-card p-3">
-            <p className="text-xs font-medium">Persetujuan diperlukan</p>
-            <p className="text-sm">
-              <span className="font-mono">{pending.items[0].summary}</span>
-            </p>
-            <div className="flex flex-wrap gap-2">
-              <Button size="sm" onClick={() => approve("once")} disabled={sending}>
-                Allow once
-              </Button>
+        {pending && pending.changes.length > 0
+          ? (
+            <div className="flex flex-col gap-2 rounded-md border bg-card p-3">
+              <p className="text-xs font-medium">Perubahan menunggu review</p>
+              <p className="text-xs text-muted-foreground">
+                Diff dan tombol accept/reject tersedia di tab editor.
+              </p>
               <Button
                 size="sm"
-                variant="secondary"
-                onClick={() => approve("always")}
-                disabled={sending}
+                variant="outline"
+                className="self-start"
+                onClick={() => dispatchReview(pending.runId, pending.changes)}
               >
-                Always allow
-              </Button>
-              <Button size="sm" variant="outline" onClick={() => approve("deny")} disabled={sending}>
-                No
+                Buka review
               </Button>
             </div>
-            {pending.items.length > 1 ? (
-              <p className="text-xs text-muted-foreground">
-                {pending.items.length - 1} permintaan lain menunggu.
+          )
+          : pending
+          ? (
+            <div className="flex flex-col gap-2 rounded-md border bg-card p-3">
+              <p className="text-xs font-medium">Persetujuan diperlukan</p>
+              <p className="text-sm">
+                <span className="font-mono">{pending.items[0].summary}</span>
               </p>
-            ) : null}
-          </div>
-        ) : null}
+              <div className="flex flex-wrap gap-2">
+                <Button size="sm" onClick={() => approve("once")} disabled={sending}>
+                  Allow once
+                </Button>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => approve("always")}
+                  disabled={sending}
+                >
+                  Always allow
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => approve("deny")}
+                  disabled={sending}
+                >
+                  No
+                </Button>
+              </div>
+              {pending.items.length > 1
+                ? (
+                  <p className="text-xs text-muted-foreground">
+                    {pending.items.length - 1} permintaan lain menunggu.
+                  </p>
+                )
+                : null}
+            </div>
+          )
+          : null}
 
         {error ? <p className="text-xs text-destructive">{error}</p> : null}
 
         <div className="border-input focus-within:border-ring focus-within:ring-ring/50 flex flex-col rounded-md border bg-transparent shadow-xs focus-within:ring-[3px]">
-          {attachments.length ? (
-            <div className="flex flex-wrap gap-1.5 px-2 pt-2">
-              {attachments.map((item) => (
-                <div
-                  key={item.id}
-                  className="flex max-w-full items-center gap-1.5 rounded-md border bg-muted/40 px-1.5 py-1 text-xs"
-                >
-                  {item.type === "image" && item.data ? (
-                    <img src={item.data} alt="" className="size-6 rounded object-cover" />
-                  ) : item.type === "workspace" ? (
-                    <FileCode2 className="size-3.5 text-muted-foreground" />
-                  ) : (
-                    <FileText className="size-3.5 text-muted-foreground" />
-                  )}
-                  <span className="max-w-40 truncate" title={item.path ?? item.name}>
-                    {item.type === "workspace" ? item.path : item.name}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setAttachments((current) => current.filter((a) => a.id !== item.id))}
-                    aria-label={`Hapus ${item.name}`}
-                    className="text-muted-foreground hover:text-foreground"
+          {attachments.length
+            ? (
+              <div className="flex flex-wrap gap-1.5 px-2 pt-2">
+                {attachments.map((item) => (
+                  <div
+                    key={item.id}
+                    className="flex max-w-full items-center gap-1.5 rounded-md border bg-muted/40 px-1.5 py-1 text-xs"
                   >
-                    <X className="size-3" />
-                  </button>
-                </div>
-              ))}
-            </div>
-          ) : null}
+                    {item.type === "image" && item.data
+                      ? <img src={item.data} alt="" className="size-6 rounded object-cover" />
+                      : item.type === "workspace"
+                      ? <FileCode2 className="size-3.5 text-muted-foreground" />
+                      : <FileText className="size-3.5 text-muted-foreground" />}
+                    <span className="max-w-40 truncate" title={item.path ?? item.name}>
+                      {item.type === "workspace" ? item.path : item.name}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setAttachments((current) => current.filter((a) => a.id !== item.id))}
+                      aria-label={`Hapus ${item.name}`}
+                      className="text-muted-foreground hover:text-foreground"
+                    >
+                      <X className="size-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )
+            : null}
+          <div className="flex items-center gap-2 px-2 pt-2">
+            <span className="w-9 shrink-0 text-[11px] text-muted-foreground">Role</span>
+            <Select
+              value={roleId ?? "none"}
+              onValueChange={(value) => {
+                const next = value === "none" ? null : value;
+                setRoleId(next);
+                const role = roles.find((item) => item.id === next);
+                if (
+                  role?.providerId &&
+                  providers.some((provider) => provider.id === role.providerId)
+                ) {
+                  setProviderId(role.providerId);
+                }
+              }}
+              disabled={!!pending}
+            >
+              <SelectTrigger
+                size="sm"
+                className="h-7 min-w-0 flex-1 border-0 bg-transparent px-1 text-xs shadow-none focus-visible:ring-0 data-[size=sm]:h-7"
+                aria-label="Role chat"
+              >
+                <SelectValue placeholder="Tanpa role" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  <SelectItem value="none">Tanpa role</SelectItem>
+                  {roles.map((role) => (
+                    <SelectItem key={role.id} value={role.id}>
+                      {role.name}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+            {roleProviderId
+              ? (
+                <Badge variant="outline" className="h-5 shrink-0 px-1.5 text-[10px]">
+                  LLM role
+                </Badge>
+              )
+              : null}
+          </div>
           <textarea
             value={input}
             onChange={(event) => setInput(event.target.value)}
@@ -614,9 +714,9 @@ export function ChatSidebar({
                 void handleFiles(files);
               }
             }}
-            placeholder={
-              pending ? "Selesaikan persetujuan dulu…" : "Tulis pesan… (Enter kirim, Shift+Enter baris baru)"
-            }
+            placeholder={pending
+              ? "Selesaikan persetujuan dulu…"
+              : "Tulis pesan… (Enter kirim, Shift+Enter baris baru)"}
             disabled={!!pending}
             rows={3}
             className="w-full resize-none border-0 bg-transparent px-3 py-2 text-sm outline-none disabled:opacity-60"
@@ -668,12 +768,13 @@ export function ChatSidebar({
             <Select
               value={providerId}
               onValueChange={setProviderId}
-              disabled={providers.length === 0 || !!pending}
+              disabled={providers.length === 0 || !!pending || !!roleProviderId}
             >
               <SelectTrigger
                 size="sm"
                 className="h-7 min-w-0 flex-1 border-0 bg-transparent px-1 text-xs shadow-none focus-visible:ring-0 data-[size=sm]:h-7"
                 aria-label="Pilih model"
+                title={roleProviderId ? "Provider ditentukan oleh role" : undefined}
               >
                 <SelectValue placeholder="Model" />
               </SelectTrigger>

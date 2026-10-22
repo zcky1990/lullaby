@@ -22,6 +22,7 @@ import {
   McpSettingsInput,
   ProjectInput,
   ProjectUpdateInput,
+  RoleInput,
   SkillsSettingsInput,
   UpdateDocumentInput,
   UpdateFileInput,
@@ -33,15 +34,18 @@ import {
   createLlmProvider,
   createLocalTicket,
   createProject,
+  createRole,
   deleteChatSession,
   deleteLlmProvider,
   deleteLocalTicket,
+  deleteRole,
   getAppSetting,
   getChatSession,
   getIntegration,
   getLlmProvider,
   getLocalTicket,
   getProject,
+  getRole,
   listChatMessages,
   listChatSessions,
   listIntegrations,
@@ -49,6 +53,7 @@ import {
   listLocalDocumentMeta,
   listLocalTickets,
   listProjects,
+  listRoles,
   type LocalTicketRow,
   markLocalDocumentSynced,
   markLocalDocumentSyncError,
@@ -56,10 +61,12 @@ import {
   markLocalTicketSyncError,
   moveLocalDocumentMeta,
   recentEvents,
+  type RoleRow,
   setAppSetting,
   updateLlmProvider,
   updateLocalTicket,
   updateProject,
+  updateRole,
   upsertIntegration,
 } from "../db/db.ts";
 import {
@@ -273,11 +280,67 @@ function serializeLlm(row: {
   };
 }
 
+function serializeRole(row: RoleRow) {
+  return {
+    id: row.id,
+    name: row.name,
+    description: row.description ?? undefined,
+    persona: row.persona,
+    providerId: row.provider_id ?? undefined,
+    updatedAt: row.updated_at,
+  };
+}
+
 async function getProjectDetail(projectId: string): Promise<Response> {
   const project = await getProject(projectId);
   if (!project) return json({ error: "project_not_found" }, 404);
   const integrations = (await listIntegrations(project.id)).map(serializeIntegration);
   return json({ project, integrations });
+}
+
+async function roleProviderExists(providerId?: string): Promise<boolean> {
+  if (!providerId) return true;
+  return (await getLlmProvider(providerId)) !== null;
+}
+
+async function listRolesHandler(): Promise<Response> {
+  return json({ roles: (await listRoles()).map(serializeRole) });
+}
+
+async function createRoleHandler(req: Request): Promise<Response> {
+  const parsed = RoleInput.safeParse(await readJson(req));
+  if (!parsed.success) {
+    return json({ error: "invalid_input", issues: parsed.error.issues }, 400);
+  }
+  if (!(await roleProviderExists(parsed.data.providerId))) {
+    return json({ error: "provider_not_found" }, 400);
+  }
+  const role = await createRole(parsed.data);
+  await record("role.created", { id: role.id, name: role.name });
+  return json({ role: serializeRole(role) }, 201);
+}
+
+async function updateRoleHandler(roleId: string, req: Request): Promise<Response> {
+  const existing = await getRole(roleId);
+  if (!existing) return json({ error: "role_not_found" }, 404);
+  const parsed = RoleInput.safeParse(await readJson(req));
+  if (!parsed.success) {
+    return json({ error: "invalid_input", issues: parsed.error.issues }, 400);
+  }
+  if (!(await roleProviderExists(parsed.data.providerId))) {
+    return json({ error: "provider_not_found" }, 400);
+  }
+  const role = await updateRole(roleId, parsed.data);
+  await record("role.saved", { id: roleId });
+  return json({ role: serializeRole(role!) });
+}
+
+async function deleteRoleHandler(roleId: string): Promise<Response> {
+  const existing = await getRole(roleId);
+  if (!existing) return json({ error: "role_not_found" }, 404);
+  await deleteRole(roleId);
+  await record("role.deleted", { id: roleId });
+  return json({ ok: true });
 }
 
 async function createLlmHandler(req: Request): Promise<Response> {
@@ -337,7 +400,11 @@ async function chatHandler(projectId: string, req: Request): Promise<Response> {
     return json({ error: "invalid_input", issues: parsed.error.issues }, 400);
   }
 
+  const role = parsed.data.roleId ? await getRole(parsed.data.roleId) : null;
   let provider = parsed.data.providerId ? await getLlmProvider(parsed.data.providerId) : null;
+  if (role?.provider_id) {
+    provider = (await getLlmProvider(role.provider_id)) ?? provider;
+  }
   if (!provider) provider = (await listLlmProviders())[0] ?? null;
   if (!provider) return json({ error: "no_provider" }, 400);
 
@@ -357,6 +424,7 @@ async function chatHandler(projectId: string, req: Request): Promise<Response> {
     parsed.data.sessionId,
     parsed.data.variant,
     parsed.data.mode,
+    role?.persona,
   );
   await record("chat.message", { projectId, providerId: provider.id });
   return json(result);
@@ -1342,6 +1410,17 @@ export async function handleRequest(req: Request): Promise<Response> {
     );
     if (ticketTransition && method === "POST") {
       return await transitionTicketHandler(ticketTransition[1], ticketTransition[2], req);
+    }
+
+    if (pathname === "/api/roles") {
+      if (method === "GET") return await listRolesHandler();
+      if (method === "POST") return await createRoleHandler(req);
+    }
+
+    const roleItem = pathname.match(/^\/api\/roles\/([^/]+)$/);
+    if (roleItem) {
+      if (method === "PUT" || method === "POST") return await updateRoleHandler(roleItem[1], req);
+      if (method === "DELETE") return await deleteRoleHandler(roleItem[1]);
     }
 
     if (pathname === "/api/llm") {
