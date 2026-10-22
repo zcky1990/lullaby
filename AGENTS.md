@@ -55,11 +55,10 @@ finishing a change.
   stdio or http) so each server's tools can be discovered and enabled/disabled. Tool execution from
   chat is not wired yet.
 - **List/menus**: `ActivityBar` (left rail) opens tabs in the main area (`TabsBar`).
-  Workspace/Explorer/Document keep a **separate** side panel in `<aside>` (`WorkspacePanel`,
-  `FileTreePanel`, `DocumentPanel`); files/documents open as their own tabs. Project Settings and
-  Global Settings have no outer panel — their section nav (`SettingsPanel`, `GlobalSettingsPanel`)
-  lives inside the tab. In Project Settings each form/section is a **`Collapsible`**
-  (`CollapsibleSection`).
+  Workspace/Explorer/Document/Project Settings keep a **separate** side panel in `<aside>`
+  (`WorkspacePanel`, `FileTreePanel`, `DocumentPanel`, `SettingsPanel`); files/documents open as
+  their own tabs. Global Settings has no outer panel — its `GlobalSettingsPanel` lives inside the
+  tab. In Project Settings each form/section is a **`Collapsible`** (`CollapsibleSection`).
 - UI build outputs are embedded (`scripts/build-assets.ts` -> `src/ui/assets.generated.ts`) so the
   desktop binary is self-contained; never read UI files from disk at runtime.
 - Integration credentials (API token/key) are entered as normal text and stored **in the integration
@@ -85,7 +84,7 @@ finishing a change.
 
 - `main.ts` — entry: bootstrap, window, server.
 - `web/` — Vite + React + shadcn/ui client (built to `web/dist`).
-  - `web/src/App.tsx` — shell (activity bar + panel + main).
+  - `web/src/App.tsx` — shell (VSCode-like activity bar + panel + tabs + main + `StatusBar`).
   - `web/src/components/` — feature components (ActivityBar, `TabsBar`, Workspace/FileTree/Document/
     Ticket/Settings panels, `TicketKanban`, `TicketDetailDialog`, `MonacoViewer`,
     `MarkdownView`/`Mermaid`, `SettingsView` + `IntegrationForm`/`LlmProviderForm`,

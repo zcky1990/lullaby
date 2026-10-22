@@ -47,7 +47,7 @@ interface Props {
 export function TabsBar({ tabs, activeId, onSelect, onClose }: Props) {
   if (tabs.length === 0) return null;
   return (
-    <div className="flex items-stretch overflow-x-auto border-b bg-card/30">
+    <div className="flex items-stretch overflow-x-auto border-b bg-[var(--tabbar)]">
       {tabs.map((tab) => {
         const Icon = ICONS[tab.kind];
         const active = tab.id === activeId;
@@ -55,8 +55,10 @@ export function TabsBar({ tabs, activeId, onSelect, onClose }: Props) {
           <div
             key={tab.id}
             className={cn(
-              "group flex items-center gap-2 border-r px-3 py-2 text-sm",
-              active ? "bg-background text-foreground" : "text-muted-foreground hover:bg-accent",
+              "group flex h-[35px] items-center gap-2 border-t border-r border-t-transparent px-3 text-[13px]",
+              active
+                ? "border-t-primary bg-background text-foreground"
+                : "text-muted-foreground hover:bg-accent",
             )}
           >
             <button

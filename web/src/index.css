@@ -29,6 +29,11 @@
   --border: oklch(0.92 0.004 286.32);
   --input: oklch(0.92 0.004 286.32);
   --ring: oklch(0.705 0.015 286.067);
+  --activitybar: var(--card);
+  --sidebar: var(--card);
+  --tabbar: var(--card);
+  --statusbar: var(--primary);
+  --statusbar-foreground: var(--primary-foreground);
 }
 
 .dark {
@@ -135,6 +140,60 @@ html.dark[data-theme="supabase"] {
   --border: oklch(1 0 0 / 12%);
   --input: oklch(1 0 0 / 16%);
   --ring: oklch(0.78 0.16 162);
+}
+
+
+[data-theme="vscode"] {
+  --radius: 0.25rem;
+  --background: #ffffff;
+  --foreground: #3b3b3b;
+  --card: #f3f3f3;
+  --card-foreground: #3b3b3b;
+  --popover: #f3f3f3;
+  --popover-foreground: #3b3b3b;
+  --primary: #005fb8;
+  --primary-foreground: #ffffff;
+  --secondary: #e5e5e5;
+  --secondary-foreground: #3b3b3b;
+  --muted: #e5e5e5;
+  --muted-foreground: #6e6e6e;
+  --accent: #e8e8e8;
+  --accent-foreground: #3b3b3b;
+  --border: #e5e5e5;
+  --input: #cecece;
+  --ring: #005fb8;
+  --activitybar: #f8f8f8;
+  --sidebar: #f8f8f8;
+  --tabbar: #f3f3f3;
+  --statusbar: #007acc;
+  --statusbar-foreground: #ffffff;
+}
+
+html.dark[data-theme="vscode"] {
+  --background: #1e1e1e;
+  --foreground: #cccccc;
+  --card: #252526;
+  --card-foreground: #cccccc;
+  --popover: #252526;
+  --popover-foreground: #cccccc;
+  --primary: #007acc;
+  --primary-foreground: #ffffff;
+  --secondary: #2d2d30;
+  --secondary-foreground: #cccccc;
+  --muted: #2d2d30;
+  --muted-foreground: #9d9d9d;
+  --accent: #2a2d2e;
+  --accent-foreground: #ffffff;
+  --destructive: #f14c4c;
+  --destructive-foreground: #ffffff;
+  --border: #3c3c3c;
+  --input: #3c3c3c;
+  --ring: #007acc;
+  --activitybar: #333333;
+  --sidebar: #252526;
+  --tabbar: #252526;
+  --statusbar: #007acc;
+  --statusbar-foreground: #ffffff;
 }
 
 @theme inline {

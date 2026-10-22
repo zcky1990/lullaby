@@ -2,11 +2,15 @@ import { Badge } from "@/components/ui/badge";
 
 export function PanelHeader({ title, count }: { title: string; count?: number }) {
   return (
-    <div className="flex items-center justify-between px-3 py-3">
-      <span className="text-xs font-medium tracking-wider text-muted-foreground uppercase">
+    <div className="flex h-[35px] items-center justify-between px-4">
+      <span className="text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">
         {title}
       </span>
-      {count !== undefined && <Badge variant="secondary">{count}</Badge>}
+      {count !== undefined && (
+        <Badge variant="secondary" className="h-5 px-1.5 text-[10px]">
+          {count}
+        </Badge>
+      )}
     </div>
   );
 }

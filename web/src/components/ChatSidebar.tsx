@@ -359,7 +359,7 @@ export function ChatSidebar({
 
   return (
     <aside
-      className="relative flex w-96 shrink-0 flex-col border-l bg-card/20"
+      className="relative flex w-96 shrink-0 flex-col border-l bg-[var(--sidebar)]"
       onDragOver={(event) => {
         const types = Array.from(event.dataTransfer.types);
         if (!types.includes("Files") && !types.includes("application/x-rnd-workspace-path")) {

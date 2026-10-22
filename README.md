@@ -51,8 +51,9 @@ setiap kali UI berubah. Task `dev`/`desktop`/`start` sudah menjalankannya otomat
 
 ## Menu aplikasi
 
-Shell ala VSCode: **activity bar** (kiri) + **panel** terpisah (Workspace/Explorer/Document) +
-**area konten bertab**. Memilih file/dokumen/menu membuka **tab** di area konten.
+Shell ala VSCode: **activity bar** (kiri, ikon 48px dengan indikator aktif) + **panel** terpisah
+(Workspace/Explorer/Document) + **status bar** biru di bawah (branch/project/file/encoding) + **area
+konten bertab**. Memilih file/dokumen/menu membuka **tab** di area konten.
 
 | Menu                 | Muncul bila             | Isi                                                                                                                                                                                     |
 | -------------------- | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -104,8 +105,8 @@ file teks ≤ 200 KB (body API ≤ 26 MB).
 **Editor tabs (ala VS Code):** memilih file (Explorer), dokumen (Document), atau menu
 (Workspace/Ticket/Project Settings/Global Settings) membuka **tab** di area konten. Tab bisa diklik
 ulang dan **ditutup** (`×`); menutup tab terakhir menampilkan empty state. Workspace/Explorer/
-Document memakai **panel kiri terpisah** yang **lebarnya bisa di-drag** (tersimpan di `localStorage`
-`rnd.panelWidth:v1`), sedangkan **Project Settings** dan **Global Settings** menaruh sidebar-nya
+Document/**Project Settings** memakai **panel kiri terpisah** yang **lebarnya bisa di-drag**
+(tersimpan di `localStorage` `rnd.panelWidth:v1`), sedangkan **Global Settings** menaruh sidebar-nya
 (section nav) di dalam tab.
 
 ## HTTP API

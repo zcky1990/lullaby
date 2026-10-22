@@ -3,7 +3,7 @@ import { createContext, type ReactNode, useContext, useEffect, useState } from "
 export type Theme = "light" | "dark" | "system";
 export type ResolvedTheme = "light" | "dark";
 export type EditorTheme = "auto" | "vs" | "vs-dark" | "hc-black" | "hc-light";
-export type ThemePreset = "shadcn" | "claude" | "supabase";
+export type ThemePreset = "vscode" | "shadcn" | "claude" | "supabase";
 export type AppFont = "system" | "inter" | "manrope" | "jetbrains";
 export type EditorFont = "jetbrains" | "fira" | "menlo" | "consolas" | "monospace";
 export type IconSize = "sm" | "md" | "lg";
@@ -128,7 +128,11 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setThemeState] = useState<Theme>(readTheme);
   const [editorTheme, setEditorThemeState] = useState<EditorTheme>(readEditorTheme);
   const [colorTheme, setColorThemeState] = useState<ThemePreset>(() =>
-    readString(COLOR_THEME_KEY, ["shadcn", "claude", "supabase"] as const, "shadcn")
+    readString(
+      COLOR_THEME_KEY,
+      ["vscode", "shadcn", "claude", "supabase"] as const,
+      "vscode",
+    )
   );
   const [appFont, setAppFontState] = useState<AppFont>(() =>
     readString(APP_FONT_KEY, ["system", "inter", "manrope", "jetbrains"] as const, "system")

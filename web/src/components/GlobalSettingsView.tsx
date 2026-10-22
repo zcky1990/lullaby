@@ -33,7 +33,8 @@ const THEME_OPTIONS: { id: Theme; label: string; icon: typeof Sun }[] = [
 ];
 
 const COLOR_THEME_OPTIONS: { id: ThemePreset; label: string; description: string }[] = [
-  { id: "shadcn", label: "shadcn", description: "Neutral hitam-putih (default)" },
+  { id: "vscode", label: "VS Code", description: "Tampilan VS Code (biru, abu-abu gelap)" },
+  { id: "shadcn", label: "shadcn", description: "Neutral hitam-putih" },
   { id: "claude", label: "Claude", description: "Krem hangat dengan aksen terracotta" },
   { id: "supabase", label: "Supabase", description: "Hijau emerald dengan nuansa gelap" },
 ];

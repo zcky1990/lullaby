@@ -42,7 +42,7 @@ export function ActivityBar({ active, hasProject, hasWorkspace, onChange }: Prop
   );
 
   return (
-    <nav className="flex w-14 shrink-0 flex-col items-center gap-1 border-r bg-card/40 py-3">
+    <nav className="flex w-12 shrink-0 flex-col items-center gap-0.5 border-r bg-[var(--activitybar)] py-2">
       {items.map((item) => {
         const Icon = item.icon;
         return (
@@ -54,9 +54,10 @@ export function ActivityBar({ active, hasProject, hasWorkspace, onChange }: Prop
             aria-label={item.label}
             onClick={() => onChange(item.id)}
             className={cn(
-              "text-muted-foreground",
+              "relative size-12 shrink-0 rounded-none text-muted-foreground hover:bg-accent/60 hover:text-foreground [&_svg]:size-6",
               item.bottom && "mt-auto",
-              active === item.id && "bg-accent text-accent-foreground",
+              active === item.id &&
+                "bg-[var(--sidebar)] text-foreground before:absolute before:inset-y-0 before:left-0 before:w-0.5 before:bg-primary",
             )}
           >
             <Icon />

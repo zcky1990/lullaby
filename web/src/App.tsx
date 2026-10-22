@@ -27,6 +27,7 @@ import { GlobalSettingsPanel, type GlobalSection } from "@/components/GlobalSett
 import { GlobalSettingsView } from "@/components/GlobalSettingsView";
 import { SettingsPanel, type SettingsSection } from "@/components/SettingsPanel";
 import { SettingsView } from "@/components/SettingsView";
+import { StatusBar } from "@/components/StatusBar";
 import {
   Select,
   SelectContent,
@@ -133,6 +134,8 @@ export default function App() {
   const [panelWidth, setPanelWidth] = useState(readPanelWidth);
 
   const hasWorkspace = !!detail?.project.workspace_path;
+  const workspaceBase =
+    detail?.project.workspace_path?.split(/[\\/]/).filter(Boolean).pop() ?? null;
   const activeTab = tabs.find((tab) => tab.id === activeTabId) ?? null;
 
   const assignees = useMemo(() => {
@@ -675,7 +678,6 @@ export default function App() {
         return (
           <SettingsTab
             section={settingsSection}
-            onSection={setSettingsSection}
             detail={detail}
             activity={activity}
             addingProvider={addingProvider}
@@ -691,7 +693,7 @@ export default function App() {
       case "global":
         return (
           <div className="flex h-full">
-            <aside className="flex w-56 shrink-0 flex-col border-r bg-card/20">
+            <aside className="flex w-56 shrink-0 flex-col border-r bg-[var(--sidebar)]">
               <GlobalSettingsPanel section={globalSection} onSelect={setGlobalSection} />
             </aside>
             <div className="min-w-0 flex-1 overflow-y-auto p-6">
@@ -725,18 +727,22 @@ export default function App() {
   };
 
   return (
-    <div className="flex h-full">
-      <ActivityBar
+    <div className="flex h-full flex-col">
+      <div className="flex min-h-0 flex-1">
+        <ActivityBar
         active={menu}
         hasProject={!!currentId}
         hasWorkspace={hasWorkspace}
         onChange={onMenuChange}
       />
 
-      {(menu === "workspace" || menu === "files" || menu === "document") && (
+      {(menu === "workspace" ||
+        menu === "files" ||
+        menu === "document" ||
+        menu === "settings") && (
         <aside
           style={{ width: panelWidth }}
-          className="relative flex shrink-0 flex-col border-r bg-card/20"
+          className="relative flex shrink-0 flex-col border-r bg-[var(--sidebar)]"
         >
           {menu === "workspace" && (
             <WorkspacePanel
@@ -752,6 +758,9 @@ export default function App() {
               selectedPath={activeTab?.kind === "file" ? activeTab.ref ?? null : null}
               onOpenFile={openFile}
             />
+          )}
+          {menu === "settings" && (
+            <SettingsPanel section={settingsSection} onSelect={setSettingsSection} />
           )}
           {menu === "document" && (
             <DocumentPanel
@@ -784,12 +793,19 @@ export default function App() {
       )}
 
       <main className="flex min-w-0 flex-1 flex-col">
-        <header className="flex items-center justify-end border-b px-6 py-3 max-h-[40px] h-[40px]">
+        <header className="flex h-[35px] items-center justify-between border-b px-3">
+          <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
+            <span className="truncate font-medium text-foreground">
+              {detail?.project.name ?? "RND Workflow"}
+            </span>
+            {workspaceBase ? <span className="truncate">{workspaceBase}</span> : null}
+          </div>
           <Button
             size="sm"
-            variant={chatOpen ? "secondary" : "outline"}
+            variant={chatOpen ? "secondary" : "ghost"}
             onClick={() => setChatOpen((open) => !open)}
             data-icon="inline-start"
+            className="h-7"
           >
             <MessageSquare />
             Chat
@@ -822,6 +838,14 @@ export default function App() {
           onTicketsChanged={() => currentId && loadTickets(currentId)}
         />
       )}
+
+      </div>
+
+      <StatusBar
+        projectName={detail?.project.name}
+        workspacePath={detail?.project.workspace_path}
+        activeTitle={activeTab?.title}
+      />
 
       <TicketDetailDialog
         projectId={currentId}
@@ -1243,7 +1267,6 @@ function DocumentTab({
 
 function SettingsTab({
   section,
-  onSection,
   detail,
   activity,
   addingProvider,
@@ -1256,7 +1279,6 @@ function SettingsTab({
   onUpdateWorkspace,
 }: {
   section: SettingsSection;
-  onSection: (section: SettingsSection) => void;
   detail: ProjectDetail | null;
   activity: ActivityEvent[];
   addingProvider: boolean;
@@ -1270,25 +1292,20 @@ function SettingsTab({
 }) {
   if (!detail) return <Empty text="Belum ada project." />;
   return (
-    <div className="flex h-full">
-      <aside className="flex w-56 shrink-0 flex-col border-r bg-card/20">
-        <SettingsPanel section={section} onSelect={onSection} />
-      </aside>
-      <div className="min-w-0 flex-1 overflow-y-auto p-6">
-        <SettingsView
-          detail={detail}
-          section={section}
-          activity={activity}
-          addingProvider={addingProvider}
-          onAddProvider={onAddProvider}
-          onSaveIntegration={onSaveIntegration}
-          onTestIntegration={onTestIntegration}
-          onTestLlm={onTestLlm}
-          onSaveLlm={onSaveLlm}
-          onDeleteLlm={onDeleteLlm}
-          onUpdateWorkspace={onUpdateWorkspace}
-        />
-      </div>
+    <div className="h-full overflow-y-auto p-6">
+      <SettingsView
+        detail={detail}
+        section={section}
+        activity={activity}
+        addingProvider={addingProvider}
+        onAddProvider={onAddProvider}
+        onSaveIntegration={onSaveIntegration}
+        onTestIntegration={onTestIntegration}
+        onTestLlm={onTestLlm}
+        onSaveLlm={onSaveLlm}
+        onDeleteLlm={onDeleteLlm}
+        onUpdateWorkspace={onUpdateWorkspace}
+      />
     </div>
   );
 }
