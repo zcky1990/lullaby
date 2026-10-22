@@ -3,7 +3,6 @@ import { useState } from "react";
 import { ChevronRight, FolderOpen, Plus } from "lucide-react";
 import { ActivityFeed, type ActivityEvent } from "@/components/ActivityFeed";
 import { IntegrationForm } from "@/components/IntegrationForm";
-import { LlmProviderForm } from "@/components/LlmProviderForm";
 import type { SettingsSection } from "@/components/SettingsPanel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -23,24 +22,14 @@ import { Separator } from "@/components/ui/separator";
 import { canPickDirectory, chooseWorkspaceDirectory } from "@/lib/bindings";
 import { SINGLETONS } from "@/lib/integrations";
 import { cn } from "@/lib/utils";
-import type {
-  IntegrationPayload,
-  LlmProviderPayload,
-  ProjectDetail,
-  TestResult,
-} from "@/lib/api";
+import type { IntegrationPayload, ProjectDetail, TestResult } from "@/lib/api";
 
 interface Props {
   detail: ProjectDetail;
   section: SettingsSection;
   activity: ActivityEvent[];
-  addingProvider: boolean;
-  onAddProvider: (value: boolean) => void;
   onSaveIntegration: (payload: IntegrationPayload) => Promise<void>;
   onTestIntegration: (payload: IntegrationPayload) => Promise<TestResult>;
-  onTestLlm: (payload: LlmProviderPayload) => Promise<TestResult>;
-  onSaveLlm: (id: string | null, payload: LlmProviderPayload) => Promise<void>;
-  onDeleteLlm: (id: string) => Promise<void>;
   onUpdateWorkspace: (path: string, documentPath?: string) => Promise<void>;
 }
 
@@ -126,16 +115,11 @@ export function SettingsView({
   detail,
   section,
   activity,
-  addingProvider,
-  onAddProvider,
   onSaveIntegration,
   onTestIntegration,
-  onTestLlm,
-  onSaveLlm,
-  onDeleteLlm,
   onUpdateWorkspace,
 }: Props) {
-  const { project, integrations, llmProviders } = detail;
+  const { project, integrations } = detail;
   const [drafts, setDrafts] = useState<Record<string, string | null>>({});
 
   const setDraft = (id: string, kind: string | null) =>
@@ -225,60 +209,6 @@ export function SettingsView({
               </CollapsibleSection>
             );
           })}
-        </div>
-      )}
-
-      {section === "llm" && (
-        <div className="flex flex-col gap-6">
-          <div className="flex flex-col gap-2">
-            <div className="flex items-center justify-between">
-              <h2 className="text-sm font-medium tracking-wider text-muted-foreground uppercase">
-                LLM Providers
-              </h2>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => onAddProvider(true)}
-                data-icon="inline-start"
-              >
-                <Plus />
-                Provider
-              </Button>
-            </div>
-            <Separator />
-          </div>
-
-          {llmProviders.length === 0 && !addingProvider && (
-            <p className="text-sm text-muted-foreground">
-              Belum ada provider LLM. Tambahkan minimal satu untuk Planner/Coder/Verifier.
-            </p>
-          )}
-
-          {llmProviders.map((provider) => (
-            <CollapsibleSection
-              key={provider.id + provider.updatedAt}
-              title={`${provider.name}${provider.model ? ` · ${provider.model}` : ""}`}
-              defaultOpen={false}
-            >
-              <LlmProviderForm
-                provider={provider}
-                onSave={(payload) => onSaveLlm(provider.id, payload)}
-                onTest={onTestLlm}
-                onDelete={() => onDeleteLlm(provider.id)}
-              />
-            </CollapsibleSection>
-          ))}
-
-          {addingProvider && (
-            <CollapsibleSection title="Provider baru">
-              <LlmProviderForm
-                onSave={(payload) => onSaveLlm(null, payload)}
-                onTest={onTestLlm}
-                onDelete={async () => onAddProvider(false)}
-                onCancel={() => onAddProvider(false)}
-              />
-            </CollapsibleSection>
-          )}
         </div>
       )}
 

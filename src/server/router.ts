@@ -6,6 +6,9 @@ import {
   CreateDocumentInput,
   DocmostConfig,
   GenerateTicketsInput,
+  GitCheckoutInput,
+  GitCommitInput,
+  GitPathsInput,
   IntegrationInput,
   type IntegrationKind,
   JiraConfig,
@@ -65,6 +68,17 @@ import {
   readLocalDocument,
   updateLocalDocument,
 } from "../fs/documents.ts";
+import {
+  checkGitRepository,
+  checkoutBranch,
+  commit as gitCommit,
+  getDiff as gitDiff,
+  getStatus as gitStatus,
+  listBranches as gitBranches,
+  listCommits as gitLog,
+  stagePaths as gitStage,
+  unstagePaths as gitUnstage,
+} from "../integrations/git.ts";
 import { listMcpTools } from "./mcp.ts";
 import { globalSkillsDir, listSkills, readSkillsSettings, workspaceSkillsDir } from "./skills.ts";
 import { listDirectory, readWorkspaceFile, writeWorkspaceFile } from "../fs/workspace.ts";
@@ -263,14 +277,10 @@ async function getProjectDetail(projectId: string): Promise<Response> {
   const project = await getProject(projectId);
   if (!project) return json({ error: "project_not_found" }, 404);
   const integrations = (await listIntegrations(project.id)).map(serializeIntegration);
-  const llmProviders = (await listLlmProviders(project.id)).map(serializeLlm);
-  return json({ project, integrations, llmProviders });
+  return json({ project, integrations });
 }
 
-async function createLlmHandler(projectId: string, req: Request): Promise<Response> {
-  const project = await getProject(projectId);
-  if (!project) return json({ error: "project_not_found" }, 404);
-
+async function createLlmHandler(req: Request): Promise<Response> {
   const parsed = LlmProviderInput.safeParse(await readJson(req));
   if (!parsed.success) {
     return json({ error: "invalid_input", issues: parsed.error.issues }, 400);
@@ -278,7 +288,6 @@ async function createLlmHandler(projectId: string, req: Request): Promise<Respon
 
   const provider = await createLlmProvider({
     id: crypto.randomUUID(),
-    projectId,
     name: parsed.data.name,
     provider: parsed.data.provider,
     model: parsed.data.model,
@@ -286,19 +295,13 @@ async function createLlmHandler(projectId: string, req: Request): Promise<Respon
     apiKey: parsed.data.apiKey,
     mode: parsed.data.mode,
   });
-  await record("llm.created", { projectId, name: provider.name });
+  await record("llm.created", { name: provider.name });
   return json({ provider: serializeLlm(provider) }, 201);
 }
 
-async function updateLlmHandler(
-  projectId: string,
-  providerId: string,
-  req: Request,
-): Promise<Response> {
+async function updateLlmHandler(providerId: string, req: Request): Promise<Response> {
   const existing = await getLlmProvider(providerId);
-  if (!existing || existing.project_id !== projectId) {
-    return json({ error: "provider_not_found" }, 404);
-  }
+  if (!existing) return json({ error: "provider_not_found" }, 404);
 
   const parsed = LlmProviderInput.safeParse(await readJson(req));
   if (!parsed.success) {
@@ -313,17 +316,15 @@ async function updateLlmHandler(
     apiKey: parsed.data.apiKey,
     mode: parsed.data.mode,
   });
-  await record("llm.saved", { projectId, providerId });
+  await record("llm.saved", { providerId });
   return json({ provider: serializeLlm(provider!) });
 }
 
-async function deleteLlmHandler(projectId: string, providerId: string): Promise<Response> {
+async function deleteLlmHandler(providerId: string): Promise<Response> {
   const existing = await getLlmProvider(providerId);
-  if (!existing || existing.project_id !== projectId) {
-    return json({ error: "provider_not_found" }, 404);
-  }
+  if (!existing) return json({ error: "provider_not_found" }, 404);
   await deleteLlmProvider(providerId);
-  await record("llm.deleted", { projectId, providerId });
+  await record("llm.deleted", { providerId });
   return json({ ok: true });
 }
 
@@ -337,9 +338,7 @@ async function chatHandler(projectId: string, req: Request): Promise<Response> {
   }
 
   let provider = parsed.data.providerId ? await getLlmProvider(parsed.data.providerId) : null;
-  if (!provider || provider.project_id !== projectId) {
-    provider = (await listLlmProviders(projectId))[0] ?? null;
-  }
+  if (!provider) provider = (await listLlmProviders())[0] ?? null;
   if (!provider) return json({ error: "no_provider" }, 400);
 
   const messages: VisibleMessage[] = parsed.data.messages
@@ -655,6 +654,116 @@ async function listMcpToolsHandler(req: Request): Promise<Response> {
   }
 }
 
+async function gitCwd(projectId: string): Promise<string | Response> {
+  const project = await getProject(projectId);
+  if (!project) return json({ error: "project_not_found" }, 404);
+  const workspace = project.workspace_path?.trim();
+  if (!workspace) return json({ error: "Workspace project belum diatur." }, 400);
+  const check = await checkGitRepository(workspace);
+  if (!check.ok) {
+    return json({ error: check.error ?? "Workspace bukan git repository." }, 400);
+  }
+  return check.cwd;
+}
+
+async function gitStatusHandler(projectId: string): Promise<Response> {
+  const cwd = await gitCwd(projectId);
+  if (cwd instanceof Response) return cwd;
+  try {
+    return json({ status: await gitStatus(cwd) });
+  } catch (error) {
+    return json({ error: (error as Error).message }, 400);
+  }
+}
+
+async function gitBranchesHandler(projectId: string): Promise<Response> {
+  const cwd = await gitCwd(projectId);
+  if (cwd instanceof Response) return cwd;
+  try {
+    return json({ branches: await gitBranches(cwd) });
+  } catch (error) {
+    return json({ error: (error as Error).message }, 400);
+  }
+}
+
+async function gitLogHandler(projectId: string, limit: number): Promise<Response> {
+  const cwd = await gitCwd(projectId);
+  if (cwd instanceof Response) return cwd;
+  try {
+    return json({ commits: await gitLog(cwd, Math.min(Math.max(limit, 1), 200)) });
+  } catch (error) {
+    return json({ error: (error as Error).message }, 400);
+  }
+}
+
+async function gitDiffHandler(
+  projectId: string,
+  path: string,
+  staged: boolean,
+): Promise<Response> {
+  const cwd = await gitCwd(projectId);
+  if (cwd instanceof Response) return cwd;
+  if (!path) return json({ error: "path_required" }, 400);
+  try {
+    return json({ diff: await gitDiff(cwd, path, staged) });
+  } catch (error) {
+    return json({ error: (error as Error).message }, 400);
+  }
+}
+
+async function gitPathsHandler(
+  projectId: string,
+  req: Request,
+  action: "stage" | "unstage",
+): Promise<Response> {
+  const cwd = await gitCwd(projectId);
+  if (cwd instanceof Response) return cwd;
+  const parsed = GitPathsInput.safeParse(await readJson(req));
+  if (!parsed.success) {
+    return json({ error: "invalid_input", issues: parsed.error.issues }, 400);
+  }
+  try {
+    if (action === "stage") await gitStage(cwd, parsed.data.paths);
+    else await gitUnstage(cwd, parsed.data.paths);
+    await record(`git.${action}`, { projectId, count: parsed.data.paths.length });
+    return json({ ok: true });
+  } catch (error) {
+    return json({ error: (error as Error).message }, 400);
+  }
+}
+
+async function gitCommitHandler(projectId: string, req: Request): Promise<Response> {
+  const cwd = await gitCwd(projectId);
+  if (cwd instanceof Response) return cwd;
+  const parsed = GitCommitInput.safeParse(await readJson(req));
+  if (!parsed.success) {
+    return json({ error: "invalid_input", issues: parsed.error.issues }, 400);
+  }
+  try {
+    const output = await gitCommit(cwd, parsed.data.message);
+    await record("git.committed", { projectId });
+    return json({ ok: true, output });
+  } catch (error) {
+    return json({ error: (error as Error).message }, 400);
+  }
+}
+
+async function gitCheckoutHandler(projectId: string, req: Request): Promise<Response> {
+  const cwd = await gitCwd(projectId);
+  if (cwd instanceof Response) return cwd;
+  const parsed = GitCheckoutInput.safeParse(await readJson(req));
+  if (!parsed.success) {
+    return json({ error: "invalid_input", issues: parsed.error.issues }, 400);
+  }
+  try {
+    await checkoutBranch(cwd, parsed.data.branch);
+    await record("git.checkout", { projectId, branch: parsed.data.branch });
+    return json({ ok: true });
+  } catch (error) {
+    return json({ error: (error as Error).message }, 400);
+  }
+}
+
 async function terminalHandler(projectId: string, req: Request): Promise<Response> {
   const project = await getProject(projectId);
   if (!project) return json({ error: "project_not_found" }, 404);
@@ -675,10 +784,8 @@ async function generateTicketsHandler(projectId: string, req: Request): Promise<
   }
 
   let provider = parsed.data.providerId ? await getLlmProvider(parsed.data.providerId) : null;
-  if (!provider || provider.project_id !== projectId) {
-    provider = (await listLlmProviders(projectId))[0] ?? null;
-  }
-  if (!provider) return json({ error: "Belum ada provider LLM di project ini." }, 400);
+  if (!provider) provider = (await listLlmProviders())[0] ?? null;
+  if (!provider) return json({ error: "Belum ada provider LLM." }, 400);
 
   try {
     const result = await generateTicketsFromDocument(
@@ -1098,6 +1205,43 @@ export async function handleRequest(req: Request): Promise<Response> {
     if (detail && method === "GET") return await getProjectDetail(detail[1]);
     if (detail && method === "PUT") return await updateProjectHandler(detail[1], req);
 
+    const gitStatus = pathname.match(/^\/api\/projects\/([^/]+)\/git\/status$/);
+    if (gitStatus && method === "GET") return await gitStatusHandler(gitStatus[1]);
+
+    const gitBranches = pathname.match(/^\/api\/projects\/([^/]+)\/git\/branches$/);
+    if (gitBranches && method === "GET") return await gitBranchesHandler(gitBranches[1]);
+
+    const gitLog = pathname.match(/^\/api\/projects\/([^/]+)\/git\/log$/);
+    if (gitLog && method === "GET") {
+      return await gitLogHandler(gitLog[1], Number(url.searchParams.get("limit") ?? 50));
+    }
+
+    const gitDiff = pathname.match(/^\/api\/projects\/([^/]+)\/git\/diff$/);
+    if (gitDiff && method === "GET") {
+      const staged = url.searchParams.get("staged") === "1" ||
+        url.searchParams.get("staged") === "true";
+      return await gitDiffHandler(gitDiff[1], url.searchParams.get("path") ?? "", staged);
+    }
+
+    const gitStage = pathname.match(/^\/api\/projects\/([^/]+)\/git\/(stage|unstage)$/);
+    if (gitStage && method === "POST") {
+      return await gitPathsHandler(
+        gitStage[1],
+        req,
+        gitStage[2] === "stage" ? "stage" : "unstage",
+      );
+    }
+
+    const gitCommitRoute = pathname.match(/^\/api\/projects\/([^/]+)\/git\/commit$/);
+    if (gitCommitRoute && method === "POST") {
+      return await gitCommitHandler(gitCommitRoute[1], req);
+    }
+
+    const gitCheckout = pathname.match(/^\/api\/projects\/([^/]+)\/git\/checkout$/);
+    if (gitCheckout && method === "POST") {
+      return await gitCheckoutHandler(gitCheckout[1], req);
+    }
+
     const terminal = pathname.match(/^\/api\/projects\/([^/]+)\/terminal$/);
     if (terminal && method === "GET") return await terminalHandler(terminal[1], req);
 
@@ -1200,20 +1344,19 @@ export async function handleRequest(req: Request): Promise<Response> {
       return await transitionTicketHandler(ticketTransition[1], ticketTransition[2], req);
     }
 
-    const llmList = pathname.match(/^\/api\/projects\/([^/]+)\/llm$/);
-    if (llmList) {
+    if (pathname === "/api/llm") {
       if (method === "GET") {
-        return json({ providers: (await listLlmProviders(llmList[1])).map(serializeLlm) });
+        return json({ providers: (await listLlmProviders()).map(serializeLlm) });
       }
-      if (method === "POST") return await createLlmHandler(llmList[1], req);
+      if (method === "POST") return await createLlmHandler(req);
     }
 
-    const llmItem = pathname.match(/^\/api\/projects\/([^/]+)\/llm\/([^/]+)$/);
+    const llmItem = pathname.match(/^\/api\/llm\/([^/]+)$/);
     if (llmItem) {
       if (method === "PUT" || method === "POST") {
-        return await updateLlmHandler(llmItem[1], llmItem[2], req);
+        return await updateLlmHandler(llmItem[1], req);
       }
-      if (method === "DELETE") return await deleteLlmHandler(llmItem[1], llmItem[2]);
+      if (method === "DELETE") return await deleteLlmHandler(llmItem[1]);
     }
 
     const chatSessions = pathname.match(/^\/api\/projects\/([^/]+)\/chat\/sessions$/);

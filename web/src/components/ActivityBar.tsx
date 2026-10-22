@@ -1,6 +1,7 @@
 import {
   FileText,
   FolderTree,
+  GitBranch,
   LayoutGrid,
   Settings,
   SlidersHorizontal,
@@ -15,6 +16,7 @@ export type Menu =
   | "workspace"
   | "files"
   | "terminal"
+  | "git"
   | "document"
   | "ticket"
   | "settings"
@@ -31,6 +33,7 @@ const ITEMS: {
   { id: "workspace", label: "Workspace", icon: LayoutGrid },
   { id: "files", label: "Explorer", icon: FolderTree, requiresProject: true, requiresWorkspace: true },
   { id: "terminal", label: "Terminal", icon: SquareTerminal, requiresProject: true },
+  { id: "git", label: "Git", icon: GitBranch, requiresProject: true, requiresWorkspace: true },
   { id: "document", label: "Document", icon: FileText },
   { id: "ticket", label: "Ticket", icon: Ticket },
   { id: "settings", label: "Project Settings", icon: Settings, requiresProject: true },

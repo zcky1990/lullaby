@@ -22,9 +22,10 @@ import {
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { LlmProvidersSettings } from "@/components/LlmProvidersSettings";
 import { McpSettings } from "@/components/McpSettings";
 import { SkillsSettings } from "@/components/SkillsSettings";
-import { api } from "@/lib/api";
+import { api, type LlmProvider, type LlmProviderPayload, type TestResult } from "@/lib/api";
 
 const THEME_OPTIONS: { id: Theme; label: string; icon: typeof Sun }[] = [
   { id: "light", label: "Light", icon: Sun },
@@ -79,9 +80,21 @@ const EDITOR_THEME_OPTIONS: { id: EditorTheme; label: string; icon: typeof Sun }
 export function GlobalSettingsView({
   section,
   projectId,
+  llmProviders,
+  addingProvider,
+  onAddProvider,
+  onTestLlm,
+  onSaveLlm,
+  onDeleteLlm,
 }: {
   section: GlobalSection;
   projectId: string | null;
+  llmProviders: LlmProvider[];
+  addingProvider: boolean;
+  onAddProvider: (value: boolean) => void;
+  onTestLlm: (payload: LlmProviderPayload) => Promise<TestResult>;
+  onSaveLlm: (id: string | null, payload: LlmProviderPayload) => Promise<void>;
+  onDeleteLlm: (id: string) => Promise<void>;
 }) {
   if (section === "appearance") {
     return (
@@ -90,6 +103,18 @@ export function GlobalSettingsView({
         <EditorSettings />
         <IconSettings />
       </div>
+    );
+  }
+  if (section === "llm") {
+    return (
+      <LlmProvidersSettings
+        providers={llmProviders}
+        addingProvider={addingProvider}
+        onAddProvider={onAddProvider}
+        onTestLlm={onTestLlm}
+        onSaveLlm={onSaveLlm}
+        onDeleteLlm={onDeleteLlm}
+      />
     );
   }
   if (section === "mcp") return <McpSettings />;

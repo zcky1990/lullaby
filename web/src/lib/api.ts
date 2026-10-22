@@ -31,7 +31,6 @@ export interface LlmProvider {
 export interface ProjectDetail {
   project: Project;
   integrations: Integration[];
-  llmProviders: LlmProvider[];
 }
 
 export interface TestResult {
@@ -66,6 +65,37 @@ export interface McpServer {
   headers?: Record<string, string>;
   env?: Record<string, string>;
   enabled: boolean;
+}
+
+export interface GitFile {
+  path: string;
+  status: string;
+  staged: boolean;
+  untracked: boolean;
+}
+
+export interface GitStatus {
+  branch: string;
+  ahead: number;
+  behind: number;
+  staged: GitFile[];
+  unstaged: GitFile[];
+  untracked: GitFile[];
+  clean: boolean;
+}
+
+export interface GitBranch {
+  name: string;
+  current: boolean;
+}
+
+export interface GitCommit {
+  hash: string;
+  short: string;
+  subject: string;
+  author: string;
+  date: string;
+  refs: string;
 }
 
 export interface McpTool {
@@ -437,15 +467,13 @@ export const api = {
     ),
   testIntegration: (payload: IntegrationPayload) =>
     request<{ result: TestResult }>("/api/integrations/test", jsonInit("POST", payload)),
-  createLlm: (projectId: string, payload: LlmProviderPayload) =>
-    request<{ provider: LlmProvider }>(`/api/projects/${projectId}/llm`, jsonInit("POST", payload)),
-  updateLlm: (projectId: string, id: string, payload: LlmProviderPayload) =>
-    request<{ provider: LlmProvider }>(
-      `/api/projects/${projectId}/llm/${id}`,
-      jsonInit("PUT", payload),
-    ),
-  deleteLlm: (projectId: string, id: string) =>
-    request<{ ok: boolean }>(`/api/projects/${projectId}/llm/${id}`, { method: "DELETE" }),
+  listLlm: () => request<{ providers: LlmProvider[] }>("/api/llm"),
+  createLlm: (payload: LlmProviderPayload) =>
+    request<{ provider: LlmProvider }>("/api/llm", jsonInit("POST", payload)),
+  updateLlm: (id: string, payload: LlmProviderPayload) =>
+    request<{ provider: LlmProvider }>(`/api/llm/${id}`, jsonInit("PUT", payload)),
+  deleteLlm: (id: string) =>
+    request<{ ok: boolean }>(`/api/llm/${id}`, { method: "DELETE" }),
   chat: (
     projectId: string,
     payload: {
@@ -481,6 +509,36 @@ export const api = {
     ),
   saveSkillsSettings: (payload: { enabled: boolean; disabled: string[] }) =>
     request<{ ok: boolean }>("/api/settings/skills", jsonInit("PUT", payload)),
+  gitStatus: (projectId: string) =>
+    request<{ status: GitStatus }>(`/api/projects/${projectId}/git/status`),
+  gitBranches: (projectId: string) =>
+    request<{ branches: GitBranch[] }>(`/api/projects/${projectId}/git/branches`),
+  gitLog: (projectId: string, limit = 50) =>
+    request<{ commits: GitCommit[] }>(`/api/projects/${projectId}/git/log?limit=${limit}`),
+  gitDiff: (projectId: string, path: string, staged: boolean) =>
+    request<{ diff: string }>(
+      `/api/projects/${projectId}/git/diff?path=${encodeURIComponent(path)}&staged=${staged ? "1" : "0"}`,
+    ),
+  gitStage: (projectId: string, paths: string[]) =>
+    request<{ ok: boolean }>(
+      `/api/projects/${projectId}/git/stage`,
+      jsonInit("POST", { paths }),
+    ),
+  gitUnstage: (projectId: string, paths: string[]) =>
+    request<{ ok: boolean }>(
+      `/api/projects/${projectId}/git/unstage`,
+      jsonInit("POST", { paths }),
+    ),
+  gitCommit: (projectId: string, message: string) =>
+    request<{ ok: boolean; output: string }>(
+      `/api/projects/${projectId}/git/commit`,
+      jsonInit("POST", { message }),
+    ),
+  gitCheckout: (projectId: string, branch: string) =>
+    request<{ ok: boolean }>(
+      `/api/projects/${projectId}/git/checkout`,
+      jsonInit("POST", { branch }),
+    ),
   getMcpSettings: () => request<McpSettingsResponse>("/api/settings/mcp"),
   saveMcpSettings: (payload: {
     servers: McpServer[];

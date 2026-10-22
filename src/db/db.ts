@@ -34,7 +34,6 @@ export interface EventRow {
 
 export interface LlmProviderRow {
   id: string;
-  project_id: string;
   name: string;
   provider: string;
   model: string | null;
@@ -84,7 +83,6 @@ CREATE TABLE IF NOT EXISTS events (
 
 CREATE TABLE IF NOT EXISTS llm_providers (
   id         TEXT PRIMARY KEY,
-  project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
   name       TEXT NOT NULL,
   provider   TEXT NOT NULL DEFAULT 'openai',
   model      TEXT,
@@ -161,6 +159,32 @@ function migrate(db: DatabaseSync): void {
   ensureColumn(db, "llm_providers", "api_key", "api_key TEXT");
   ensureColumn(db, "chat_messages", "changes", "changes TEXT");
 
+  const llmInfo = db.prepare("PRAGMA table_info(llm_providers)").all() as Array<{ name: string }>;
+  if (llmInfo.some((row) => row.name === "project_id")) {
+    db.exec("PRAGMA foreign_keys = OFF");
+    db.exec(`
+      CREATE TABLE llm_providers_global (
+        id         TEXT PRIMARY KEY,
+        name       TEXT NOT NULL,
+        provider   TEXT NOT NULL DEFAULT 'openai',
+        model      TEXT,
+        base_url   TEXT,
+        api_key    TEXT,
+        mode       TEXT NOT NULL DEFAULT 'api',
+        config     TEXT NOT NULL DEFAULT '{}',
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+      INSERT OR IGNORE INTO llm_providers_global
+        (id, name, provider, model, base_url, api_key, mode, config, created_at, updated_at)
+      SELECT id, name, provider, model, base_url, api_key, mode, config, created_at, updated_at
+      FROM llm_providers;
+      DROP TABLE llm_providers;
+      ALTER TABLE llm_providers_global RENAME TO llm_providers;
+      PRAGMA foreign_keys = ON;
+    `);
+  }
+
   const legacy = db
     .prepare(
       "SELECT id, project_id, mode, config, secret_ref FROM project_integrations WHERE kind = 'llm'",
@@ -182,11 +206,10 @@ function migrate(db: DatabaseSync): void {
     }
     db.prepare(
       `INSERT OR IGNORE INTO llm_providers
-        (id, project_id, name, provider, model, base_url, mode, config)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        (id, name, provider, model, base_url, mode, config)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
     ).run(
       row.id,
-      row.project_id,
       "Default",
       typeof cfg.provider === "string" ? cfg.provider : "openai",
       typeof cfg.model === "string" ? cfg.model : null,
@@ -361,12 +384,10 @@ export async function pruneEvents(keep = 1000): Promise<void> {
   ).run(keep);
 }
 
-export async function listLlmProviders(projectId: string): Promise<LlmProviderRow[]> {
+export async function listLlmProviders(): Promise<LlmProviderRow[]> {
   const db = await getDb();
   return rows<LlmProviderRow>(
-    db.prepare("SELECT * FROM llm_providers WHERE project_id = ? ORDER BY created_at").all(
-      projectId,
-    ),
+    db.prepare("SELECT * FROM llm_providers ORDER BY created_at").all(),
   );
 }
 
@@ -378,7 +399,6 @@ export async function getLlmProvider(id: string): Promise<LlmProviderRow | null>
 
 export interface LlmProviderInputRow {
   id: string;
-  projectId: string;
   name: string;
   provider: string;
   model?: string;
@@ -391,11 +411,10 @@ export async function createLlmProvider(input: LlmProviderInputRow): Promise<Llm
   const db = await getDb();
   db.prepare(
     `INSERT INTO llm_providers
-       (id, project_id, name, provider, model, base_url, api_key, mode, config)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, '{}')`,
+       (id, name, provider, model, base_url, api_key, mode, config)
+     VALUES (?, ?, ?, ?, ?, ?, ?, '{}')`,
   ).run(
     input.id,
-    input.projectId,
     input.name,
     input.provider,
     input.model ?? null,
@@ -408,7 +427,7 @@ export async function createLlmProvider(input: LlmProviderInputRow): Promise<Llm
 
 export async function updateLlmProvider(
   id: string,
-  input: Omit<LlmProviderInputRow, "id" | "projectId">,
+  input: Omit<LlmProviderInputRow, "id">,
 ): Promise<LlmProviderRow | null> {
   const db = await getDb();
   db.prepare(

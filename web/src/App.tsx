@@ -23,6 +23,8 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty";
 import { FileTreePanel } from "@/components/FileTreePanel";
+import { GitPanel } from "@/components/GitPanel";
+import { GitTab } from "@/components/GitTab";
 import { GlobalSettingsPanel, type GlobalSection } from "@/components/GlobalSettingsPanel";
 import { GlobalSettingsView } from "@/components/GlobalSettingsView";
 import { SettingsPanel, type SettingsSection } from "@/components/SettingsPanel";
@@ -58,7 +60,11 @@ import {
   api,
   type DocSummary,
   type CreatedTicket,
+  type GitBranch,
+  type GitCommit,
+  type GitStatus,
   type IntegrationPayload,
+  type LlmProvider,
   type LlmProviderPayload,
   type LocalDocSummary,
   type PendingFileChange,
@@ -99,6 +105,7 @@ function readPanelWidth(): number {
 const PANEL_FOR_KIND: Record<TabKind, Menu> = {
   workspace: "workspace",
   ticket: "ticket",
+  git: "git",
   settings: "settings",
   global: "global",
   review: "files",
@@ -115,6 +122,7 @@ export default function App() {
   const [detail, setDetail] = useState<ProjectDetail | null>(null);
   const [activity, setActivity] = useState<ActivityEvent[]>([]);
   const [addingProvider, setAddingProvider] = useState(false);
+  const [llmProviders, setLlmProviders] = useState<LlmProvider[]>([]);
 
   const [tabs, setTabs] = useState<EditorTab[]>([]);
   const [activeTabId, setActiveTabId] = useState<string | null>(null);
@@ -139,6 +147,11 @@ export default function App() {
   const [createTicketOpen, setCreateTicketOpen] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
   const [terminalOpen, setTerminalOpen] = useState(false);
+  const [gitStatusData, setGitStatusData] = useState<GitStatus | null>(null);
+  const [gitBranchList, setGitBranchList] = useState<GitBranch[]>([]);
+  const [gitCommits, setGitCommits] = useState<GitCommit[]>([]);
+  const [gitLoading, setGitLoading] = useState(false);
+  const [gitError, setGitError] = useState<string | undefined>();
   const [review, setReview] = useState<{
     runId: string;
     changes: PendingFileChange[];
@@ -175,6 +188,15 @@ export default function App() {
       const saved = stored ? data.projects.find((project) => project.id === stored) : undefined;
       return saved?.id ?? data.projects[0]?.id ?? null;
     });
+  }, []);
+
+  const loadLlmProviders = useCallback(async () => {
+    try {
+      const result = await api.listLlm();
+      setLlmProviders(result.providers);
+    } catch (error) {
+      console.error(error);
+    }
   }, []);
 
   const loadDetail = useCallback(async (id: string) => {
@@ -214,6 +236,64 @@ export default function App() {
       setLocalDocsLoading(false);
     }
   }, []);
+
+  const loadGit = useCallback(async (id: string) => {
+    setGitLoading(true);
+    setGitError(undefined);
+    try {
+      const [status, branches, log] = await Promise.all([
+        api.gitStatus(id),
+        api.gitBranches(id),
+        api.gitLog(id),
+      ]);
+      setGitStatusData(status.status);
+      setGitBranchList(branches.branches);
+      setGitCommits(log.commits);
+    } catch (error) {
+      setGitError((error as Error).message);
+      setGitStatusData(null);
+      setGitBranchList([]);
+      setGitCommits([]);
+    } finally {
+      setGitLoading(false);
+    }
+  }, []);
+
+  const stageGit = useCallback(
+    async (paths: string[]) => {
+      if (!currentId) return;
+      await api.gitStage(currentId, paths);
+      await loadGit(currentId);
+    },
+    [currentId, loadGit],
+  );
+
+  const unstageGit = useCallback(
+    async (paths: string[]) => {
+      if (!currentId) return;
+      await api.gitUnstage(currentId, paths);
+      await loadGit(currentId);
+    },
+    [currentId, loadGit],
+  );
+
+  const commitGit = useCallback(
+    async (message: string) => {
+      if (!currentId) return;
+      await api.gitCommit(currentId, message);
+      await loadGit(currentId);
+    },
+    [currentId, loadGit],
+  );
+
+  const checkoutGit = useCallback(
+    async (branch: string) => {
+      if (!currentId) return;
+      await api.gitCheckout(currentId, branch);
+      await loadGit(currentId);
+    },
+    [currentId, loadGit],
+  );
 
   const loadTickets = useCallback(async (id: string) => {
     setTicketsLoading(true);
@@ -538,7 +618,8 @@ export default function App() {
 
   useEffect(() => {
     loadProjects().catch(console.error);
-  }, [loadProjects]);
+    loadLlmProviders().catch(console.error);
+  }, [loadProjects, loadLlmProviders]);
 
   useEffect(() => {
     if (!currentId) return;
@@ -560,6 +641,10 @@ export default function App() {
     setLocalDocs([]);
     setLocalDocsConfigured(false);
     setLocalDocsError(undefined);
+    setGitStatusData(null);
+    setGitBranchList([]);
+    setGitCommits([]);
+    setGitError(undefined);
     const workspaceTab: EditorTab = {
       id: `workspace:${currentId}`,
       kind: "workspace",
@@ -578,7 +663,8 @@ export default function App() {
       loadLocalDocuments(currentId).catch(console.error);
     }
     if (menu === "ticket") loadTickets(currentId).catch(console.error);
-  }, [menu, currentId, loadDocuments, loadLocalDocuments, loadTickets]);
+    if (menu === "git") loadGit(currentId).catch(console.error);
+  }, [menu, currentId, loadDocuments, loadLocalDocuments, loadTickets, loadGit]);
 
   useEffect(() => {
     if (menu === "settings" && !currentId) setMenu("workspace");
@@ -606,6 +692,7 @@ export default function App() {
       setTerminalOpen((value) => !value);
       return;
     }
+    else if (next === "git") openSingleton("git", "Git");
     else if (next === "settings") openSingleton("settings", "Project Settings");
     else setMenu(next);
   };
@@ -677,17 +764,15 @@ export default function App() {
     ).result;
 
   const saveLlm = async (id: string | null, payload: LlmProviderPayload) => {
-    if (!currentId) return;
-    if (id) await api.updateLlm(currentId, id, payload);
-    else await api.createLlm(currentId, payload);
+    if (id) await api.updateLlm(id, payload);
+    else await api.createLlm(payload);
     setAddingProvider(false);
-    await loadDetail(currentId);
+    await loadLlmProviders();
   };
 
   const deleteLlm = async (id: string) => {
-    if (!currentId) return;
-    await api.deleteLlm(currentId, id);
-    await loadDetail(currentId);
+    await api.deleteLlm(id);
+    await loadLlmProviders();
   };
 
   const moveTicket = async (key: string, _from: string, to: string) => {
@@ -752,20 +837,24 @@ export default function App() {
             section={settingsSection}
             detail={detail}
             activity={activity}
-            addingProvider={addingProvider}
-            onAddProvider={setAddingProvider}
             onSaveIntegration={saveIntegration}
             onTestIntegration={testIntegration}
-            onTestLlm={testLlm}
-            onSaveLlm={saveLlm}
-            onDeleteLlm={deleteLlm}
             onUpdateWorkspace={updateWorkspace}
           />
         );
       case "global":
         return (
           <div className="h-full overflow-y-auto p-6">
-            <GlobalSettingsView section={globalSection} projectId={currentId} />
+            <GlobalSettingsView
+              section={globalSection}
+              projectId={currentId}
+              llmProviders={llmProviders}
+              addingProvider={addingProvider}
+              onAddProvider={setAddingProvider}
+              onTestLlm={testLlm}
+              onSaveLlm={saveLlm}
+              onDeleteLlm={deleteLlm}
+            />
           </div>
         );
       case "document":
@@ -778,6 +867,20 @@ export default function App() {
             onSyncLocal={syncLocalDocument}
             onGenerateTickets={generateTicketsFromDocument}
             onOpenTickets={() => openSingleton("ticket", "Ticket Board")}
+          />
+        );
+      case "git":
+        return (
+          <GitTab
+            projectId={currentId}
+            status={gitStatusData}
+            commits={gitCommits}
+            loading={gitLoading}
+            error={gitError}
+            onRefresh={() => currentId && loadGit(currentId)}
+            onStage={stageGit}
+            onUnstage={unstageGit}
+            onCommit={commitGit}
           />
         );
       case "review":
@@ -815,6 +918,7 @@ export default function App() {
         menu === "document" ||
         menu === "settings" ||
         menu === "ticket" ||
+        menu === "git" ||
         menu === "global") && (
         <aside
           style={{ width: panelWidth }}
@@ -840,6 +944,16 @@ export default function App() {
           )}
           {menu === "global" && (
             <GlobalSettingsPanel section={globalSection} onSelect={setGlobalSection} />
+          )}
+          {menu === "git" && (
+            <GitPanel
+              status={gitStatusData}
+              branches={gitBranchList}
+              loading={gitLoading}
+              error={gitError}
+              onRefresh={() => currentId && loadGit(currentId)}
+              onCheckout={(branch) => void checkoutGit(branch)}
+            />
           )}
           {menu === "ticket" && (
             <TicketPanel
@@ -911,6 +1025,7 @@ export default function App() {
             "min-h-0 flex-1",
             activeTab?.kind === "file" ||
               activeTab?.kind === "review" ||
+              activeTab?.kind === "git" ||
               activeTab?.kind === "document" ||
               activeTab?.kind === "settings" ||
               activeTab?.kind === "global"
@@ -929,7 +1044,7 @@ export default function App() {
 
       <ChatSidebar
         projectId={currentId}
-        providers={detail?.llmProviders ?? []}
+        providers={llmProviders}
         onClose={() => setChatOpen(false)}
         onTicketsChanged={() => currentId && loadTickets(currentId)}
         hidden={!chatOpen}
@@ -941,6 +1056,7 @@ export default function App() {
         projectName={detail?.project.name}
         workspacePath={detail?.project.workspace_path}
         activeTitle={activeTab?.title}
+        branch={gitStatusData?.branch}
       />
 
       <TicketDetailDialog
@@ -983,7 +1099,7 @@ function WorkspaceOverview({
   detail: ProjectDetail;
   onOpenSettings: () => void;
 }) {
-  const { project, integrations, llmProviders } = detail;
+  const { project, integrations } = detail;
   return (
     <div className="flex flex-col gap-6">
       <div>
@@ -993,9 +1109,8 @@ function WorkspaceOverview({
         </p>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2">
         <StatCard label="Integrations" value={integrations.length} />
-        <StatCard label="LLM Providers" value={llmProviders.length} />
         <StatCard label="Workspace" value={project.workspace_path ? 1 : 0} />
       </div>
 
@@ -1365,25 +1480,15 @@ function SettingsTab({
   section,
   detail,
   activity,
-  addingProvider,
-  onAddProvider,
   onSaveIntegration,
   onTestIntegration,
-  onTestLlm,
-  onSaveLlm,
-  onDeleteLlm,
   onUpdateWorkspace,
 }: {
   section: SettingsSection;
   detail: ProjectDetail | null;
   activity: ActivityEvent[];
-  addingProvider: boolean;
-  onAddProvider: (value: boolean) => void;
   onSaveIntegration: (payload: IntegrationPayload) => Promise<void>;
   onTestIntegration: (payload: IntegrationPayload) => Promise<TestResult>;
-  onTestLlm: (payload: LlmProviderPayload) => Promise<TestResult>;
-  onSaveLlm: (id: string | null, payload: LlmProviderPayload) => Promise<void>;
-  onDeleteLlm: (id: string) => Promise<void>;
   onUpdateWorkspace: (path: string) => Promise<void>;
 }) {
   if (!detail) return <Empty text="Belum ada project." />;
@@ -1393,13 +1498,8 @@ function SettingsTab({
         detail={detail}
         section={section}
         activity={activity}
-        addingProvider={addingProvider}
-        onAddProvider={onAddProvider}
         onSaveIntegration={onSaveIntegration}
         onTestIntegration={onTestIntegration}
-        onTestLlm={onTestLlm}
-        onSaveLlm={onSaveLlm}
-        onDeleteLlm={onDeleteLlm}
         onUpdateWorkspace={onUpdateWorkspace}
       />
     </div>

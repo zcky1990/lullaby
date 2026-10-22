@@ -51,12 +51,21 @@ finishing a change.
   names). Chat injects the skill list into the system prompt and exposes a read-only `use_skill`
   tool (progressive disclosure; allowed in Plan mode). Enabled state lives in `app_settings`
   (`skills_enabled`, `skills_disabled`); UI is Global Settings → Skills.
+- **Git**: `src/integrations/git.ts` runs the `git` CLI inside `projects.workspace_path` (status,
+  branches, log, diff, stage/unstage, commit, checkout with `--` path guards). UI is a
+  SourceTree-like two-pane view: `GitPanel` (branches/refresh) in the aside and `GitTab`
+  (Changes/History) in the tab; routes live under `/api/projects/:id/git/*`. Expects a git
+  repository; returns a clear error otherwise.
 - **Terminal**: `src/server/terminal.ts` upgrades `/api/projects/:id/terminal` to a WebSocket and
   runs an interactive shell in the project workspace via `script` (PTY). The Terminal activity item
   toggles a VS Code-like **bottom panel** (`TerminalPanel`) with multiple `TerminalSession`
   instances (xterm.js + fit addon, termcn-inspired styling); sessions stay mounted while the panel
   is hidden, and the panel height persists. WebSocket auth uses the same session cookie as the HTTP
   API.
+- **LLM providers are global**: `llm_providers` has no `project_id` (existing per-project rows are
+  migrated into the global table at startup). Project Settings no longer manages them; Global
+  Settings → LLM Providers does, via `GET/POST /api/llm` and `PUT/DELETE /api/llm/:id`. Chat and
+  `generateTicketsFromDocument` resolve providers from the global list.
 - **MCP**: global server config (`McpSettings`) is stored in `app_settings` (`mcp_servers` JSON;
   stdio command/args/env or http url/headers) plus `mcp_enabled` and `mcp_disabled_tools`.
   `POST /api/settings/mcp/tools` connects with `initialize` + `tools/list` (`src/server/mcp.ts`,

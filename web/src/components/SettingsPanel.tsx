@@ -1,13 +1,12 @@
-import { Cpu, FolderCog, type LucideIcon, Plug, ScrollText } from "lucide-react";
+import { FolderCog, type LucideIcon, Plug, ScrollText } from "lucide-react";
 import { PanelHeader } from "@/components/PanelHeader";
 import { cn } from "@/lib/utils";
 
-export type SettingsSection = "workspace" | "integrations" | "llm" | "activity";
+export type SettingsSection = "workspace" | "integrations" | "activity";
 
 const SECTIONS: { id: SettingsSection; label: string; icon: LucideIcon }[] = [
   { id: "workspace", label: "Workspace", icon: FolderCog },
   { id: "integrations", label: "Integrations", icon: Plug },
-  { id: "llm", label: "LLM Providers", icon: Cpu },
   { id: "activity", label: "Activity", icon: ScrollText },
 ];
 

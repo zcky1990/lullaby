@@ -1,6 +1,7 @@
 import {
   File as FileIcon,
   FileText,
+  GitBranch,
   GitCompare,
   LayoutGrid,
   Settings,
@@ -17,7 +18,8 @@ export type TabKind =
   | "global"
   | "document"
   | "file"
-  | "review";
+  | "review"
+  | "git";
 
 export interface EditorTab {
   id: string;
@@ -44,6 +46,7 @@ const ICONS: Record<TabKind, typeof FileIcon> = {
   document: FileText,
   file: FileIcon,
   review: GitCompare,
+  git: GitBranch,
 };
 
 interface Props {

@@ -63,8 +63,8 @@ membuka **panel bawah** ala VS Code (xterm.js, cwd = workspace project).
 | **Terminal**         | ada project             | terminal interaktif (**xterm.js**) dengan shell di folder workspace; tampilan mengikuti gaya **termcn** (header + status koneksi)                                              |
 | **Document**         | selalu                  | tree halaman Docmost (collapsible, lazy children, **+** tambah) + render **markdown** + **Edit** (judul/isi via Monaco)                                                        |
 | **Ticket**           | selalu                  | **Kanban** tiket lokal + Jira; **sidebar** berisi **Tiket baru** (lokal), **filter assignee**, dan **Refresh**; klik card → detail (edit/hapus/sync); drag = update/transition |
-| **Project Settings** | ada project             | Workspace, Integrations (Document/Ticket/Code, `+` pilih tipe), LLM Providers — form **collapsible**                                                                           |
-| **Global Settings**  | selalu                  | satu halaman: **Appearance & Editor** (tema/font app, tema/font/ukuran Monaco, ukuran & ketebalan ikon) · MCP · About                                                          |
+| **Project Settings** | ada project             | Workspace, Integrations (Document/Ticket/Code, `+` pilih tipe), Activity — form **collapsible**                                                                                |
+| **Global Settings**  | selalu                  | satu halaman: **Appearance & Editor** · **LLM Providers** (global) · MCP · Skills · About                                                                                      |
 
 **Chat LLM:** tombol **Chat** di header membuka sidebar kanan. Chat bisa memakai **tools** untuk
 membaca (`list_files`, `read_file`) dan **menulis** (`write_file`) file di folder workspace project
@@ -143,8 +143,8 @@ Document/**Project Settings**/**Ticket**/**Global Settings** memakai **panel kir
 | `POST /api/projects/:id/local-tickets`                     | buat tiket **lokal** (belum di Jira)                    |
 | `GET/PATCH/DELETE /api/projects/:id/local-tickets/:id`     | detail / ubah (termasuk status) / hapus tiket lokal     |
 | `POST /api/projects/:id/local-tickets/:id/sync`            | sync manual tiket lokal → Jira (buat issue)             |
-| `GET /api/projects/:id/llm` · `POST /api/projects/:id/llm` | list / tambah provider LLM                              |
-| `PUT /api/projects/:id/llm/:providerId` · `DELETE ...`     | ubah / hapus provider LLM                               |
+| `GET /api/llm` · `POST /api/llm`                           | list / tambah provider LLM **global**                   |
+| `PUT /api/llm/:providerId` · `DELETE /api/llm/:providerId` | ubah / hapus provider LLM global                        |
 | `POST /api/projects/:id/chat`                              | chat LLM (agent + tools file workspace)                 |
 | `POST /api/chat/approve`                                   | setujui/tolak aksi tulis (once/always/deny)             |
 | `GET /api/projects/:id/chat/sessions`                      | daftar sesi chat                                        |
@@ -159,7 +159,7 @@ Document/**Project Settings**/**Ticket**/**Global Settings** memakai **panel kir
 | ---------------------- | ---------------------------------------------------------------------------------------------------------- |
 | `projects`             | `name`, `workspace_path`, target (`docmost_space_id`, `jira_project_key`, `github_repo`)                   |
 | `project_integrations` | per `(project, kind)`: `mode`, `config` (JSON, termasuk token)                                             |
-| `llm_providers`        | banyak per project: `name`, `provider`, `model`, `base_url`, `api_key`, `mode`                             |
+| `llm_providers`        | provider LLM **global**: `name`, `provider`, `model`, `base_url`, `api_key`, `mode`                        |
 | `chat_sessions`        | sesi chat per project: `title`, `created_at`, `updated_at`                                                 |
 | `chat_messages`        | pesan per sesi: `role` (user/assistant), `content`, `changes` (JSON diff), `created_at`                    |
 | `local_tickets`        | tiket lokal: `title`, `description`, `status`, `priority`, `type`, `jira_key`, `sync_status`, `sync_error` |
@@ -208,6 +208,10 @@ Fondasi (F0) — yang sudah jalan:
 - **Explorer**: file tree folder workspace + editor kode **Monaco** yang **bisa diedit** (indikator
   dirty di tab/header, tombol **Simpan** atau `Cmd/Ctrl+S`; file ditulis lewat
   `PUT /api/projects/:id/files/content` dengan guard path workspace).
+- **Git**: menu ala **SourceTree** dengan panel kiri berisi branch (checkout) + status; tab utama
+  punya **Changes** (staged/unstaged/untracked, stage/unstage, klik file untuk diff, commit
+  message + Commit) dan **History** (log commit dengan hash/subject/author/refs). Backend
+  menjalankan `git` CLI di workspace (status/branches/log/diff/stage/unstage/commit/checkout).
 - **Terminal**: panel bawah ala VS Code (toggle dari activity bar) dengan **beberapa instance**
   terminal (tab + tombol **+**), masing-masing xterm.js yang menjalankan shell di workspace project
   via WebSocket + PTY (`script`). Instance tetap hidup saat panel disembunyikan; tinggi panel bisa
@@ -229,13 +233,14 @@ Fondasi (F0) — yang sudah jalan:
   (yang sudah synced tidak diduplikasi). AI punya tool `create_ticket` yang selalu membuat tiket
   **lokal** (tidak langsung POST ke Jira).
 - **Project Settings**: layout **section** (bukan card) dengan tombol `+` pilih tipe integrasi
-  (Document/Ticket/Code), LLM Providers, Workspace, Activity.
-- **Global Settings**: **Appearance & Editor** (tema app + tema Monaco dalam satu section) · **MCP**
-  · About. MCP ditambah/diedit lewat **editor JSON** (format `mcpServers`, seperti `mcp.json`
-  Cursor) untuk server global stdio (command/args/env) atau http (url/headers), aktif/nonaktif;
-  disimpan di `app_settings` (SQLite).
+  (Document/Ticket/Code), Workspace, Activity.
+- **Global Settings**: **Appearance & Editor** · **LLM Providers** (global, dipakai semua project) ·
+  **MCP** · **Skills** · About. MCP ditambah/diedit lewat **editor JSON** (format `mcpServers`,
+  seperti `mcp.json` Cursor) untuk server global stdio (command/args/env) atau http (url/headers),
+  aktif/nonaktif; disimpan di `app_settings` (SQLite).
 - Integrasi Docmost/Jira/GitHub/LLM: simpan config, health-check, list document/ticket.
-- Multi-provider LLM per project; live activity via SSE.
+- Multi-provider LLM **global** (dipakai semua project untuk chat & generate ticket); live activity
+  via SSE.
 
 **Belum termasuk:** eksekusi tool MCP di chat (discovery & toggle sudah ada), generate tiket AI dari
 PRD, bulk-sync/update Jira, workflow engine, sandbox coding loop, MCP transport (mode `mcp`

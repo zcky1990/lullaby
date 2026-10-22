@@ -4,15 +4,16 @@ interface Props {
   projectName?: string;
   workspacePath?: string | null;
   activeTitle?: string;
+  branch?: string;
 }
 
-export function StatusBar({ projectName, workspacePath, activeTitle }: Props) {
+export function StatusBar({ projectName, workspacePath, activeTitle, branch }: Props) {
   return (
     <footer className="flex h-6 shrink-0 items-center justify-between gap-4 bg-[var(--statusbar)] px-3 text-[11px] text-[var(--statusbar-foreground)]">
       <div className="flex min-w-0 items-center gap-3">
         <span className="flex items-center gap-1">
           <GitBranch className="size-3.5" />
-          main
+          {branch || "main"}
         </span>
         <span className="truncate opacity-90">{projectName ?? "No project"}</span>
         {workspacePath ? <span className="truncate opacity-75">{workspacePath}</span> : null}

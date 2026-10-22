@@ -1,11 +1,12 @@
-import { Info, type LucideIcon, Palette, Server, Sparkles } from "lucide-react";
+import { Cpu, Info, type LucideIcon, Palette, Server, Sparkles } from "lucide-react";
 import { PanelHeader } from "@/components/PanelHeader";
 import { cn } from "@/lib/utils";
 
-export type GlobalSection = "appearance" | "mcp" | "skills" | "about";
+export type GlobalSection = "appearance" | "llm" | "mcp" | "skills" | "about";
 
 const SECTIONS: { id: GlobalSection; label: string; icon: LucideIcon }[] = [
   { id: "appearance", label: "Appearance & Editor", icon: Palette },
+  { id: "llm", label: "LLM Providers", icon: Cpu },
   { id: "mcp", label: "MCP", icon: Server },
   { id: "skills", label: "Skills", icon: Sparkles },
   { id: "about", label: "About", icon: Info },

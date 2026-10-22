@@ -94,6 +94,18 @@ export const ChatInput = z.object({
 });
 export type ChatInput = z.infer<typeof ChatInput>;
 
+export const GitPathsInput = z.object({
+  paths: z.array(z.string().trim().min(1).max(1000)).min(1).max(200),
+});
+
+export const GitCommitInput = z.object({
+  message: z.string().trim().min(1).max(2000),
+});
+
+export const GitCheckoutInput = z.object({
+  branch: z.string().trim().min(1).max(200),
+});
+
 export const UpdateFileInput = z.object({
   path: z.string().trim().min(1).max(1000),
   content: z.string().max(2_000_000),
