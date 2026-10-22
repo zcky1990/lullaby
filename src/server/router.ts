@@ -88,6 +88,7 @@ import { publish } from "./bus.ts";
 import { APP_TOKEN_COOKIE, APP_TOKEN_HEADER, appToken } from "./session.ts";
 import { sse } from "./sse.ts";
 import { serveAsset } from "./static.ts";
+import { handleTerminal } from "./terminal.ts";
 
 const VERSION = "0.1.0";
 const MAX_BODY_BYTES = 26_000_000;
@@ -654,6 +655,16 @@ async function listMcpToolsHandler(req: Request): Promise<Response> {
   }
 }
 
+async function terminalHandler(projectId: string, req: Request): Promise<Response> {
+  const project = await getProject(projectId);
+  if (!project) return json({ error: "project_not_found" }, 404);
+  try {
+    return handleTerminal(req, project.workspace_path ?? null);
+  } catch (error) {
+    return json({ error: (error as Error).message }, 400);
+  }
+}
+
 async function generateTicketsHandler(projectId: string, req: Request): Promise<Response> {
   const project = await getProject(projectId);
   if (!project) return json({ error: "project_not_found" }, 404);
@@ -1086,6 +1097,9 @@ export async function handleRequest(req: Request): Promise<Response> {
     const detail = pathname.match(/^\/api\/projects\/([^/]+)$/);
     if (detail && method === "GET") return await getProjectDetail(detail[1]);
     if (detail && method === "PUT") return await updateProjectHandler(detail[1], req);
+
+    const terminal = pathname.match(/^\/api\/projects\/([^/]+)\/terminal$/);
+    if (terminal && method === "GET") return await terminalHandler(terminal[1], req);
 
     const files = pathname.match(/^\/api\/projects\/([^/]+)\/files$/);
     if (files && method === "GET") {

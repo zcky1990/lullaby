@@ -29,6 +29,7 @@ import { SettingsPanel, type SettingsSection } from "@/components/SettingsPanel"
 import { SettingsView } from "@/components/SettingsView";
 import { ReviewTab } from "@/components/ReviewTab";
 import { StatusBar } from "@/components/StatusBar";
+import { TerminalPanel } from "@/components/TerminalPanel";
 import {
   Select,
   SelectContent,
@@ -136,6 +137,7 @@ export default function App() {
   const [detailOpen, setDetailOpen] = useState(false);
   const [createTicketOpen, setCreateTicketOpen] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
+  const [terminalOpen, setTerminalOpen] = useState(false);
   const [review, setReview] = useState<{
     runId: string;
     changes: PendingFileChange[];
@@ -589,6 +591,10 @@ export default function App() {
     if (next === "global") openSingleton("global", "Global Settings");
     else if (next === "workspace") openSingleton("workspace", "Workspace");
     else if (next === "ticket") openSingleton("ticket", "Ticket Board");
+    else if (next === "terminal") {
+      setTerminalOpen((value) => !value);
+      return;
+    }
     else if (next === "settings") openSingleton("settings", "Project Settings");
     else setMenu(next);
   };
@@ -789,6 +795,7 @@ export default function App() {
         active={menu}
         hasProject={!!currentId}
         hasWorkspace={hasWorkspace}
+        terminalOpen={terminalOpen}
         onChange={onMenuChange}
       />
 
@@ -902,6 +909,11 @@ export default function App() {
         >
           {activeTab ? renderTab(activeTab) : <Empty text="Buka menu dari activity bar di kiri." />}
         </div>
+        <TerminalPanel
+          projectId={currentId}
+          open={terminalOpen}
+          onClose={() => setTerminalOpen(false)}
+        />
       </main>
 
       <ChatSidebar

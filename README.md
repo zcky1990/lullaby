@@ -52,13 +52,15 @@ setiap kali UI berubah. Task `dev`/`desktop`/`start` sudah menjalankannya otomat
 ## Menu aplikasi
 
 Shell ala VSCode: **activity bar** (kiri, ikon 48px dengan indikator aktif) + **panel** terpisah
-(Workspace/Explorer/Document) + **status bar** biru di bawah (branch/project/file/encoding) + **area
-konten bertab**. Memilih file/dokumen/menu membuka **tab** di area konten.
+(Workspace/Explorer/Document/…) + **status bar** biru di bawah (branch/project/file/encoding) +
+**area konten bertab**. Memilih file/dokumen/menu membuka **tab** di area konten; menu **Terminal**
+membuka **panel bawah** ala VS Code (xterm.js, cwd = workspace project).
 
 | Menu                 | Muncul bila             | Isi                                                                                                                                                                            |
 | -------------------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | **Workspace**        | selalu                  | daftar/buat project (nama + workspace folder opsional), overview project                                                                                                       |
 | **Explorer**         | project punya workspace | file tree folder workspace + editor kode **Monaco** (bisa diedit, simpan dengan tombol/card `Cmd/Ctrl+S`)                                                                      |
+| **Terminal**         | ada project             | terminal interaktif (**xterm.js**) dengan shell di folder workspace; tampilan mengikuti gaya **termcn** (header + status koneksi)                                              |
 | **Document**         | selalu                  | tree halaman Docmost (collapsible, lazy children, **+** tambah) + render **markdown** + **Edit** (judul/isi via Monaco)                                                        |
 | **Ticket**           | selalu                  | **Kanban** tiket lokal + Jira; **sidebar** berisi **Tiket baru** (lokal), **filter assignee**, dan **Refresh**; klik card → detail (edit/hapus/sync); drag = update/transition |
 | **Project Settings** | ada project             | Workspace, Integrations (Document/Ticket/Code, `+` pilih tipe), LLM Providers — form **collapsible**                                                                           |
@@ -202,6 +204,11 @@ Fondasi (F0) — yang sudah jalan:
 - **Explorer**: file tree folder workspace + editor kode **Monaco** yang **bisa diedit** (indikator
   dirty di tab/header, tombol **Simpan** atau `Cmd/Ctrl+S`; file ditulis lewat
   `PUT /api/projects/:id/files/content` dengan guard path workspace).
+- **Terminal**: panel bawah ala VS Code (toggle dari activity bar) dengan **beberapa instance**
+  terminal (tab + tombol **+**), masing-masing xterm.js yang menjalankan shell di workspace project
+  via WebSocket + PTY (`script`). Instance tetap hidup saat panel disembunyikan; tinggi panel bisa
+  di-drag dan tersimpan (`rnd.terminalHeight:v1`). Tema mengikuti editor dan tampilan bergaya
+  termcn.
 - **Document**: pilih sumber **Local** atau **Docmost**. Local memakai folder **Document workspace**
   (Project Settings → Workspace): daftar file `.md`, buat/rename, edit markdown, dan **sync manual**
   ke Docmost (badge Local/Synced/Error; sync pertama membuat page lalu update konten, sync

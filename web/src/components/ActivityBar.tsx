@@ -4,13 +4,21 @@ import {
   LayoutGrid,
   Settings,
   SlidersHorizontal,
+  SquareTerminal,
   Ticket,
   type LucideIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
-export type Menu = "workspace" | "files" | "document" | "ticket" | "settings" | "global";
+export type Menu =
+  | "workspace"
+  | "files"
+  | "terminal"
+  | "document"
+  | "ticket"
+  | "settings"
+  | "global";
 
 const ITEMS: {
   id: Menu;
@@ -22,6 +30,7 @@ const ITEMS: {
 }[] = [
   { id: "workspace", label: "Workspace", icon: LayoutGrid },
   { id: "files", label: "Explorer", icon: FolderTree, requiresProject: true, requiresWorkspace: true },
+  { id: "terminal", label: "Terminal", icon: SquareTerminal, requiresProject: true },
   { id: "document", label: "Document", icon: FileText },
   { id: "ticket", label: "Ticket", icon: Ticket },
   { id: "settings", label: "Project Settings", icon: Settings, requiresProject: true },
@@ -32,10 +41,17 @@ interface Props {
   active: Menu;
   hasProject: boolean;
   hasWorkspace: boolean;
+  terminalOpen?: boolean;
   onChange: (menu: Menu) => void;
 }
 
-export function ActivityBar({ active, hasProject, hasWorkspace, onChange }: Props) {
+export function ActivityBar({
+  active,
+  hasProject,
+  hasWorkspace,
+  terminalOpen,
+  onChange,
+}: Props) {
   const items = ITEMS.filter(
     (item) =>
       (!item.requiresProject || hasProject) && (!item.requiresWorkspace || hasWorkspace),
@@ -56,7 +72,7 @@ export function ActivityBar({ active, hasProject, hasWorkspace, onChange }: Prop
             className={cn(
               "relative size-12 shrink-0 rounded-none text-muted-foreground hover:bg-accent/60 hover:text-foreground [&_svg]:size-6",
               item.bottom && "mt-auto",
-              active === item.id &&
+              (item.id === "terminal" ? terminalOpen : active === item.id) &&
                 "bg-[var(--sidebar)] text-foreground before:absolute before:inset-y-0 before:left-0 before:w-0.5 before:bg-primary",
             )}
           >

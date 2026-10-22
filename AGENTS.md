@@ -51,6 +51,12 @@ finishing a change.
   names). Chat injects the skill list into the system prompt and exposes a read-only `use_skill`
   tool (progressive disclosure; allowed in Plan mode). Enabled state lives in `app_settings`
   (`skills_enabled`, `skills_disabled`); UI is Global Settings → Skills.
+- **Terminal**: `src/server/terminal.ts` upgrades `/api/projects/:id/terminal` to a WebSocket and
+  runs an interactive shell in the project workspace via `script` (PTY). The Terminal activity item
+  toggles a VS Code-like **bottom panel** (`TerminalPanel`) with multiple `TerminalSession`
+  instances (xterm.js + fit addon, termcn-inspired styling); sessions stay mounted while the panel
+  is hidden, and the panel height persists. WebSocket auth uses the same session cookie as the HTTP
+  API.
 - **MCP**: global server config (`McpSettings`) is stored in `app_settings` (`mcp_servers` JSON;
   stdio command/args/env or http url/headers) plus `mcp_enabled` and `mcp_disabled_tools`.
   `POST /api/settings/mcp/tools` connects with `initialize` + `tools/list` (`src/server/mcp.ts`,
