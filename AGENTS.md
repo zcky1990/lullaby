@@ -75,11 +75,13 @@ finishing a change.
   open, everything else requires the cookie (set when the HTML shell is served) or the `x-app-token`
   header.
 - **Filesystem reads must go through `src/fs/workspace.ts`** (path-traversal guarded, capped size).
-  Writes (chat `write_file`) create **pending hunk changes** in `src/server/chat.ts`; the UI
-  accepts/rejects each hunk (`POST /api/chat/change`) or all (`/api/chat/change-all`) before
-  `writeWorkspaceFile` runs. Direct editor saves use `PUT /api/projects/:id/files/content` (also
-  `writeWorkspaceFile`, no approval; user is editing). The Explorer Monaco editor is editable; tabs
-  track a `dirty` flag and save via button or `Cmd/Ctrl+S`.
+  Writes (chat `write_file`) create **pending hunk changes** in `src/server/chat.ts`; a **Review
+  tab** (`ReviewTab`) in the main area accepts/rejects each hunk (`POST /api/chat/change`) or all
+  (`/api/chat/change-all`) before `writeWorkspaceFile` runs. Chat only shows a notice and dispatches
+  events (`web/src/lib/review-events.ts`). Direct editor saves use
+  `PUT /api/projects/:id/files/content` (also `writeWorkspaceFile`, no approval; user is editing).
+  The Explorer Monaco editor is editable; tabs track a `dirty` flag and save via button or
+  `Cmd/Ctrl+S`.
 - Persistence uses `node:sqlite` (`src/db/db.ts`); keep queries parameterized and add columns via
   `ensureColumn` migrations.
 

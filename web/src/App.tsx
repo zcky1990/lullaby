@@ -27,6 +27,7 @@ import { GlobalSettingsPanel, type GlobalSection } from "@/components/GlobalSett
 import { GlobalSettingsView } from "@/components/GlobalSettingsView";
 import { SettingsPanel, type SettingsSection } from "@/components/SettingsPanel";
 import { SettingsView } from "@/components/SettingsView";
+import { ReviewTab } from "@/components/ReviewTab";
 import { StatusBar } from "@/components/StatusBar";
 import {
   Select,
@@ -49,6 +50,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { CHANGES_APPLIED_EVENT, REVIEW_EVENT, type ReviewDetail } from "@/lib/review-events";
 import { cn } from "@/lib/utils";
 import {
   api,
@@ -57,6 +59,7 @@ import {
   type IntegrationPayload,
   type LlmProviderPayload,
   type LocalDocSummary,
+  type PendingFileChange,
   type Project,
   type ProjectDetail,
   type TestResult,
@@ -96,6 +99,7 @@ const PANEL_FOR_KIND: Record<TabKind, Menu> = {
   ticket: "ticket",
   settings: "settings",
   global: "global",
+  review: "files",
   document: "document",
   file: "files",
 };
@@ -132,6 +136,10 @@ export default function App() {
   const [detailOpen, setDetailOpen] = useState(false);
   const [createTicketOpen, setCreateTicketOpen] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
+  const [review, setReview] = useState<{
+    runId: string;
+    changes: PendingFileChange[];
+  } | null>(null);
   const [panelWidth, setPanelWidth] = useState(readPanelWidth);
 
   const hasWorkspace = !!detail?.project.workspace_path;
@@ -353,6 +361,57 @@ export default function App() {
     },
     [currentId, tabs, focusTab, patchTab],
   );
+
+  useEffect(() => {
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent<ReviewDetail | null>).detail;
+      if (!detail) {
+        setReview(null);
+        setTabs((current) => current.filter((tab) => tab.kind !== "review"));
+        setActiveTabId((current) =>
+          current && tabs.some((tab) => tab.id === current && tab.kind === "review") ? null : current
+        );
+        return;
+      }
+      setReview({ runId: detail.runId, changes: detail.changes });
+      const id = `review:${detail.runId}`;
+      setTabs((current) => {
+        if (current.some((tab) => tab.kind === "review")) {
+          return current.map((tab) =>
+            tab.kind === "review"
+              ? {
+                ...tab,
+                id,
+                ref: detail.runId,
+                title: `Review changes (${detail.changes.length})`,
+              }
+              : tab
+          );
+        }
+        return [
+          ...current,
+          {
+            id,
+            kind: "review" as const,
+            ref: detail.runId,
+            title: `Review changes (${detail.changes.length})`,
+          },
+        ];
+      });
+      setActiveTabId(id);
+    };
+    window.addEventListener(REVIEW_EVENT, handler);
+    return () => window.removeEventListener(REVIEW_EVENT, handler);
+  }, [tabs]);
+
+  useEffect(() => {
+    const handler = (event: Event) => {
+      const paths = (event as CustomEvent<{ paths: string[] }>).detail?.paths ?? [];
+      for (const path of paths.slice(0, 8)) void openFile(path, true);
+    };
+    window.addEventListener(CHANGES_APPLIED_EVENT, handler);
+    return () => window.removeEventListener(CHANGES_APPLIED_EVENT, handler);
+  }, [openFile]);
 
   const saveFile = useCallback(
     async (path: string, content: string) => {
@@ -704,6 +763,12 @@ export default function App() {
             onOpenTickets={() => openSingleton("ticket", "Ticket Board")}
           />
         );
+      case "review":
+        return review ? (
+          <ReviewTab runId={review.runId} changes={review.changes} />
+        ) : (
+          <Empty text="Tidak ada perubahan yang menunggu review." />
+        );
       case "file":
         return (
           <FileTab
@@ -827,6 +892,7 @@ export default function App() {
           className={cn(
             "min-h-0 flex-1",
             activeTab?.kind === "file" ||
+              activeTab?.kind === "review" ||
               activeTab?.kind === "document" ||
               activeTab?.kind === "settings" ||
               activeTab?.kind === "global"
@@ -838,15 +904,13 @@ export default function App() {
         </div>
       </main>
 
-      {chatOpen && (
-        <ChatSidebar
-          projectId={currentId}
-          providers={detail?.llmProviders ?? []}
-          onClose={() => setChatOpen(false)}
-          onOpenFile={(path) => void openFile(path, true)}
-          onTicketsChanged={() => currentId && loadTickets(currentId)}
-        />
-      )}
+      <ChatSidebar
+        projectId={currentId}
+        providers={detail?.llmProviders ?? []}
+        onClose={() => setChatOpen(false)}
+        onTicketsChanged={() => currentId && loadTickets(currentId)}
+        hidden={!chatOpen}
+      />
 
       </div>
 

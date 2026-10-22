@@ -1,6 +1,7 @@
 import {
   File as FileIcon,
   FileText,
+  GitCompare,
   LayoutGrid,
   Settings,
   SlidersHorizontal,
@@ -9,7 +10,14 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-export type TabKind = "workspace" | "ticket" | "settings" | "global" | "document" | "file";
+export type TabKind =
+  | "workspace"
+  | "ticket"
+  | "settings"
+  | "global"
+  | "document"
+  | "file"
+  | "review";
 
 export interface EditorTab {
   id: string;
@@ -35,6 +43,7 @@ const ICONS: Record<TabKind, typeof FileIcon> = {
   global: SlidersHorizontal,
   document: FileText,
   file: FileIcon,
+  review: GitCompare,
 };
 
 interface Props {

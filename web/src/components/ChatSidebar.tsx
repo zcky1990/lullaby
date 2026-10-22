@@ -1,6 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { FileCode2, FileText, Paperclip, Plus, Send, Trash2, X } from "lucide-react";
-import { ChangeReview } from "@/components/ChangeReview";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -23,6 +22,7 @@ import {
   type LlmProvider,
   type PendingFileChange,
 } from "@/lib/api";
+import { CHAT_RESPONSE_EVENT, dispatchChangesApplied, dispatchReview } from "@/lib/review-events";
 import { cn } from "@/lib/utils";
 
 const MarkdownView = lazy(() => import("@/components/MarkdownView"));
@@ -109,16 +109,16 @@ interface Props {
   projectId: string | null;
   providers: LlmProvider[];
   onClose: () => void;
-  onOpenFile?: (path: string) => void;
   onTicketsChanged?: () => void;
+  hidden?: boolean;
 }
 
 export function ChatSidebar({
   projectId,
   providers,
   onClose,
-  onOpenFile,
   onTicketsChanged,
+  hidden,
 }: Props) {
   const [providerId, setProviderId] = useState(providers[0]?.id ?? "");
   const [variant, setVariant] = useState("medium");
@@ -176,6 +176,7 @@ export function ChatSidebar({
     setAttachments([]);
     setPending(null);
     setError(undefined);
+    dispatchReview(null, null);
     refreshSessions().catch(console.error);
   }, [projectId, refreshSessions]);
 
@@ -229,6 +230,10 @@ export function ChatSidebar({
     }
     if (response.status === "done") {
       setPending(null);
+      dispatchReview(null, null);
+      if (response.changes?.length) {
+        dispatchChangesApplied(response.changes.map((change) => change.path));
+      }
       if (response.sessionId) setSessionId(response.sessionId);
       setEntries((current) => [
         ...current,
@@ -248,11 +253,24 @@ export function ChatSidebar({
         items: response.pending,
         changes: response.pendingChanges ?? [],
       });
+      dispatchReview(response.runId, response.pendingChanges ?? []);
       refreshSessions().catch(console.error);
       return;
     }
     setError(response.error);
   };
+
+  const responseRef = useRef(handleResponse);
+  responseRef.current = handleResponse;
+
+  useEffect(() => {
+    const handler = (event: Event) => {
+      const response = (event as CustomEvent<ChatResponse>).detail;
+      if (response) responseRef.current(response);
+    };
+    window.addEventListener(CHAT_RESPONSE_EVENT, handler);
+    return () => window.removeEventListener(CHAT_RESPONSE_EVENT, handler);
+  }, []);
 
   const send = async () => {
     const text = input.trim();
@@ -308,34 +326,6 @@ export function ChatSidebar({
     }
   };
 
-  const decideChange = async (callId: string, hunk: number, accept: boolean) => {
-    if (!pending) return;
-    setSending(true);
-    setError(undefined);
-    try {
-      const response = await api.chatChange({ runId: pending.runId, callId, hunk, accept });
-      handleResponse(response);
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setSending(false);
-    }
-  };
-
-  const decideAllChanges = async (accept: boolean) => {
-    if (!pending) return;
-    setSending(true);
-    setError(undefined);
-    try {
-      const response = await api.chatChangeAll({ runId: pending.runId, accept });
-      handleResponse(response);
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setSending(false);
-    }
-  };
-
   const approve = async (action: "once" | "always" | "deny") => {
     if (!pending) return;
     const item = pending.items[0];
@@ -358,6 +348,7 @@ export function ChatSidebar({
       setAttachments([]);
       setPending(null);
       setError(undefined);
+      dispatchReview(null, null);
       return;
     }
     if (!projectId) return;
@@ -394,7 +385,10 @@ export function ChatSidebar({
 
   return (
     <aside
-      className="relative flex w-96 shrink-0 flex-col border-l bg-[var(--sidebar)]"
+      className={cn(
+        "relative flex w-96 shrink-0 flex-col border-l bg-[var(--sidebar)]",
+        hidden && "hidden",
+      )}
       onDragOver={(event) => {
         const types = Array.from(event.dataTransfer.types);
         if (!types.includes("Files") && !types.includes("application/x-rnd-workspace-path")) {
@@ -514,9 +508,6 @@ export function ChatSidebar({
                 ) : (
                   <span className="whitespace-pre-wrap">{entry.content}</span>
                 )}
-                {entry.changes?.length ? (
-                  <Changes changes={entry.changes} onOpenFile={onOpenFile} />
-                ) : null}
               </div>
             ))}
             {sending ? (
@@ -531,12 +522,20 @@ export function ChatSidebar({
 
       <div className="flex flex-col gap-2 border-t p-3">
         {pending && pending.changes.length > 0 ? (
-          <ChangeReview
-            changes={pending.changes}
-            busy={sending}
-            onDecision={decideChange}
-            onAll={decideAllChanges}
-          />
+          <div className="flex flex-col gap-2 rounded-md border bg-card p-3">
+            <p className="text-xs font-medium">Perubahan menunggu review</p>
+            <p className="text-xs text-muted-foreground">
+              Diff dan tombol accept/reject tersedia di tab editor.
+            </p>
+            <Button
+              size="sm"
+              variant="outline"
+              className="self-start"
+              onClick={() => dispatchReview(pending.runId, pending.changes)}
+            >
+              Buka review
+            </Button>
+          </div>
         ) : pending ? (
           <div className="flex flex-col gap-2 rounded-md border bg-card p-3">
             <p className="text-xs font-medium">Persetujuan diperlukan</p>
@@ -720,49 +719,5 @@ export function ChatSidebar({
         </div>
       </div>
     </aside>
-  );
-}
-
-function Changes({
-  changes,
-  onOpenFile,
-}: {
-  changes: FileChange[];
-  onOpenFile?: (path: string) => void;
-}) {
-  return (
-    <div className="mt-2 flex flex-col gap-2">
-      {changes.map((change) => (
-        <div key={change.path} className="overflow-hidden rounded-md border bg-background/70">
-          <button
-            type="button"
-            onClick={() => onOpenFile?.(change.path)}
-            className="flex w-full items-center gap-2 px-2 py-1 text-left hover:bg-accent"
-            title={`Buka ${change.path}`}
-          >
-            <FileCode2 className="size-3.5 shrink-0 text-muted-foreground" />
-            <span className="min-w-0 flex-1 truncate font-mono text-[11px]">{change.path}</span>
-            <span className="shrink-0 text-[10px] text-muted-foreground">
-              {change.action === "create" ? "baru" : "diubah"} · +{change.added} −{change.removed}
-            </span>
-          </button>
-          <pre className="max-h-56 overflow-auto border-t bg-muted/30 px-2 py-1 text-[11px] leading-4">
-            {change.diff.split("\n").map((line, index) => (
-              <span
-                key={index}
-                className={cn(
-                  "block whitespace-pre-wrap break-all",
-                  line.startsWith("+") && "text-emerald-600 dark:text-emerald-400",
-                  line.startsWith("-") && "text-red-600 dark:text-red-400",
-                  !line.startsWith("+") && !line.startsWith("-") && "text-muted-foreground",
-                )}
-              >
-                {line || " "}
-              </span>
-            ))}
-          </pre>
-        </div>
-      ))}
-    </div>
   );
 }
