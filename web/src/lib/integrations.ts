@@ -34,6 +34,48 @@ export const SINGLETONS: SingletonDef[] = [
     ],
   },
   {
+    kind: "notion",
+    label: "Notion",
+    fields: [
+      {
+        key: "apiToken",
+        label: "Internal Integration Token",
+        placeholder: "ntn_… or secret_…",
+        type: "password",
+        secret: true,
+      },
+      {
+        key: "parentPageId",
+        label: "Parent Page ID (opsional)",
+        placeholder: "UUID halaman akar — kosongkan untuk search workspace",
+      },
+    ],
+  },
+  {
+    kind: "confluence",
+    label: "Confluence Cloud",
+    fields: [
+      {
+        key: "baseUrl",
+        label: "Base URL",
+        placeholder: "https://acme.atlassian.net/wiki",
+      },
+      { key: "email", label: "Email", placeholder: "bot@example.com" },
+      {
+        key: "apiToken",
+        label: "API Token",
+        placeholder: "atlassian api token",
+        type: "password",
+        secret: true,
+      },
+      {
+        key: "spaceKey",
+        label: "Space Key (opsional)",
+        placeholder: "PROJ — kosongkan untuk daftar semua space",
+      },
+    ],
+  },
+  {
     kind: "jira",
     label: "Jira (Board)",
     fields: [

@@ -1,9 +1,19 @@
 import { z } from "zod";
 
-export const IntegrationKind = z.enum(["llm", "docmost", "jira", "github"]);
-export const SingletonKind = z.enum(["docmost", "jira", "github"]);
+export const IntegrationKind = z.enum([
+  "llm",
+  "docmost",
+  "notion",
+  "confluence",
+  "jira",
+  "github",
+]);
+export const SingletonKind = z.enum(["docmost", "notion", "confluence", "jira", "github"]);
 export type SingletonKind = z.infer<typeof SingletonKind>;
 export type IntegrationKind = z.infer<typeof IntegrationKind>;
+
+export const DocumentSource = z.enum(["docmost", "notion", "confluence"]);
+export type DocumentSource = z.infer<typeof DocumentSource>;
 
 export const IntegrationMode = z.enum(["api", "mcp"]);
 export type IntegrationMode = z.infer<typeof IntegrationMode>;
@@ -91,6 +101,11 @@ export const ChatInput = z.object({
   providerId: z.string().trim().optional(),
   sessionId: z.string().trim().optional(),
   roleId: z.string().trim().optional(),
+  skillName: z
+    .preprocess(
+      (value) => (value === "" || value == null ? undefined : value),
+      z.string().trim().max(64).regex(/^[a-z0-9][a-z0-9_-]*$/i).optional(),
+    ),
   variant: ChatVariant.default("medium"),
   mode: ChatMode.default("build"),
   messages: z
@@ -263,14 +278,33 @@ export const GithubConfig = z.object({
   repo: z.string().trim().optional(),
   defaultBranch: z.string().trim().default("main"),
 });
+
+export const NotionConfig = z.object({
+  apiToken: z.string().trim().optional(),
+  parentPageId: optionalText,
+});
+
+export const ConfluenceConfig = z.object({
+  baseUrl: httpUrl,
+  email: z.string().trim().optional(),
+  apiToken: z.string().trim().optional(),
+  spaceKey: optionalText,
+});
+
 export type DocmostConfig = z.infer<typeof DocmostConfig>;
 export type JiraConfig = z.infer<typeof JiraConfig>;
 export type GithubConfig = z.infer<typeof GithubConfig>;
+export type NotionConfig = z.infer<typeof NotionConfig>;
+export type ConfluenceConfig = z.infer<typeof ConfluenceConfig>;
 
 export function parseIntegrationConfig(kind: IntegrationKind, config: Record<string, unknown>) {
   switch (kind) {
     case "docmost":
       return DocmostConfig.safeParse(config);
+    case "notion":
+      return NotionConfig.safeParse(config);
+    case "confluence":
+      return ConfluenceConfig.safeParse(config);
     case "jira":
       return JiraConfig.safeParse(config);
     case "github":

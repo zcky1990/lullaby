@@ -1,13 +1,26 @@
 import { equal, rejects } from "node:assert/strict";
+import {
+  ConfluenceConfig,
+  type DocmostConfig,
+  type JiraConfig,
+  NotionConfig,
+  parseIntegrationConfig,
+} from "../src/config/schema.ts";
+import {
+  getDocument as getConfluenceDocument,
+  listDocuments as listConfluenceDocuments,
+} from "../src/integrations/confluence.ts";
 import { getDocument, listDocuments } from "../src/integrations/docmost.ts";
-import type { DocmostConfig } from "../src/config/schema.ts";
 import {
   createTicket,
   getTicket,
   listTickets,
   transitionTicket,
 } from "../src/integrations/jira.ts";
-import type { JiraConfig } from "../src/config/schema.ts";
+import {
+  getDocument as getNotionDocument,
+  listDocuments as listNotionDocuments,
+} from "../src/integrations/notion.ts";
 
 const TOKEN = "Bearer tok";
 
@@ -158,4 +171,190 @@ Deno.test("jira: createTicket posts issue and returns key", async () => {
   equal(created.key, "PROJ-9");
   equal(body.includes("New ticket"), true);
   await server.shutdown();
+});
+
+Deno.test("schema: NotionConfig and ConfluenceConfig parse", () => {
+  const notion = NotionConfig.safeParse({ apiToken: "secret_x", parentPageId: "" });
+  equal(notion.success, true);
+  if (notion.success) equal(notion.data.parentPageId, undefined);
+
+  const confluence = ConfluenceConfig.safeParse({
+    baseUrl: "https://acme.atlassian.net/wiki",
+    email: "bot@example.com",
+    apiToken: "tok",
+    spaceKey: "ENG",
+  });
+  equal(confluence.success, true);
+
+  const notionKind = parseIntegrationConfig("notion", { apiToken: "ntn_1" });
+  equal(notionKind.success, true);
+  const confluenceKind = parseIntegrationConfig("confluence", {
+    baseUrl: "https://acme.atlassian.net",
+    email: "a@b.c",
+    apiToken: "t",
+  });
+  equal(confluenceKind.success, true);
+});
+
+Deno.test("notion: listDocuments children + getDocument blocks", async () => {
+  const { server, port } = startMock((req) => {
+    if (req.headers.get("authorization") !== "Bearer secret_tok") {
+      return json({ error: "unauth" }, 401);
+    }
+    if (req.headers.get("notion-version") !== "2022-06-28") {
+      return json({ error: "version" }, 400);
+    }
+    const { pathname } = new URL(req.url);
+    if (pathname === "/v1/blocks/parent-1/children") {
+      return json({
+        results: [
+          {
+            object: "block",
+            id: "page-1",
+            type: "child_page",
+            child_page: { title: "Spec" },
+            has_children: false,
+          },
+        ],
+        has_more: false,
+      });
+    }
+    if (pathname === "/v1/pages/page-1") {
+      return json({
+        object: "page",
+        id: "page-1",
+        properties: {
+          title: { type: "title", title: [{ plain_text: "Spec" }] },
+        },
+      });
+    }
+    if (pathname === "/v1/blocks/page-1/children") {
+      return json({
+        results: [
+          {
+            object: "block",
+            id: "b1",
+            type: "heading_1",
+            heading_1: { rich_text: [{ plain_text: "Hello" }] },
+            has_children: false,
+          },
+          {
+            object: "block",
+            id: "b2",
+            type: "paragraph",
+            paragraph: { rich_text: [{ plain_text: "World" }] },
+            has_children: false,
+          },
+        ],
+        has_more: false,
+      });
+    }
+    return new Response("nf", { status: 404 });
+  });
+
+  const base = `http://127.0.0.1:${await port}`;
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (input, init) => {
+    const url = String(input).replace("https://api.notion.com", base);
+    return originalFetch(url, init);
+  };
+
+  try {
+    const cfg = { apiToken: "secret_tok", parentPageId: "parent-1" };
+    const { documents } = await listNotionDocuments(cfg);
+    equal(documents.length, 1);
+    equal(documents[0].title, "Spec");
+    equal(documents[0].hasChildren, true);
+
+    const doc = await getNotionDocument(cfg, "page-1");
+    equal(doc.title, "Spec");
+    equal(doc.content.includes("# Hello"), true);
+    equal(doc.content.includes("World"), true);
+  } finally {
+    globalThis.fetch = originalFetch;
+    await server.shutdown();
+  }
+});
+
+Deno.test("confluence: list spaces/pages and getDocument", async () => {
+  const { server, port } = startMock((req) => {
+    if (req.headers.get("authorization") !== "Basic Ym90QGUuY29tOnRr") {
+      return json({ error: "unauth" }, 401);
+    }
+    const { pathname, searchParams } = new URL(req.url);
+    if (pathname === "/wiki/rest/api/space") {
+      return json({
+        results: [{ key: "ENG", name: "Engineering" }],
+        size: 1,
+        limit: 50,
+      });
+    }
+    if (pathname === "/wiki/rest/api/content" && searchParams.get("spaceKey") === "ENG") {
+      return json({
+        results: [
+          {
+            id: "100",
+            title: "Home",
+            ancestors: [],
+            children: { page: { size: 1 } },
+          },
+        ],
+        size: 1,
+        limit: 50,
+      });
+    }
+    if (pathname === "/wiki/rest/api/content/100/child/page") {
+      return json({
+        results: [{ id: "101", title: "Child", children: { page: { size: 0 } } }],
+        size: 1,
+        limit: 50,
+      });
+    }
+    if (pathname === "/wiki/rest/api/content/100") {
+      return json({
+        id: "100",
+        title: "Home",
+        space: { key: "ENG" },
+        body: {
+          storage: { value: "<h1>Welcome</h1><p>Body text</p>" },
+        },
+      });
+    }
+    return new Response("nf", { status: 404 });
+  });
+
+  const cfg: ConfluenceConfig = {
+    baseUrl: `http://127.0.0.1:${await port}/wiki`,
+    email: "bot@e.com",
+    apiToken: "tk",
+    spaceKey: undefined,
+  };
+
+  const spaces = await listConfluenceDocuments(cfg);
+  equal(spaces.documents.length, 1);
+  equal(spaces.documents[0].id, "space:ENG");
+  equal(spaces.documents[0].title, "Engineering");
+
+  const pages = await listConfluenceDocuments(cfg, "space:ENG");
+  equal(pages.documents.length, 1);
+  equal(pages.documents[0].title, "Home");
+
+  const children = await listConfluenceDocuments(cfg, "100");
+  equal(children.documents[0].title, "Child");
+
+  const doc = await getConfluenceDocument(cfg, "100");
+  equal(doc.title, "Home");
+  equal(doc.content.includes("# Welcome"), true);
+  equal(doc.content.includes("Body text"), true);
+  await server.shutdown();
+});
+
+Deno.test("confluence: rejects getDocument on space id", async () => {
+  const cfg: ConfluenceConfig = {
+    baseUrl: "https://acme.atlassian.net/wiki",
+    email: "bot@e.com",
+    apiToken: "tk",
+    spaceKey: undefined,
+  };
+  await rejects(() => getConfluenceDocument(cfg, "space:ENG"), /halaman/i);
 });

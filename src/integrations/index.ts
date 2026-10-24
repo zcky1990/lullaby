@@ -1,14 +1,18 @@
 import { z } from "zod";
 import {
+  ConfluenceConfig,
   DocmostConfig,
   GithubConfig,
   type IntegrationInput,
   JiraConfig,
+  NotionConfig,
 } from "../config/schema.ts";
+import { testConfluence } from "./confluence.ts";
 import { testDocmost } from "./docmost.ts";
 import { testGithub } from "./github.ts";
 import { request, type TestResult, truncate } from "./http.ts";
 import { testJira } from "./jira.ts";
+import { testNotion } from "./notion.ts";
 
 const LlmConfig = z.object({
   baseUrl: z
@@ -68,6 +72,16 @@ export async function testIntegration(input: IntegrationInput): Promise<TestResu
       const parsed = DocmostConfig.safeParse(input.config);
       if (!parsed.success) return invalid(parsed.error);
       return await testDocmost(parsed.data);
+    }
+    case "notion": {
+      const parsed = NotionConfig.safeParse(input.config);
+      if (!parsed.success) return invalid(parsed.error);
+      return await testNotion(parsed.data);
+    }
+    case "confluence": {
+      const parsed = ConfluenceConfig.safeParse(input.config);
+      if (!parsed.success) return invalid(parsed.error);
+      return await testConfluence(parsed.data);
     }
     case "jira": {
       const parsed = JiraConfig.safeParse(input.config);

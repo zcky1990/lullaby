@@ -36,11 +36,15 @@ finishing a change.
   `App.tsx` (tab list, and file/doc selection). All activity-bar menus use the outer `<aside>`;
   Global Settings keeps its section nav in that panel instead of inside the tab.
 - **Documents**: `DocumentPanel` switches between **Local** (`.md` files under
-  `projects.document_path`) and Docmost. Local docs are renamed/saved on disk; manual sync
-  (`POST /local-documents/sync`) creates/updates the Docmost page and stores `page_id` in
-  `local_documents`. `Generate ticket` in the document tab calls `POST /generate-tickets`
-  (`generateTicketsFromDocument`) which uses the first LLM provider and only the `create_ticket`
-  tool.
+  `projects.document_path`), **Docmost**, **Notion**, and **Confluence Cloud**. Remote sources
+  use `GET /documents?source=` / `GET /documents/:pageId?source=` (`docmost` default). Notion
+  auth is Internal Integration Token (+ optional `parentPageId`); Confluence is baseUrl + email +
+  API token (+ optional `spaceKey`). Create/update remote pages and local→Notion/Confluence sync
+  are out of v1 (Create only for Local/Docmost; Notion/Confluence tabs are read-only). Local docs
+  are renamed/saved on disk; manual sync (`POST /local-documents/sync`) creates/updates the
+  Docmost page and stores `page_id` in `local_documents`. `Generate ticket` in the document tab
+  calls `POST /generate-tickets` (`generateTicketsFromDocument`) which uses the first LLM
+  provider and only the `create_ticket` tool.
 - **Tickets**: `local_tickets` (SQLite) are created locally (UI `TicketCreateDialog` + AI tool
   `create_ticket`); `GET /tickets` merges unsynced local tickets with Jira. Local tickets are
   editable from `TicketDetailDialog` (`PATCH /local-tickets/:id`, rich text description) and can be
@@ -51,8 +55,9 @@ finishing a change.
   chats), and `appDataDir()/skills` (global). Chat injects the skill list into the system prompt and
   exposes a read-only `use_skill` tool (progressive disclosure; allowed in Plan mode). After each
   successful Build run that used tools, `src/server/chat/skill-learn.ts` writes a deterministic
-  project skill. Enabled state lives in `app_settings` (`skills_enabled`, `skills_disabled`); UI is
-  Global Settings → Skills.
+  project skill. Chat composer supports `/skill-name` (autocomplete + `skillName` on
+  `POST .../chat`) which injects the skill body into the system prompt. Enabled state lives in
+  `app_settings` (`skills_enabled`, `skills_disabled`); UI is Global Settings → Skills.
 - **Git**: `src/integrations/git.ts` runs the `git` CLI inside `projects.workspace_path` (status,
   branches, log, diff, stage/unstage, commit, checkout with `--` path guards). UI is a
   SourceTree-like two-pane view: `GitPanel` (branches/refresh) in the aside and `GitTab`

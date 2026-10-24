@@ -41,7 +41,7 @@ interface ProviderOption {
 interface IntegrationSectionDef {
   id: string;
   title: string;
-  kind: string;
+  kinds: string[];
   options: ProviderOption[];
 }
 
@@ -49,17 +49,17 @@ const INTEGRATION_SECTIONS: IntegrationSectionDef[] = [
   {
     id: "document",
     title: "Document",
-    kind: "docmost",
+    kinds: ["docmost", "notion", "confluence"],
     options: [
       { label: "Docmost", kind: "docmost" },
-      { label: "Confluence", kind: null },
-      { label: "Notion", kind: null },
+      { label: "Notion", kind: "notion" },
+      { label: "Confluence", kind: "confluence" },
     ],
   },
   {
     id: "ticket",
     title: "Ticket",
-    kind: "jira",
+    kinds: ["jira"],
     options: [
       { label: "Jira", kind: "jira" },
       { label: "ClickUp", kind: null },
@@ -69,7 +69,7 @@ const INTEGRATION_SECTIONS: IntegrationSectionDef[] = [
   {
     id: "code",
     title: "Code",
-    kind: "github",
+    kinds: ["github"],
     options: [
       { label: "GitHub", kind: "github" },
       { label: "GitLab", kind: null },
@@ -120,10 +120,12 @@ export function SettingsView({
   onUpdateWorkspace,
 }: Props) {
   const { project, integrations } = detail;
-  const [drafts, setDrafts] = useState<Record<string, string | null>>({});
+  const [draftKinds, setDraftKinds] = useState<string[]>([]);
 
-  const setDraft = (id: string, kind: string | null) =>
-    setDrafts((current) => ({ ...current, [id]: kind }));
+  const addDraft = (kind: string) =>
+    setDraftKinds((current) => (current.includes(kind) ? current : [...current, kind]));
+  const removeDraft = (kind: string) =>
+    setDraftKinds((current) => current.filter((item) => item !== kind));
 
   return (
     <div className="max-w-3xl flex flex-col gap-8">
@@ -150,16 +152,17 @@ export function SettingsView({
       {section === "integrations" && (
         <div className="flex flex-col gap-6">
           {INTEGRATION_SECTIONS.map((def) => {
-            const definition = SINGLETONS.find((item) => item.kind === def.kind);
-            const value = integrations.find((item) => item.kind === def.kind);
-            const draft = drafts[def.id] === def.kind;
-            const showForm = Boolean(value) || draft;
+            const visibleKinds = def.kinds.filter(
+              (kind) =>
+                integrations.some((item) => item.kind === kind) || draftKinds.includes(kind),
+            );
+            const showForms = visibleKinds.length > 0;
 
             return (
               <CollapsibleSection
                 key={def.id}
                 title={def.title}
-                defaultOpen={showForm}
+                defaultOpen={showForms}
                 action={
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
@@ -175,7 +178,9 @@ export function SettingsView({
                           option.kind ? (
                             <DropdownMenuItem
                               key={option.label}
-                              onSelect={() => setDraft(def.id, option.kind)}
+                              disabled={integrations.some((item) => item.kind === option.kind) ||
+                                draftKinds.includes(option.kind)}
+                              onSelect={() => addDraft(option.kind!)}
                             >
                               {option.label}
                             </DropdownMenuItem>
@@ -191,15 +196,29 @@ export function SettingsView({
                   </DropdownMenu>
                 }
               >
-                {showForm && definition ? (
-                  <IntegrationForm
-                    kind={def.kind}
-                    fields={definition.fields}
-                    value={value}
-                    onSave={onSaveIntegration}
-                    onTest={onTestIntegration}
-                    onCancel={value ? undefined : () => setDraft(def.id, null)}
-                  />
+                {showForms ? (
+                  <div className="flex flex-col gap-6">
+                    {visibleKinds.map((kind) => {
+                      const definition = SINGLETONS.find((item) => item.kind === kind);
+                      if (!definition) return null;
+                      const value = integrations.find((item) => item.kind === kind);
+                      return (
+                        <div key={kind} className="flex flex-col gap-2">
+                          {def.kinds.length > 1 ? (
+                            <p className="text-sm font-medium">{definition.label}</p>
+                          ) : null}
+                          <IntegrationForm
+                            kind={kind}
+                            fields={definition.fields}
+                            value={value}
+                            onSave={onSaveIntegration}
+                            onTest={onTestIntegration}
+                            onCancel={value ? undefined : () => removeDraft(kind)}
+                          />
+                        </div>
+                      );
+                    })}
+                  </div>
                 ) : (
                   <p className="text-sm text-muted-foreground">
                     Belum ada {def.title.toLowerCase()}. Klik tombol <Plus className="inline size-3" />{" "}

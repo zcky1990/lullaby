@@ -6,7 +6,7 @@ import {
   getProject,
   listChatMessages,
 } from "../../db/db.ts";
-import { loadEnabledSkills, projectSlug, type SkillInfo } from "../skills.ts";
+import { loadEnabledSkills, projectSlug, readSkillBody, type SkillInfo } from "../skills.ts";
 import { complete, VARIANT_TEMPERATURE } from "./llm.ts";
 import { approvalResponse, prepareWriteChange, setAdvance } from "./review.ts";
 import { scheduleSkillLearn } from "./skill-learn.ts";
@@ -38,11 +38,16 @@ function skillPrompt(skills: SkillInfo[]): string {
     skills.map((skill) => `- ${skill.name}: ${skill.description}`).join("\n");
 }
 
-function systemPrompt(
+export function activeSkillPrompt(name: string, body: string): string {
+  return `\n\n## Active skill: ${name}\nThe user invoked /${name}. Follow these instructions for this request:\n\n${body}\n`;
+}
+
+export function systemPrompt(
   workspace: string | null,
   mode: "plan" | "build",
   skills: SkillInfo[],
   persona?: string,
+  activeSkill?: { name: string; body: string } | null,
 ): string {
   const skillList = skillPrompt(skills);
   let prompt: string;
@@ -58,7 +63,10 @@ function systemPrompt(
       `to this root (for example "src/index.ts"). Do not use absolute paths or "..".`;
   }
   const withPersona = persona?.trim() ? `${persona.trim()}\n\n${prompt}` : prompt;
-  return `${withPersona}${skillList}`;
+  const withActive = activeSkill
+    ? `${withPersona}${skillList}${activeSkillPrompt(activeSkill.name, activeSkill.body)}`
+    : `${withPersona}${skillList}`;
+  return withActive;
 }
 
 export async function advance(run: Run): Promise<ChatResponse> {
@@ -187,6 +195,7 @@ export async function startChat(
   variant: string = "medium",
   mode: "plan" | "build" = "build",
   rolePersona?: string,
+  skillName?: string,
 ): Promise<ChatResponse> {
   pruneRuns();
 
@@ -221,6 +230,16 @@ export async function startChat(
   const skills = await loadEnabledSkills(workspace, slug);
   const skillMap = new Map(skills.map((skill) => [skill.name, skill]));
 
+  let activeSkill: { name: string; body: string } | null = null;
+  if (skillName?.trim()) {
+    const wanted = skillName.trim().toLowerCase();
+    const skill = skillMap.get(wanted);
+    if (!skill) {
+      return { status: "error", error: "unknown_skill", sessionId: session.id };
+    }
+    activeSkill = { name: skill.name, body: await readSkillBody(skill) };
+  }
+
   const run: Run = {
     id: crypto.randomUUID(),
     provider,
@@ -228,7 +247,10 @@ export async function startChat(
     sessionId: session.id,
     temperature: VARIANT_TEMPERATURE[variant],
     turns: [
-      { role: "system", content: systemPrompt(workspace, mode, skills, rolePersona) },
+      {
+        role: "system",
+        content: systemPrompt(workspace, mode, skills, rolePersona, activeSkill),
+      },
       ...resolved.map((message) => ({
         role: message.role,
         content: message.content,

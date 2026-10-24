@@ -31,12 +31,14 @@ import {
 import { applyHunks, diffHunks, diffLines } from "../src/server/diff.ts";
 import { handleRequest } from "../src/server/router.ts";
 import { APP_TOKEN_HEADER, appToken } from "../src/server/session.ts";
+import { activeSkillPrompt, systemPrompt } from "../src/server/chat/agent.ts";
 import {
   buildSkillMarkdown,
   extractSkillEvidence,
   skillNameFromEvidence,
   writeProjectSkill,
 } from "../src/server/chat/skill-learn.ts";
+import { detectSlashQuery, parseSlashSkill } from "../src/server/chat/slash-skill.ts";
 import type { Run } from "../src/server/chat/types.ts";
 import { listSkills, parseSkillFile, projectSkillsDir, projectSlug } from "../src/server/skills.ts";
 
@@ -94,6 +96,44 @@ Deno.test("diffLines handles new and empty files", () => {
   const same = diffLines("same", "same");
   equal(same.added, 0);
   equal(same.removed, 0);
+});
+
+Deno.test("parseSlashSkill extracts skill and remaining text", () => {
+  deepEqual(parseSlashSkill("/fix-login tighten styles"), {
+    skillName: "fix-login",
+    text: "tighten styles",
+  });
+  deepEqual(parseSlashSkill("/fix-login"), { skillName: "fix-login", text: "" });
+  deepEqual(parseSlashSkill("no slash here"), { skillName: null, text: "no slash here" });
+  deepEqual(detectSlashQuery("hello /cre", 10), { active: true, query: "cre", start: 6 });
+  equal(detectSlashQuery("hello world").active, false);
+});
+
+Deno.test("ChatInput accepts skillName", () => {
+  const parsed = ChatInput.parse({
+    skillName: "fix-login",
+    messages: [{ role: "user", content: "Tighten styles" }],
+  });
+  equal(parsed.skillName, "fix-login");
+  throws(() =>
+    ChatInput.parse({
+      skillName: "bad name",
+      messages: [{ role: "user", content: "x" }],
+    })
+  );
+});
+
+Deno.test("systemPrompt injects active skill body", () => {
+  const prompt = systemPrompt(
+    "/tmp/ws",
+    "build",
+    [{ id: "project:demo", name: "demo", description: "d", source: "project", path: "/x" }],
+    undefined,
+    { name: "demo", body: "Always use tabs." },
+  );
+  equal(prompt.includes("Active skill: demo"), true);
+  equal(prompt.includes("Always use tabs."), true);
+  equal(prompt.includes(activeSkillPrompt("demo", "Always use tabs.")), true);
 });
 
 Deno.test("ChatInput accepts message attachments", () => {

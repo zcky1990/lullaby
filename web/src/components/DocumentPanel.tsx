@@ -15,18 +15,26 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PanelHeader } from "@/components/PanelHeader";
 import { Spinner } from "@/components/ui/spinner";
-import { api, type DocSummary, type LocalDocSummary } from "@/lib/api";
+import { api, type DocSummary, type DocumentSource, type LocalDocSummary } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
-interface Props {
-  projectId: string | null;
+export type PanelDocSource = "local" | DocumentSource;
+
+interface RemoteSourceState {
   loading: boolean;
   configured: boolean;
   error?: string;
   debug?: string;
   documents: DocSummary[];
+}
+
+interface Props {
+  projectId: string | null;
+  source: PanelDocSource;
+  onSourceChange: (source: PanelDocSource) => void;
+  remote: RemoteSourceState;
   selectedId: string | null;
-  onSelect: (id: string, title: string) => void;
+  onSelect: (id: string, title: string, source: DocumentSource) => void;
   onRefresh: () => void;
   onCreate: (title: string, parentPageId?: string) => Promise<void>;
   localDocuments: LocalDocSummary[];
@@ -38,13 +46,17 @@ interface Props {
   onCreateLocal: (title: string) => Promise<void>;
 }
 
+const REMOTE_TABS: { id: DocumentSource; label: string }[] = [
+  { id: "docmost", label: "Docmost" },
+  { id: "notion", label: "Notion" },
+  { id: "confluence", label: "Confluence" },
+];
+
 export function DocumentPanel({
   projectId,
-  loading,
-  configured,
-  error,
-  debug,
-  documents,
+  source,
+  onSourceChange,
+  remote,
   selectedId,
   onSelect,
   onRefresh,
@@ -57,11 +69,13 @@ export function DocumentPanel({
   onRefreshLocal,
   onCreateLocal,
 }: Props) {
-  const [source, setSource] = useState<"local" | "docmost">("local");
   const [createOpen, setCreateOpen] = useState(false);
   const [title, setTitle] = useState("");
   const [busy, setBusy] = useState(false);
   const [createError, setCreateError] = useState<string | undefined>();
+
+  const canCreate = source === "local" || source === "docmost";
+  const { loading, configured, error, debug, documents } = remote;
 
   const submit = async () => {
     const value = title.trim();
@@ -88,18 +102,20 @@ export function DocumentPanel({
           count={source === "local" ? localDocuments.length : documents.length}
         />
         <div className="flex items-center gap-1">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => {
-              setCreateError(undefined);
-              setCreateOpen(true);
-            }}
-            disabled={!projectId || (source === "local" ? !localConfigured : !configured)}
-            aria-label="Tambah dokumen"
-          >
-            <Plus />
-          </Button>
+          {canCreate ? (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => {
+                setCreateError(undefined);
+                setCreateOpen(true);
+              }}
+              disabled={!projectId || (source === "local" ? !localConfigured : !configured)}
+              aria-label="Tambah dokumen"
+            >
+              <Plus />
+            </Button>
+          ) : null}
           <Button
             variant="ghost"
             size="icon"
@@ -112,23 +128,26 @@ export function DocumentPanel({
         </div>
       </div>
 
-      <div className="flex items-center gap-1 px-2 pb-2">
+      <div className="flex flex-wrap items-center gap-1 px-2 pb-2">
         <Button
           size="sm"
           variant={source === "local" ? "secondary" : "ghost"}
           className="h-7"
-          onClick={() => setSource("local")}
+          onClick={() => onSourceChange("local")}
         >
           Local
         </Button>
-        <Button
-          size="sm"
-          variant={source === "docmost" ? "secondary" : "ghost"}
-          className="h-7"
-          onClick={() => setSource("docmost")}
-        >
-          Docmost
-        </Button>
+        {REMOTE_TABS.map((tab) => (
+          <Button
+            key={tab.id}
+            size="sm"
+            variant={source === tab.id ? "secondary" : "ghost"}
+            className="h-7"
+            onClick={() => onSourceChange(tab.id)}
+          >
+            {tab.label}
+          </Button>
+        ))}
       </div>
 
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
@@ -232,15 +251,14 @@ export function DocumentPanel({
               </div>
             )}
             {projectId && !loading && !configured && (
-              <Hint>Integrasi Docmost belum diatur (Project Settings → Integrations).</Hint>
+              <Hint>
+                Integrasi {sourceLabel(source)} belum diatur (Project Settings → Integrations).
+              </Hint>
             )}
             {projectId && !loading && configured && error && <Hint tone="error">{error}</Hint>}
             {projectId && !loading && configured && !error && documents.length === 0 && (
               <>
-                <Hint>
-                  Belum ada dokumen. Isi <span className="font-medium">Space ID</span> (id space,
-                  bukan nama) di Project Settings → Integrations.
-                </Hint>
+                <Hint>{emptyHint(source)}</Hint>
                 {debug && (
                   <pre className="mx-2 mb-2 max-h-40 overflow-auto rounded-md border bg-muted/40 p-2 text-[10px] whitespace-pre-wrap text-muted-foreground">
                     {debug}
@@ -254,6 +272,7 @@ export function DocumentPanel({
                 doc={doc}
                 depth={0}
                 projectId={projectId}
+                source={source}
                 selectedId={selectedId}
                 onSelect={onSelect}
               />
@@ -265,18 +284,51 @@ export function DocumentPanel({
   );
 }
 
+function sourceLabel(source: DocumentSource): string {
+  if (source === "notion") return "Notion";
+  if (source === "confluence") return "Confluence";
+  return "Docmost";
+}
+
+function emptyHint(source: DocumentSource): ReactNode {
+  if (source === "notion") {
+    return (
+      <>
+        Belum ada halaman. Pastikan integration punya akses ke page, atau isi{" "}
+        <span className="font-medium">Parent Page ID</span> di Project Settings.
+      </>
+    );
+  }
+  if (source === "confluence") {
+    return (
+      <>
+        Belum ada dokumen. Isi <span className="font-medium">Space Key</span> di Project Settings
+        atau expand space di tree.
+      </>
+    );
+  }
+  return (
+    <>
+      Belum ada dokumen. Isi <span className="font-medium">Space ID</span> (id space, bukan nama) di
+      Project Settings → Integrations.
+    </>
+  );
+}
+
 function DocNode({
   doc,
   depth,
   projectId,
+  source,
   selectedId,
   onSelect,
 }: {
   doc: DocSummary;
   depth: number;
   projectId: string | null;
+  source: DocumentSource;
   selectedId: string | null;
-  onSelect: (id: string, title: string) => void;
+  onSelect: (id: string, title: string, source: DocumentSource) => void;
 }) {
   const hasChildren = doc.hasChildren || !!doc.children?.length;
   const [open, setOpen] = useState(false);
@@ -293,7 +345,7 @@ function DocNode({
     setLoadingChildren(true);
     setChildError(undefined);
     try {
-      const res = await api.listDocuments(projectId, doc.id);
+      const res = await api.listDocuments(projectId, doc.id, source);
       setChildren(res.documents);
     } catch (error) {
       setChildError((error as Error).message);
@@ -328,7 +380,7 @@ function DocNode({
           <span className="size-5 shrink-0" />
         )}
         <button
-          onClick={() => onSelect(doc.id, doc.title)}
+          onClick={() => onSelect(doc.id, doc.title, source)}
           className="flex min-w-0 flex-1 items-center gap-1.5 py-1 text-left"
           title={doc.title}
         >
@@ -366,6 +418,7 @@ function DocNode({
               doc={child}
               depth={depth + 1}
               projectId={projectId}
+              source={source}
               selectedId={selectedId}
               onSelect={onSelect}
             />

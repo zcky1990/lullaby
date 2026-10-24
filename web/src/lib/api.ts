@@ -49,6 +49,8 @@ export interface TestResult {
   latencyMs: number;
 }
 
+export type DocumentSource = "docmost" | "notion" | "confluence";
+
 export interface DocSummary {
   id: string;
   title: string;
@@ -298,6 +300,7 @@ export interface ChatSessionDetail {
 
 export interface DocumentsResponse {
   configured: boolean;
+  source?: DocumentSource;
   error?: string;
   documents: DocSummary[];
   debug?: string;
@@ -413,12 +416,15 @@ export const api = {
       jsonInit("PUT", { path, content }),
     ),
   projectDetail: (id: string) => request<ProjectDetail>(`/api/projects/${id}`),
-  listDocuments: (projectId: string, pageId?: string) =>
-    request<DocumentsResponse>(
-      `/api/projects/${projectId}/documents${pageId ? `?pageId=${encodeURIComponent(pageId)}` : ""}`,
+  listDocuments: (projectId: string, pageId?: string, source: DocumentSource = "docmost") => {
+    const params = new URLSearchParams({ source });
+    if (pageId) params.set("pageId", pageId);
+    return request<DocumentsResponse>(`/api/projects/${projectId}/documents?${params}`);
+  },
+  getDocument: (projectId: string, pageId: string, source: DocumentSource = "docmost") =>
+    request<{ document: DocContent; source?: DocumentSource }>(
+      `/api/projects/${projectId}/documents/${encodeURIComponent(pageId)}?source=${source}`,
     ),
-  getDocument: (projectId: string, pageId: string) =>
-    request<{ document: DocContent }>(`/api/projects/${projectId}/documents/${pageId}`),
   createDocument: (projectId: string, payload: { title: string; parentPageId?: string }) =>
     request<{ document: DocSummary }>(
       `/api/projects/${projectId}/documents`,
@@ -531,6 +537,7 @@ export const api = {
       providerId?: string;
       sessionId?: string;
       roleId?: string;
+      skillName?: string;
       variant?: string;
       mode?: ChatMode;
       messages: { role: string; content: string; attachments?: ChatAttachment[] }[];

@@ -14,7 +14,7 @@ import {
 import type { ActivityEvent } from "@/components/ActivityFeed";
 import { ActivityBar, type Menu } from "@/components/ActivityBar";
 import { ChatSidebar } from "@/components/ChatSidebar";
-import { DocumentPanel } from "@/components/DocumentPanel";
+import { DocumentPanel, type PanelDocSource } from "@/components/DocumentPanel";
 import {
   Empty as EmptyState,
   EmptyDescription,
@@ -60,6 +60,7 @@ import { cn } from "@/lib/utils";
 import {
   api,
   type DocSummary,
+  type DocumentSource,
   type CreatedTicket,
   type GitBranch,
   type GitCommit,
@@ -129,6 +130,7 @@ export default function App() {
     openSingleton,
   } = useEditorTabs(setMenu, currentId);
 
+  const [docSource, setDocSource] = useState<PanelDocSource>("local");
   const [docs, setDocs] = useState<DocSummary[]>([]);
   const [docsConfigured, setDocsConfigured] = useState(true);
   const [docsError, setDocsError] = useState<string | undefined>();
@@ -214,12 +216,12 @@ export default function App() {
     setDetail(await api.projectDetail(id));
   }, []);
 
-  const loadDocuments = useCallback(async (id: string) => {
+  const loadDocuments = useCallback(async (id: string, source: DocumentSource = "docmost") => {
     setDocsLoading(true);
     setDocsError(undefined);
     setDocsDebug(undefined);
     try {
-      const res = await api.listDocuments(id);
+      const res = await api.listDocuments(id, undefined, source);
       setDocsConfigured(res.configured);
       setDocs(res.documents);
       setDocsError(res.error);
@@ -337,18 +339,19 @@ export default function App() {
   }, [tabs, activeTabId, patchTab]);
 
   const openDocument = useCallback(
-    async (pageId: string, title: string) => {
+    async (pageId: string, title: string, source: DocumentSource = "docmost") => {
       if (!currentId) return;
+      if (pageId.startsWith("space:")) return;
       setMenu("document");
-      const id = `doc:${currentId}:${pageId}`;
+      const id = `doc:${source}:${currentId}:${pageId}`;
       const existing = tabs.find((tab) => tab.id === id);
       if (existing && !existing.error) {
         setActiveTabId(id);
         return;
       }
-      focusTab({ id, kind: "document", title, ref: pageId, loading: true });
+      focusTab({ id, kind: "document", title, ref: pageId, source, loading: true });
       try {
-        const res = await api.getDocument(currentId, pageId);
+        const res = await api.getDocument(currentId, pageId, source);
         patchTab(id, {
           content: res.document.content,
           title: res.document.title ?? title,
@@ -358,7 +361,7 @@ export default function App() {
         patchTab(id, { loading: false, error: (error as Error).message });
       }
     },
-    [currentId, tabs, focusTab, patchTab],
+    [currentId, tabs, focusTab, patchTab, setActiveTabId, setMenu],
   );
 
   const openLocalDocument = useCallback(
@@ -507,21 +510,25 @@ export default function App() {
     async (title: string, parentPageId?: string) => {
       if (!currentId) return;
       const { document } = await api.createDocument(currentId, { title, parentPageId });
-      await loadDocuments(currentId);
-      await openDocument(document.id, document.title);
+      await loadDocuments(currentId, "docmost");
+      await openDocument(document.id, document.title, "docmost");
     },
     [currentId, loadDocuments, openDocument],
   );
+
+  const changeDocSource = useCallback((source: PanelDocSource) => {
+    setDocSource(source);
+  }, []);
 
   const saveDocument = useCallback(
     async (pageId: string, payload: { title?: string; content: string }) => {
       if (!currentId) return;
       const { document } = await api.updateDocument(currentId, pageId, payload);
-      patchTab(`doc:${currentId}:${pageId}`, {
+      patchTab(`doc:docmost:${currentId}:${pageId}`, {
         content: document.content,
         title: document.title ?? payload.title,
       });
-      await loadDocuments(currentId);
+      await loadDocuments(currentId, "docmost");
     },
     [currentId, patchTab, loadDocuments],
   );
@@ -634,12 +641,12 @@ export default function App() {
   useEffect(() => {
     if (!currentId) return;
     if (menu === "document") {
-      loadDocuments(currentId).catch(console.error);
+      if (docSource !== "local") loadDocuments(currentId, docSource).catch(console.error);
       loadLocalDocuments(currentId).catch(console.error);
     }
     if (menu === "ticket") loadTickets(currentId).catch(console.error);
     if (menu === "git") loadGit(currentId).catch(console.error);
-  }, [menu, currentId, loadDocuments, loadLocalDocuments, loadTickets, loadGit]);
+  }, [menu, currentId, docSource, loadDocuments, loadLocalDocuments, loadTickets, loadGit]);
 
   useEffect(() => {
     if (menu === "settings" && !currentId) setMenu("workspace");
@@ -968,14 +975,20 @@ export default function App() {
           {menu === "document" && (
             <DocumentPanel
               projectId={currentId}
-              loading={docsLoading}
-              configured={docsConfigured}
-              error={docsError}
-              debug={docsDebug}
-              documents={docs}
+              source={docSource}
+              onSourceChange={changeDocSource}
+              remote={{
+                loading: docsLoading,
+                configured: docsConfigured,
+                error: docsError,
+                debug: docsDebug,
+                documents: docs,
+              }}
               selectedId={activeTab?.kind === "document" ? activeTab.ref ?? null : null}
               onSelect={openDocument}
-              onRefresh={() => currentId && loadDocuments(currentId)}
+              onRefresh={() =>
+                currentId && docSource !== "local" && loadDocuments(currentId, docSource)
+              }
               onCreate={createDocument}
               localDocuments={localDocs}
               localConfigured={localDocsConfigured}
@@ -1277,6 +1290,7 @@ function DocumentTab({
 
   const docRef = tab.ref ?? "";
   const isLocal = tab.source === "local";
+  const canEdit = isLocal || tab.source === "docmost" || !tab.source;
 
   const save = async () => {
     setBusy(true);
@@ -1397,7 +1411,7 @@ function DocumentTab({
               {tab.syncStatus === "synced" ? "Sync ulang" : "Sync ke Docmost"}
             </Button>
           ) : null}
-          {editing ? (
+          {canEdit && editing ? (
             <>
               <Button size="sm" variant="ghost" onClick={cancel} disabled={busy}>
                 Batal
@@ -1407,12 +1421,13 @@ function DocumentTab({
                 Simpan
               </Button>
             </>
-          ) : (
+          ) : null}
+          {canEdit && !editing ? (
             <Button size="sm" variant="outline" onClick={() => setEditing(true)} data-icon="inline-start">
               <Pencil />
               Edit
             </Button>
-          )}
+          ) : null}
         </div>
       </div>
 

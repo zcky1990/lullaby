@@ -2,7 +2,10 @@ import {
   ChatChangeAllInput,
   ChatChangeInput,
   ChatInput,
+  ConfluenceConfig,
   CreateDocumentInput,
+  DocumentSource,
+  type DocumentSource as DocumentSourceType,
   DocmostConfig,
   GenerateTicketsInput,
   GitCheckoutInput,
@@ -16,6 +19,7 @@ import {
   LocalDocumentUpdateInput,
   LocalTicketInput,
   LocalTicketUpdateInput,
+  NotionConfig,
   parseIntegrationConfig,
   ProjectInput,
   ProjectUpdateInput,
@@ -73,11 +77,19 @@ import {
 } from "../integrations/git.ts";
 import { listDirectory, readWorkspaceFile, writeWorkspaceFile } from "../fs/workspace.ts";
 import {
+  getDocument as getConfluenceDocument,
+  listDocuments as listConfluenceDocuments,
+} from "../integrations/confluence.ts";
+import {
   createDocument,
   getDocument,
   listDocuments,
   updateDocument,
 } from "../integrations/docmost.ts";
+import {
+  getDocument as getNotionDocument,
+  listDocuments as listNotionDocuments,
+} from "../integrations/notion.ts";
 import { createTicket, getTicket, listTickets, transitionTicket } from "../integrations/jira.ts";
 import {
   decideAllChatChanges,
@@ -273,8 +285,23 @@ async function chatHandler(projectId: string, req: Request): Promise<Response> {
     parsed.data.variant,
     parsed.data.mode,
     role?.persona,
+    parsed.data.skillName,
   );
-  await record("chat.message", { projectId, providerId: provider.id });
+  if (result.status === "error" && result.error === "unknown_skill") {
+    return json(
+      {
+        error: "unknown_skill",
+        message: `Skill tidak ditemukan: ${parsed.data.skillName}`,
+        skillName: parsed.data.skillName,
+      },
+      400,
+    );
+  }
+  await record("chat.message", {
+    projectId,
+    providerId: provider.id,
+    skillName: parsed.data.skillName ?? null,
+  });
   return json(result);
 }
 
@@ -684,7 +711,10 @@ async function testIntegrationHandler(req: Request): Promise<Response> {
   return json({ result });
 }
 
-async function integrationContext(projectId: string, kind: "docmost" | "jira") {
+async function integrationContext(
+  projectId: string,
+  kind: "docmost" | "notion" | "confluence" | "jira",
+) {
   const row = await getIntegration(projectId, kind);
   if (!row) return null;
   let config: Record<string, unknown> = {};
@@ -696,26 +726,78 @@ async function integrationContext(projectId: string, kind: "docmost" | "jira") {
   return { config };
 }
 
-async function listDocumentsHandler(projectId: string, pageId?: string): Promise<Response> {
+function parseDocumentSource(raw: string | null): DocumentSourceType {
+  const parsed = DocumentSource.safeParse(raw ?? "docmost");
+  return parsed.success ? parsed.data : "docmost";
+}
+
+async function listDocumentsHandler(
+  projectId: string,
+  source: DocumentSourceType,
+  pageId?: string,
+): Promise<Response> {
   const project = await getProject(projectId);
   if (!project) return json({ error: "project_not_found" }, 404);
-  const ctx = await integrationContext(projectId, "docmost");
-  if (!ctx) return json({ configured: false, documents: [] });
+  const ctx = await integrationContext(projectId, source);
+  if (!ctx) return json({ configured: false, documents: [], source });
 
-  const parsed = DocmostConfig.safeParse(ctx.config);
-  if (!parsed.success) {
-    return json({ configured: true, error: "Konfigurasi Docmost tidak valid.", documents: [] });
-  }
   try {
+    if (source === "notion") {
+      const parsed = NotionConfig.safeParse(ctx.config);
+      if (!parsed.success) {
+        return json({
+          configured: true,
+          source,
+          error: "Konfigurasi Notion tidak valid.",
+          documents: [],
+        });
+      }
+      const { documents, sample } = await listNotionDocuments(parsed.data, pageId);
+      return json({
+        configured: true,
+        source,
+        documents,
+        ...(documents.length === 0 && !pageId ? { debug: sample } : {}),
+      });
+    }
+    if (source === "confluence") {
+      const parsed = ConfluenceConfig.safeParse(ctx.config);
+      if (!parsed.success) {
+        return json({
+          configured: true,
+          source,
+          error: "Konfigurasi Confluence tidak valid.",
+          documents: [],
+        });
+      }
+      const { documents, sample } = await listConfluenceDocuments(parsed.data, pageId);
+      return json({
+        configured: true,
+        source,
+        documents,
+        ...(documents.length === 0 && !pageId ? { debug: sample } : {}),
+      });
+    }
+
+    const parsed = DocmostConfig.safeParse(ctx.config);
+    if (!parsed.success) {
+      return json({
+        configured: true,
+        source,
+        error: "Konfigurasi Docmost tidak valid.",
+        documents: [],
+      });
+    }
     const spaceId = parsed.data.spaceId ?? project.docmost_space_id ?? undefined;
     const { documents, sample } = await listDocuments(parsed.data, spaceId, pageId);
     return json({
       configured: true,
+      source,
       documents,
       ...(documents.length === 0 && !pageId ? { debug: sample } : {}),
     });
   } catch (error) {
-    return json({ configured: true, error: (error as Error).message, documents: [] });
+    return json({ configured: true, source, error: (error as Error).message, documents: [] });
   }
 }
 
@@ -777,14 +859,28 @@ async function updateDocumentHandler(
   }
 }
 
-async function getDocumentHandler(projectId: string, pageId: string): Promise<Response> {
-  const ctx = await integrationContext(projectId, "docmost");
+async function getDocumentHandler(
+  projectId: string,
+  pageId: string,
+  source: DocumentSourceType,
+): Promise<Response> {
+  const ctx = await integrationContext(projectId, source);
   if (!ctx) return json({ error: "not_configured" }, 400);
 
-  const parsed = DocmostConfig.safeParse(ctx.config);
-  if (!parsed.success) return json({ error: "invalid_config" }, 400);
   try {
-    return json({ document: await getDocument(parsed.data, pageId) });
+    if (source === "notion") {
+      const parsed = NotionConfig.safeParse(ctx.config);
+      if (!parsed.success) return json({ error: "invalid_config" }, 400);
+      return json({ document: await getNotionDocument(parsed.data, pageId), source });
+    }
+    if (source === "confluence") {
+      const parsed = ConfluenceConfig.safeParse(ctx.config);
+      if (!parsed.success) return json({ error: "invalid_config" }, 400);
+      return json({ document: await getConfluenceDocument(parsed.data, pageId), source });
+    }
+    const parsed = DocmostConfig.safeParse(ctx.config);
+    if (!parsed.success) return json({ error: "invalid_config" }, 400);
+    return json({ document: await getDocument(parsed.data, pageId), source });
   } catch (error) {
     return json({ error: (error as Error).message }, 502);
   }
@@ -1128,6 +1224,7 @@ export async function handleRequest(req: Request): Promise<Response> {
       if (method === "GET") {
         return await listDocumentsHandler(
           documents[1],
+          parseDocumentSource(url.searchParams.get("source")),
           url.searchParams.get("pageId") ?? undefined,
         );
       }
@@ -1136,7 +1233,13 @@ export async function handleRequest(req: Request): Promise<Response> {
 
     const documentItem = pathname.match(/^\/api\/projects\/([^/]+)\/documents\/([^/]+)$/);
     if (documentItem) {
-      if (method === "GET") return await getDocumentHandler(documentItem[1], documentItem[2]);
+      if (method === "GET") {
+        return await getDocumentHandler(
+          documentItem[1],
+          decodeURIComponent(documentItem[2]),
+          parseDocumentSource(url.searchParams.get("source")),
+        );
+      }
       if (method === "PUT") {
         return await updateDocumentHandler(documentItem[1], documentItem[2], req);
       }

@@ -31,7 +31,7 @@ export interface EditorTab {
   content?: string;
   binary?: boolean;
   size?: number;
-  source?: "local" | "docmost";
+  source?: "local" | "docmost" | "notion" | "confluence";
   syncStatus?: "local" | "synced" | "error";
   pageId?: string;
   preview?: boolean;

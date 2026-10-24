@@ -1,5 +1,6 @@
-import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
-import { FileCode2, FileText, Paperclip, Plus, Send, Trash2, X } from "lucide-react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { FileCode2, FileText, Paperclip, Plus, Send, Sparkles, Trash2, X } from "lucide-react";
+import { SkillMentionMenu, type SkillOption } from "@/components/SkillMentionMenu";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -23,8 +24,10 @@ import {
   type LlmProvider,
   type PendingFileChange,
   type Role,
+  type SkillInfo,
 } from "@/lib/api";
 import { CHAT_RESPONSE_EVENT, dispatchChangesApplied, dispatchReview } from "@/lib/review-events";
+import { detectSlashQuery, parseSlashSkill } from "@/lib/slash-skill";
 import { cn } from "@/lib/utils";
 
 const MarkdownView = lazy(() => import("@/components/MarkdownView"));
@@ -33,6 +36,7 @@ interface Entry {
   id: string;
   role: "user" | "assistant";
   content: string;
+  skillName?: string;
   changes?: FileChange[];
   attachments?: DisplayAttachment[];
 }
@@ -158,8 +162,33 @@ export function ChatSidebar({
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | undefined>();
   const [pending, setPending] = useState<PendingState | null>(null);
+  const [skills, setSkills] = useState<SkillInfo[]>([]);
+  const [selectedSkill, setSelectedSkill] = useState<SkillOption | null>(null);
+  const [skillMenuOpen, setSkillMenuOpen] = useState(false);
+  const [skillQuery, setSkillQuery] = useState("");
+  const [skillActiveIndex, setSkillActiveIndex] = useState(0);
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const enabledSkills = useMemo(
+    () => skills.filter((skill) => skill.enabled).map((skill) => ({
+      name: skill.name,
+      description: skill.description,
+      source: skill.source,
+    })),
+    [skills],
+  );
+
+  const filteredSkills = useMemo(() => {
+    const query = skillQuery.trim().toLowerCase();
+    if (!query) return enabledSkills.slice(0, 12);
+    return enabledSkills
+      .filter((skill) =>
+        skill.name.includes(query) || skill.description.toLowerCase().includes(query)
+      )
+      .slice(0, 12);
+  }, [enabledSkills, skillQuery]);
 
   useEffect(() => {
     if (!providerId && providers[0]) setProviderId(providers[0].id);
@@ -214,6 +243,59 @@ export function ChatSidebar({
       // ignore
     }
   }, [projectId]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!projectId) {
+      setSkills([]);
+      setSelectedSkill(null);
+      return;
+    }
+    api
+      .getSkills(projectId)
+      .then((res) => {
+        if (!cancelled) setSkills(res.enabled === false ? [] : res.skills);
+      })
+      .catch(() => {
+        if (!cancelled) setSkills([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId]);
+
+  const applySkillMention = (skill: SkillOption) => {
+    const cursor = textareaRef.current?.selectionStart ?? input.length;
+    const slash = detectSlashQuery(input, cursor);
+    if (slash.active && slash.start >= 0) {
+      const before = input.slice(0, slash.start);
+      const after = input.slice(cursor);
+      const next = `${before}/${skill.name} ${after}`.replace(/\s{2,}/g, " ");
+      setInput(next);
+    } else {
+      setInput((current) => {
+        const trimmed = current.trim();
+        if (!trimmed || trimmed.startsWith("/")) return `/${skill.name} `;
+        return `/${skill.name} ${trimmed}`;
+      });
+    }
+    setSelectedSkill(skill);
+    setSkillMenuOpen(false);
+    setSkillQuery("");
+    requestAnimationFrame(() => textareaRef.current?.focus());
+  };
+
+  const syncSkillMenu = (value: string, cursor?: number) => {
+    const slash = detectSlashQuery(value, cursor ?? value.length);
+    if (!slash.active) {
+      setSkillMenuOpen(false);
+      setSkillQuery("");
+      return;
+    }
+    setSkillMenuOpen(true);
+    setSkillQuery(slash.query);
+    setSkillActiveIndex(0);
+  };
 
   useEffect(() => {
     setSessionId(null);
@@ -320,7 +402,7 @@ export function ChatSidebar({
 
   const send = async () => {
     const text = input.trim();
-    if ((!text && attachments.length === 0) || sending || pending) return;
+    if ((!text && attachments.length === 0 && !selectedSkill) || sending || pending) return;
     if (!projectId) {
       setError("Pilih project dulu.");
       return;
@@ -330,7 +412,14 @@ export function ChatSidebar({
       return;
     }
     setError(undefined);
-    const content = text || "Lihat lampiran.";
+    const parsed = parseSlashSkill(text);
+    const skillName = selectedSkill?.name ?? parsed.skillName ?? undefined;
+    const bodyText = selectedSkill && !parsed.skillName
+      ? text
+      : parsed.skillName
+      ? parsed.text
+      : text;
+    const content = bodyText.trim() || (skillName ? `Ikuti skill /${skillName}.` : "Lihat lampiran.");
     const outgoing: ChatAttachment[] = attachments.map((item) =>
       item.type === "workspace" ? { type: "workspace", name: item.name, path: item.path ?? "" } : {
         type: item.type,
@@ -347,9 +436,17 @@ export function ChatSidebar({
     }));
     setInput("");
     setAttachments([]);
+    setSelectedSkill(null);
+    setSkillMenuOpen(false);
     const next: Entry[] = [
       ...entries,
-      { id: crypto.randomUUID(), role: "user", content, attachments: shown },
+      {
+        id: crypto.randomUUID(),
+        role: "user",
+        content,
+        skillName: skillName || undefined,
+        attachments: shown,
+      },
     ];
     setEntries(next);
     setSending(true);
@@ -358,6 +455,7 @@ export function ChatSidebar({
         providerId: providerId || undefined,
         sessionId: sessionId ?? undefined,
         roleId: roleId ?? undefined,
+        skillName,
         variant,
         mode,
         messages: next.map((entry, index) => ({
@@ -510,6 +608,14 @@ export function ChatSidebar({
                       : "w-full self-start",
                   )}
                 >
+                  {entry.skillName ? (
+                    <div className="mb-1.5">
+                      <Badge variant="secondary" className="gap-1 font-mono text-[10px]">
+                        <Sparkles className="size-3" />
+                        /{entry.skillName}
+                      </Badge>
+                    </div>
+                  ) : null}
                   {entry.attachments?.length
                     ? (
                       <div className="mb-2 flex flex-wrap gap-1.5">
@@ -660,29 +766,91 @@ export function ChatSidebar({
               )
               : null}
           </div>
-          <textarea
-            value={input}
-            onChange={(event) => setInput(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter" && !event.shiftKey) {
-                event.preventDefault();
-                send();
-              }
-            }}
-            onPaste={(event) => {
-              const files = Array.from(event.clipboardData.files);
-              if (files.length) {
-                event.preventDefault();
-                void handleFiles(files);
-              }
-            }}
-            placeholder={pending
-              ? "Selesaikan persetujuan dulu…"
-              : "Tulis pesan… (Enter kirim, Shift+Enter baris baru)"}
-            disabled={!!pending}
-            rows={3}
-            className="w-full resize-none border-0 bg-transparent px-3 py-2 text-sm outline-none disabled:opacity-60"
-          />
+          <div className="relative">
+            {skillMenuOpen ? (
+              <SkillMentionMenu
+                skills={filteredSkills}
+                activeIndex={Math.min(skillActiveIndex, Math.max(filteredSkills.length - 1, 0))}
+                onHover={setSkillActiveIndex}
+                onSelect={applySkillMention}
+              />
+            ) : null}
+            {selectedSkill ? (
+              <div className="flex items-center gap-1 px-3 pt-2">
+                <Badge variant="secondary" className="gap-1 font-mono text-[10px]">
+                  <Sparkles className="size-3" />
+                  /{selectedSkill.name}
+                  <button
+                    type="button"
+                    className="ml-0.5 rounded-sm opacity-70 hover:opacity-100"
+                    aria-label="Hapus skill"
+                    onClick={() => setSelectedSkill(null)}
+                  >
+                    <X className="size-3" />
+                  </button>
+                </Badge>
+              </div>
+            ) : null}
+            <textarea
+              ref={textareaRef}
+              value={input}
+              onChange={(event) => {
+                const value = event.target.value;
+                setInput(value);
+                const parsed = parseSlashSkill(value);
+                if (parsed.skillName) {
+                  const match = enabledSkills.find((skill) => skill.name === parsed.skillName);
+                  if (match) setSelectedSkill(match);
+                }
+                syncSkillMenu(value, event.target.selectionStart);
+              }}
+              onKeyDown={(event) => {
+                if (skillMenuOpen && filteredSkills.length > 0) {
+                  if (event.key === "ArrowDown") {
+                    event.preventDefault();
+                    setSkillActiveIndex((index) => (index + 1) % filteredSkills.length);
+                    return;
+                  }
+                  if (event.key === "ArrowUp") {
+                    event.preventDefault();
+                    setSkillActiveIndex((index) =>
+                      (index - 1 + filteredSkills.length) % filteredSkills.length
+                    );
+                    return;
+                  }
+                  if (event.key === "Enter" || event.key === "Tab") {
+                    event.preventDefault();
+                    applySkillMention(
+                      filteredSkills[Math.min(skillActiveIndex, filteredSkills.length - 1)],
+                    );
+                    return;
+                  }
+                  if (event.key === "Escape") {
+                    event.preventDefault();
+                    setSkillMenuOpen(false);
+                    return;
+                  }
+                }
+                if (event.key === "Enter" && !event.shiftKey) {
+                  event.preventDefault();
+                  void send();
+                }
+              }}
+              onPaste={(event) => {
+                const files = Array.from(event.clipboardData.files);
+                if (files.length) {
+                  event.preventDefault();
+                  void handleFiles(files);
+                }
+              }}
+              placeholder={pending
+                ? "Selesaikan persetujuan dulu…"
+                : "Tulis pesan… /skill-name · Enter kirim"}
+              disabled={!!pending}
+              rows={3}
+              className="w-full resize-none border-0 bg-transparent px-3 py-2 text-sm outline-none disabled:opacity-60"
+            />
+          </div>
           <div className="flex items-center gap-1 px-2 pb-2">
             <input
               ref={fileInputRef}
@@ -773,7 +941,8 @@ export function ChatSidebar({
               size="icon"
               className="ml-auto size-7 shrink-0"
               onClick={send}
-              disabled={sending || !!pending || (!input.trim() && attachments.length === 0)}
+              disabled={sending || !!pending ||
+                (!input.trim() && attachments.length === 0 && !selectedSkill)}
               aria-label="Kirim"
             >
               {sending ? <Spinner /> : <Send />}
