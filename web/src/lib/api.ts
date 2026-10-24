@@ -108,6 +108,18 @@ export interface GitBranch {
   current: boolean;
 }
 
+export interface GitRemoteBranch {
+  name: string;
+  remote: string;
+  shortName: string;
+}
+
+export interface GitStash {
+  index: number;
+  label: string;
+  message: string;
+}
+
 export interface GitCommit {
   hash: string;
   short: string;
@@ -115,6 +127,11 @@ export interface GitCommit {
   author: string;
   date: string;
   refs: string;
+}
+
+export interface GitCommitDetail extends GitCommit {
+  body: string;
+  diff: string;
 }
 
 export interface McpTool {
@@ -407,6 +424,8 @@ export const api = {
     input: { name?: string; workspacePath?: string; documentPath?: string },
   ) =>
     request<{ project: Project }>(`/api/projects/${id}`, jsonInit("PUT", input)),
+  deleteProject: (id: string) =>
+    request<{ ok: boolean }>(`/api/projects/${id}`, { method: "DELETE" }),
   listFiles: (projectId: string, path: string) =>
     request<FilesResponse>(`/api/projects/${projectId}/files?path=${encodeURIComponent(path)}`),
   readFile: (projectId: string, path: string) =>
@@ -579,12 +598,25 @@ export const api = {
   gitStatus: (projectId: string) =>
     request<{ status: GitStatus }>(`/api/projects/${projectId}/git/status`),
   gitBranches: (projectId: string) =>
-    request<{ branches: GitBranch[] }>(`/api/projects/${projectId}/git/branches`),
+    request<{
+      branches: GitBranch[];
+      remotes: GitRemoteBranch[];
+      stashes: GitStash[];
+    }>(`/api/projects/${projectId}/git/branches`),
+  gitStashApply: (projectId: string, payload: { index: number; pop?: boolean }) =>
+    request<{ ok: boolean }>(
+      `/api/projects/${projectId}/git/stash/apply`,
+      jsonInit("POST", payload),
+    ),
   gitLog: (projectId: string, limit = 50) =>
     request<{ commits: GitCommit[] }>(`/api/projects/${projectId}/git/log?limit=${limit}`),
   gitDiff: (projectId: string, path: string, staged: boolean) =>
     request<{ diff: string }>(
       `/api/projects/${projectId}/git/diff?path=${encodeURIComponent(path)}&staged=${staged ? "1" : "0"}`,
+    ),
+  gitShow: (projectId: string, hash: string) =>
+    request<{ commit: GitCommitDetail }>(
+      `/api/projects/${projectId}/git/show?hash=${encodeURIComponent(hash)}`,
     ),
   gitStage: (projectId: string, paths: string[]) =>
     request<{ ok: boolean }>(
@@ -605,6 +637,39 @@ export const api = {
     request<{ ok: boolean }>(
       `/api/projects/${projectId}/git/checkout`,
       jsonInit("POST", { branch }),
+    ),
+  gitFetch: (projectId: string) =>
+    request<{ ok: boolean; output: string }>(
+      `/api/projects/${projectId}/git/fetch`,
+      jsonInit("POST", {}, { timeoutMs: 180_000 }),
+    ),
+  gitPull: (projectId: string) =>
+    request<{ ok: boolean; output: string }>(
+      `/api/projects/${projectId}/git/pull`,
+      jsonInit("POST", {}, { timeoutMs: 180_000 }),
+    ),
+  gitPush: (projectId: string) =>
+    request<{ ok: boolean; output: string }>(
+      `/api/projects/${projectId}/git/push`,
+      jsonInit("POST", {}, { timeoutMs: 180_000 }),
+    ),
+  gitCreateBranch: (projectId: string, payload: { name: string; checkout?: boolean }) =>
+    request<{ ok: boolean }>(
+      `/api/projects/${projectId}/git/branch`,
+      jsonInit("POST", payload),
+    ),
+  gitMerge: (projectId: string, branch: string) =>
+    request<{ ok: boolean; output: string }>(
+      `/api/projects/${projectId}/git/merge`,
+      jsonInit("POST", { branch }),
+    ),
+  gitStashCreate: (
+    projectId: string,
+    payload: { message?: string; includeUntracked?: boolean } = {},
+  ) =>
+    request<{ ok: boolean; output: string }>(
+      `/api/projects/${projectId}/git/stash`,
+      jsonInit("POST", payload),
     ),
   getMcpSettings: () => request<McpSettingsResponse>("/api/settings/mcp"),
   saveMcpSettings: (payload: {

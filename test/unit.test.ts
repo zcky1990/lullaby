@@ -29,7 +29,11 @@ import {
   updateLocalDocument,
 } from "../src/fs/documents.ts";
 import { resolveWithin } from "../src/fs/workspace.ts";
-import { checkedPaths, normalizeWorkspacePath } from "../src/integrations/git.ts";
+import {
+  checkedPaths,
+  normalizeWorkspacePath,
+  showCommit,
+} from "../src/integrations/git.ts";
 import {
   decideAllChatChanges,
   decideChatChange,
@@ -571,6 +575,19 @@ Deno.test("decideChatChange accepts and rejects hunks against workspace", async 
   } finally {
     await Deno.remove(root, { recursive: true });
   }
+});
+
+Deno.test("showCommit rejects invalid hash", async () => {
+  await rejects(() => showCommit("/tmp", "not-a-hash"));
+  await rejects(() => showCommit("/tmp", "zzzzzzz"));
+  await rejects(() => showCommit("/tmp", "../foo"));
+});
+
+Deno.test("GitStashApplyInput validates index", async () => {
+  const { GitStashApplyInput } = await import("../src/config/schema.ts");
+  equal(GitStashApplyInput.parse({ index: 0 }).pop, false);
+  equal(GitStashApplyInput.parse({ index: 2, pop: true }).pop, true);
+  throws(() => GitStashApplyInput.parse({ index: -1 }));
 });
 
 Deno.test("git checkedPaths rejects escapes and normalizes ~", async () => {

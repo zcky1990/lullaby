@@ -67,10 +67,11 @@ finishing a change.
   (needs Node >= 22.6, network, `--allow-run`). Enabled state lives in `app_settings`
   (`skills_enabled`, `skills_disabled`); UI is Global Settings → Skills.
 - **Git**: `src/integrations/git.ts` runs the `git` CLI inside `projects.workspace_path` (status,
-  branches, log, diff, stage/unstage, commit, checkout with `--` path guards). UI is a
-  SourceTree-like two-pane view: `GitPanel` (branches/refresh) in the aside and `GitTab`
-  (Changes/History) in the tab; routes live under `/api/projects/:id/git/*`. Expects a git
-  repository; returns a clear error otherwise.
+  branches, remotes, stashes, log, diff, show, stage/unstage, commit, checkout, fetch, pull,
+  push, create branch, merge, stash with `--` path guards). UI is SourceTree-like: `GitPanel`
+  (workspace, local/remotes/stashes) in the aside and `GitTab` (toolbar + File Status / History
+  with file list | diff splitter + commit form) in the tab; routes under
+  `/api/projects/:id/git/*`. Expects a git repository; returns a clear error otherwise.
 - **Terminal**: `src/server/terminal.ts` upgrades `/api/projects/:id/terminal` to a WebSocket and
   runs an interactive shell (`zsh`/`bash`, query `shell=` or global `terminal_shell` in
   `app_settings`) in the project workspace via a real PTY (`@sigma/pty-ffi`) with resize support.

@@ -4,13 +4,19 @@
 
 Menjalankan CLI `git` di dalam `projects.workspace_path` (`src/integrations/git.ts`).
 
-UI:
+UI (SourceTree-like):
 
-- Aside: `GitPanel` (branches, refresh, checkout)
-- Tab: `GitTab` — Changes (stage/unstage/commit/diff) dan History
+- Aside: `GitPanel` — Workspace (branch aktif, ahead/behind) + Branches lokal + Remotes
+  (grouped, checkout → local tracking) + Stashes (apply)
+- Tab: `GitTab` dua kolom dengan splitter (lebar tersimpan di `localStorage`)
+  - Toolbar: Fetch / Pull / Push / Branch / Merge / Stash
+  - **File Status**: kiri = Staged / Unstaged / Untracked + form commit; kanan = diff
+  - **History**: kiri = daftar commit; kanan = meta + `git show` patch
 
-Route: `/api/projects/:id/git/*`. Path di-guard (`--` / reject escape).  
-Jika folder bukan repo git, API mengembalikan error yang jelas.
+Route: `/api/projects/:id/git/*` (`status`, `branches`, `log`, `diff`, `show`, `stage`,
+`unstage`, `commit`, `checkout`, `fetch`, `pull`, `push`, `branch`, `merge`, `stash`).
+Path di-guard (`--` / reject escape). Jika folder bukan repo git, API mengembalikan error
+yang jelas.
 
 ## Terminal
 

@@ -33,7 +33,7 @@ Implementasi: `src/server/router.ts`. Input divalidasi Zod (`src/config/schema.t
 | Method | Path | Keterangan |
 | --- | --- | --- |
 | `GET`/`POST` | `/api/projects` | List / create |
-| `GET`/`PUT` | `/api/projects/:id` | Detail / update |
+| `GET`/`PUT`/`DELETE` | `/api/projects/:id` | Detail / update / hapus (CASCADE data lokal; folder disk tetap) |
 | `PUT`/`POST` | `/api/projects/:id/integrations/:kind` | Upsert integrasi |
 
 ## Files (workspace)
@@ -51,12 +51,18 @@ Prefix: `/api/projects/:id/git/`
 | Path | Method | Keterangan |
 | --- | --- | --- |
 | `status` | `GET` | Working tree |
-| `branches` | `GET` | Branches |
+| `branches` | `GET` | `{ branches, remotes, stashes }` |
 | `log` | `GET` | Commits |
 | `diff` | `GET` | Diff path (+ staged) |
+| `show` | `GET` | Detail + patch commit (`?hash=`) |
 | `stage` / `unstage` | `POST` | `{ paths }` |
 | `commit` | `POST` | `{ message }` |
-| `checkout` | `POST` | `{ branch }` |
+| `checkout` | `POST` | `{ branch }` (lokal atau `remote/name`) |
+| `fetch` / `pull` / `push` | `POST` | Sinkron remote |
+| `branch` | `POST` | `{ name, checkout? }` buat branch |
+| `merge` | `POST` | `{ branch }` merge ke HEAD |
+| `stash` | `POST` | `{ message?, includeUntracked? }` buat stash |
+| `stash/apply` | `POST` | `{ index, pop? }` |
 
 ## Terminal
 

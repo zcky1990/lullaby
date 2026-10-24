@@ -133,6 +133,29 @@ export const GitCheckoutInput = z.object({
   branch: z.string().trim().min(1).max(200),
 });
 
+export const GitStashApplyInput = z.object({
+  index: z.number().int().min(0).max(100),
+  pop: z.boolean().optional().default(false),
+});
+export type GitStashApplyInput = z.infer<typeof GitStashApplyInput>;
+
+export const GitBranchCreateInput = z.object({
+  name: z.string().trim().min(1).max(200),
+  checkout: z.boolean().optional().default(true),
+});
+export type GitBranchCreateInput = z.infer<typeof GitBranchCreateInput>;
+
+export const GitMergeInput = z.object({
+  branch: z.string().trim().min(1).max(200),
+});
+export type GitMergeInput = z.infer<typeof GitMergeInput>;
+
+export const GitStashCreateInput = z.object({
+  message: z.string().trim().max(200).optional(),
+  includeUntracked: z.boolean().optional().default(true),
+});
+export type GitStashCreateInput = z.infer<typeof GitStashCreateInput>;
+
 export const UpdateFileInput = z.object({
   path: z.string().trim().min(1).max(1000),
   content: z.string().max(2_000_000),

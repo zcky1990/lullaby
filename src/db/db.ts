@@ -358,6 +358,14 @@ export async function updateProject(
   return await getProject(id);
 }
 
+export async function deleteProject(id: string): Promise<boolean> {
+  const existing = await getProject(id);
+  if (!existing) return false;
+  const db = await getDb();
+  db.prepare("DELETE FROM projects WHERE id = ?").run(id);
+  return true;
+}
+
 export async function listIntegrations(projectId: string): Promise<IntegrationRow[]> {
   const db = await getDb();
   return rows<IntegrationRow>(

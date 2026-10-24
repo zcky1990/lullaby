@@ -66,6 +66,8 @@ import {
   type CreatedTicket,
   type GitBranch,
   type GitCommit,
+  type GitRemoteBranch,
+  type GitStash,
   type GitStatus,
   type IntegrationPayload,
   type LlmProvider,
@@ -156,6 +158,8 @@ export default function App() {
   const [terminalOpen, setTerminalOpen] = useState(false);
   const [gitStatusData, setGitStatusData] = useState<GitStatus | null>(null);
   const [gitBranchList, setGitBranchList] = useState<GitBranch[]>([]);
+  const [gitRemoteList, setGitRemoteList] = useState<GitRemoteBranch[]>([]);
+  const [gitStashList, setGitStashList] = useState<GitStash[]>([]);
   const [gitCommits, setGitCommits] = useState<GitCommit[]>([]);
   const [gitLoading, setGitLoading] = useState(false);
   const [gitError, setGitError] = useState<string | undefined>();
@@ -286,11 +290,15 @@ export default function App() {
       ]);
       setGitStatusData(status.status);
       setGitBranchList(branches.branches);
+      setGitRemoteList(branches.remotes ?? []);
+      setGitStashList(branches.stashes ?? []);
       setGitCommits(log.commits);
     } catch (error) {
       setGitError((error as Error).message);
       setGitStatusData(null);
       setGitBranchList([]);
+      setGitRemoteList([]);
+      setGitStashList([]);
       setGitCommits([]);
     } finally {
       setGitLoading(false);
@@ -328,6 +336,15 @@ export default function App() {
     async (branch: string) => {
       if (!currentId) return;
       await api.gitCheckout(currentId, branch);
+      await loadGit(currentId);
+    },
+    [currentId, loadGit],
+  );
+
+  const applyGitStash = useCallback(
+    async (index: number, pop = false) => {
+      if (!currentId) return;
+      await api.gitStashApply(currentId, { index, pop });
       await loadGit(currentId);
     },
     [currentId, loadGit],
@@ -657,6 +674,8 @@ export default function App() {
     setLocalDocsError(undefined);
     setGitStatusData(null);
     setGitBranchList([]);
+    setGitRemoteList([]);
+    setGitStashList([]);
     setGitCommits([]);
     setGitError(undefined);
     const workspaceTab: EditorTab = {
@@ -752,6 +771,17 @@ export default function App() {
     const { project } = await api.createProject(input);
     setProjects((current) => [project, ...current]);
     setCurrentId(project.id);
+  };
+
+  const removeProject = async (id: string) => {
+    await api.deleteProject(id);
+    setProjects((current) => {
+      const next = current.filter((project) => project.id !== id);
+      if (currentId === id) {
+        setCurrentId(next[0]?.id ?? null);
+      }
+      return next;
+    });
   };
 
   const saveIntegration = async (payload: IntegrationPayload) => {
@@ -937,10 +967,11 @@ export default function App() {
           <GitTab
             projectId={currentId}
             status={gitStatusData}
+            branches={gitBranchList}
             commits={gitCommits}
             loading={gitLoading}
             error={gitError}
-            onRefresh={() => currentId && loadGit(currentId)}
+            onRefresh={() => (currentId ? loadGit(currentId) : Promise.resolve())}
             onStage={stageGit}
             onUnstage={unstageGit}
             onCommit={commitGit}
@@ -985,7 +1016,7 @@ export default function App() {
         menu === "global") && (
         <aside
           style={{ width: panelWidth }}
-          className="relative flex shrink-0 flex-col border-r bg-[var(--sidebar)]"
+          className="relative flex min-h-0 shrink-0 flex-col overflow-hidden border-r bg-[var(--sidebar)]"
         >
           {menu === "workspace" && (
             <WorkspacePanel
@@ -993,6 +1024,7 @@ export default function App() {
               currentId={currentId}
               onSelect={setCurrentId}
               onCreate={createProject}
+              onDelete={removeProject}
             />
           )}
           {menu === "files" && (
@@ -1012,10 +1044,13 @@ export default function App() {
             <GitPanel
               status={gitStatusData}
               branches={gitBranchList}
+              remotes={gitRemoteList}
+              stashes={gitStashList}
               loading={gitLoading}
               error={gitError}
               onRefresh={() => currentId && loadGit(currentId)}
               onCheckout={(branch) => void checkoutGit(branch)}
+              onApplyStash={(index, pop) => void applyGitStash(index, pop)}
             />
           )}
           {menu === "ticket" && (

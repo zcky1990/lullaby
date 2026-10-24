@@ -67,6 +67,25 @@ export interface GitBranch {
   current: boolean;
 }
 
+export interface GitRemoteBranch {
+  name: string;
+  remote: string;
+  shortName: string;
+}
+
+export interface GitStash {
+  index: number;
+  label: string;
+  message: string;
+}
+
+function isSafeRefName(name: string): boolean {
+  const value = name.trim();
+  if (!value || value.length > 200) return false;
+  if (value.includes("..") || value.startsWith("-") || value.includes("\0")) return false;
+  return /^[A-Za-z0-9._/\-@{}]+$/.test(value);
+}
+
 export interface GitCommit {
   hash: string;
   short: string;
@@ -74,6 +93,29 @@ export interface GitCommit {
   author: string;
   date: string;
   refs: string;
+}
+
+export interface GitCommitDetail {
+  hash: string;
+  short: string;
+  subject: string;
+  body: string;
+  author: string;
+  date: string;
+  refs: string;
+  diff: string;
+}
+
+const MAX_SHOW_DIFF_CHARS = 60_000;
+
+function truncateDiff(text: string, max = MAX_SHOW_DIFF_CHARS): string {
+  const trimmed = text.trimEnd();
+  if (trimmed.length <= max) return trimmed;
+  return `${trimmed.slice(0, max)}\n\n…(diff truncated)`;
+}
+
+function isSafeGitHash(hash: string): boolean {
+  return /^[0-9a-fA-F]{7,40}$/.test(hash.trim());
 }
 
 export async function runGit(
@@ -248,6 +290,50 @@ export async function listBranches(cwd: string): Promise<GitBranch[]> {
     .sort((a, b) => Number(b.current) - Number(a.current) || a.name.localeCompare(b.name));
 }
 
+export async function listRemoteBranches(cwd: string): Promise<GitRemoteBranch[]> {
+  const result = await execGit(cwd, [
+    "for-each-ref",
+    "--format=%(refname:short)",
+    "refs/remotes",
+  ]);
+  if (result.code !== 0) return [];
+  return result.stdout
+    .split(/\r?\n/)
+    .filter(Boolean)
+    .filter((name) => !name.endsWith("/HEAD") && name !== "HEAD")
+    .map((name) => {
+      const slash = name.indexOf("/");
+      const remote = slash > 0 ? name.slice(0, slash) : name;
+      const shortName = slash > 0 ? name.slice(slash + 1) : name;
+      return { name, remote, shortName };
+    })
+    .sort((a, b) =>
+      a.remote.localeCompare(b.remote) || a.shortName.localeCompare(b.shortName)
+    );
+}
+
+export async function listStashes(cwd: string): Promise<GitStash[]> {
+  const result = await execGit(cwd, [
+    "stash",
+    "list",
+    "--format=%gd%x1f%s",
+  ]);
+  if (result.code !== 0) return [];
+  return result.stdout
+    .split(/\r?\n/)
+    .filter(Boolean)
+    .map((line) => {
+      const [label = "", message = ""] = line.split("\x1f");
+      const match = /stash@\{(\d+)\}/.exec(label);
+      const index = match ? Number(match[1]) : 0;
+      return {
+        index: Number.isFinite(index) ? index : 0,
+        label: label.trim() || `stash@{${index}}`,
+        message: message.trim() || "(tanpa pesan)",
+      };
+    });
+}
+
 export async function listCommits(cwd: string, limit = 50): Promise<GitCommit[]> {
   const result = await execGit(cwd, [
     "log",
@@ -271,6 +357,50 @@ export async function listCommits(cwd: string, limit = 50): Promise<GitCommit[]>
         refs: refs.trim(),
       };
     });
+}
+
+export async function showCommit(cwd: string, hash: string): Promise<GitCommitDetail> {
+  const id = hash.trim();
+  if (!isSafeGitHash(id)) throw new Error("Hash commit tidak valid.");
+
+  const meta = await execGit(cwd, [
+    "show",
+    "-s",
+    "--no-color",
+    "--pretty=format:%H%x1f%an%x1f%ad%x1f%s%x1f%D",
+    "--date=iso-strict",
+    id,
+  ]);
+  if (meta.code !== 0) {
+    throw new Error(meta.stderr.trim() || `Commit tidak ditemukan: ${id}`);
+  }
+
+  const [full = "", author = "", date = "", subject = "", refs = ""] = meta.stdout.split("\x1f");
+
+  const bodyResult = await execGit(cwd, [
+    "show",
+    "-s",
+    "--no-color",
+    "--pretty=format:%b",
+    id,
+  ]);
+  const body = bodyResult.code === 0 ? bodyResult.stdout.trim() : "";
+
+  const patch = await execGit(cwd, ["show", "--no-color", "--pretty=format:", id]);
+  if (patch.code !== 0) {
+    throw new Error(patch.stderr.trim() || `Gagal memuat diff commit: ${id}`);
+  }
+
+  return {
+    hash: full || id,
+    short: (full || id).slice(0, 7),
+    subject: subject.trim(),
+    body,
+    author: author.trim(),
+    date: date.trim(),
+    refs: refs.trim(),
+    diff: truncateDiff(patch.stdout),
+  };
 }
 
 export async function getDiff(cwd: string, path: string, staged: boolean): Promise<string> {
@@ -320,9 +450,121 @@ export async function commit(cwd: string, message: string): Promise<string> {
 }
 
 export async function checkoutBranch(cwd: string, branch: string): Promise<void> {
-  const branches = await listBranches(cwd);
-  if (!branches.some((item) => item.name === branch)) {
-    throw new Error("Branch tidak ditemukan.");
+  const name = branch.trim();
+  if (!isSafeRefName(name)) throw new Error("Nama branch tidak valid.");
+
+  const locals = await listBranches(cwd);
+  if (locals.some((item) => item.name === name)) {
+    await git(cwd, ["checkout", name]);
+    return;
   }
-  await git(cwd, ["checkout", branch]);
+
+  const remotes = await listRemoteBranches(cwd);
+  const remote = remotes.find((item) => item.name === name);
+  if (!remote) throw new Error("Branch tidak ditemukan.");
+
+  if (locals.some((item) => item.name === remote.shortName)) {
+    await git(cwd, ["checkout", remote.shortName]);
+    return;
+  }
+
+  await git(cwd, ["checkout", "-b", remote.shortName, "--track", remote.name]);
+}
+
+export async function applyStash(cwd: string, index: number, pop = false): Promise<void> {
+  if (!Number.isInteger(index) || index < 0 || index > 100) {
+    throw new Error("Index stash tidak valid.");
+  }
+  const ref = `stash@{${index}}`;
+  await git(cwd, ["stash", pop ? "pop" : "apply", ref]);
+}
+
+export async function fetchRemote(cwd: string): Promise<string> {
+  const result = await execGit(cwd, ["fetch", "--all", "--prune"]);
+  if (result.code !== 0) {
+    throw new Error(result.stderr.trim() || result.stdout.trim() || "git fetch gagal");
+  }
+  return (result.stdout || result.stderr).trim() || "Fetch selesai.";
+}
+
+export async function pull(cwd: string): Promise<string> {
+  const result = await execGit(cwd, ["pull", "--no-edit"]);
+  if (result.code !== 0) {
+    throw new Error(result.stderr.trim() || result.stdout.trim() || "git pull gagal");
+  }
+  return (result.stdout || result.stderr).trim() || "Pull selesai.";
+}
+
+export async function push(cwd: string): Promise<string> {
+  const result = await execGit(cwd, ["push"]);
+  if (result.code !== 0) {
+    const detail = result.stderr.trim() || result.stdout.trim();
+    if (/no upstream|has no upstream/i.test(detail)) {
+      const status = await getStatus(cwd);
+      const branch = status.branch;
+      if (!isSafeRefName(branch) || branch === "HEAD") {
+        throw new Error(detail || "Branch tidak punya upstream.");
+      }
+      const retry = await execGit(cwd, ["push", "-u", "origin", branch]);
+      if (retry.code !== 0) {
+        throw new Error(retry.stderr.trim() || retry.stdout.trim() || "git push gagal");
+      }
+      return (retry.stdout || retry.stderr).trim() || `Push + set upstream origin/${branch}.`;
+    }
+    throw new Error(detail || "git push gagal");
+  }
+  return (result.stdout || result.stderr).trim() || "Push selesai.";
+}
+
+export async function createBranch(
+  cwd: string,
+  name: string,
+  checkout = true,
+): Promise<void> {
+  const branch = name.trim();
+  if (!isSafeRefName(branch) || branch.includes("..")) {
+    throw new Error("Nama branch tidak valid.");
+  }
+  const locals = await listBranches(cwd);
+  if (locals.some((item) => item.name === branch)) {
+    throw new Error(`Branch sudah ada: ${branch}`);
+  }
+  if (checkout) await git(cwd, ["checkout", "-b", branch]);
+  else await git(cwd, ["branch", branch]);
+}
+
+export async function mergeBranch(cwd: string, branch: string): Promise<string> {
+  const name = branch.trim();
+  if (!isSafeRefName(name)) throw new Error("Nama branch tidak valid.");
+  const locals = await listBranches(cwd);
+  if (!locals.some((item) => item.name === name)) {
+    throw new Error("Branch lokal tidak ditemukan.");
+  }
+  if (locals.some((item) => item.current && item.name === name)) {
+    throw new Error("Tidak bisa merge branch yang sedang aktif.");
+  }
+  const result = await execGit(cwd, ["merge", "--no-edit", name]);
+  if (result.code !== 0) {
+    throw new Error(result.stderr.trim() || result.stdout.trim() || "git merge gagal");
+  }
+  return (result.stdout || result.stderr).trim() || `Merged ${name}.`;
+}
+
+export async function createStash(
+  cwd: string,
+  message?: string,
+  includeUntracked = true,
+): Promise<string> {
+  const args = ["stash", "push"];
+  if (includeUntracked) args.push("-u");
+  const note = message?.trim();
+  if (note) {
+    if (note.length > 200) throw new Error("Pesan stash terlalu panjang.");
+    args.push("-m", note);
+  }
+  const result = await execGit(cwd, args);
+  if (result.code !== 0) {
+    throw new Error(result.stderr.trim() || result.stdout.trim() || "git stash gagal");
+  }
+  return (result.stdout || result.stderr).trim() || "Stash dibuat.";
 }

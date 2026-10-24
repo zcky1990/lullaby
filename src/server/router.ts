@@ -9,9 +9,13 @@ import {
   type DocumentSource as DocumentSourceType,
   DocmostConfig,
   GenerateTicketsInput,
+  GitBranchCreateInput,
   GitCheckoutInput,
   GitCommitInput,
+  GitMergeInput,
   GitPathsInput,
+  GitStashApplyInput,
+  GitStashCreateInput,
   IntegrationInput,
   type IntegrationKind,
   JiraConfig,
@@ -34,6 +38,7 @@ import {
   createProject,
   deleteChatSession,
   deleteLocalTicket,
+  deleteProject,
   getChatSession,
   getIntegration,
   getLlmProvider,
@@ -66,13 +71,23 @@ import {
   updateLocalDocument,
 } from "../fs/documents.ts";
 import {
+  applyStash as gitApplyStash,
   checkGitRepository,
   checkoutBranch,
   commit as gitCommit,
+  createBranch as gitCreateBranch,
+  createStash as gitCreateStash,
+  fetchRemote as gitFetch,
   getDiff as gitDiff,
   getStatus as gitStatus,
   listBranches as gitBranches,
   listCommits as gitLog,
+  listRemoteBranches as gitRemotes,
+  listStashes as gitStashes,
+  mergeBranch as gitMerge,
+  pull as gitPull,
+  push as gitPush,
+  showCommit as gitShow,
   stagePaths as gitStage,
   unstagePaths as gitUnstage,
 } from "../integrations/git.ts";
@@ -162,6 +177,15 @@ async function updateProjectHandler(projectId: string, req: Request): Promise<Re
   if (!project) return json({ error: "project_not_found" }, 404);
   await record("project.updated", { id: projectId });
   return json({ project });
+}
+
+async function deleteProjectHandler(projectId: string): Promise<Response> {
+  const existing = await getProject(projectId);
+  if (!existing) return json({ error: "project_not_found" }, 404);
+  const ok = await deleteProject(projectId);
+  if (!ok) return json({ error: "project_not_found" }, 404);
+  await record("project.deleted", { id: projectId, name: existing.name });
+  return json({ ok: true });
 }
 
 async function listFilesHandler(projectId: string, rel: string): Promise<Response> {
@@ -591,7 +615,12 @@ async function gitBranchesHandler(projectId: string): Promise<Response> {
   const cwd = await gitCwd(projectId);
   if (cwd instanceof Response) return cwd;
   try {
-    return json({ branches: await gitBranches(cwd) });
+    const [branches, remotes, stashes] = await Promise.all([
+      gitBranches(cwd),
+      gitRemotes(cwd),
+      gitStashes(cwd),
+    ]);
+    return json({ branches, remotes, stashes });
   } catch (error) {
     return json({ error: (error as Error).message }, 400);
   }
@@ -617,6 +646,17 @@ async function gitDiffHandler(
   if (!path) return json({ error: "path_required" }, 400);
   try {
     return json({ diff: await gitDiff(cwd, path, staged) });
+  } catch (error) {
+    return json({ error: (error as Error).message }, 400);
+  }
+}
+
+async function gitShowHandler(projectId: string, hash: string): Promise<Response> {
+  const cwd = await gitCwd(projectId);
+  if (cwd instanceof Response) return cwd;
+  if (!hash) return json({ error: "hash_required" }, 400);
+  try {
+    return json({ commit: await gitShow(cwd, hash) });
   } catch (error) {
     return json({ error: (error as Error).message }, 400);
   }
@@ -670,6 +710,97 @@ async function gitCheckoutHandler(projectId: string, req: Request): Promise<Resp
     await checkoutBranch(cwd, parsed.data.branch);
     await record("git.checkout", { projectId, branch: parsed.data.branch });
     return json({ ok: true });
+  } catch (error) {
+    return json({ error: (error as Error).message }, 400);
+  }
+}
+
+async function gitStashApplyHandler(projectId: string, req: Request): Promise<Response> {
+  const cwd = await gitCwd(projectId);
+  if (cwd instanceof Response) return cwd;
+  const parsed = GitStashApplyInput.safeParse(await readJson(req));
+  if (!parsed.success) {
+    return json({ error: "invalid_input", issues: parsed.error.issues }, 400);
+  }
+  try {
+    await gitApplyStash(cwd, parsed.data.index, parsed.data.pop);
+    await record("git.stash_apply", {
+      projectId,
+      index: parsed.data.index,
+      pop: parsed.data.pop,
+    });
+    return json({ ok: true });
+  } catch (error) {
+    return json({ error: (error as Error).message }, 400);
+  }
+}
+
+async function gitSimpleActionHandler(
+  projectId: string,
+  action: "fetch" | "pull" | "push",
+): Promise<Response> {
+  const cwd = await gitCwd(projectId);
+  if (cwd instanceof Response) return cwd;
+  try {
+    const output = action === "fetch"
+      ? await gitFetch(cwd)
+      : action === "pull"
+      ? await gitPull(cwd)
+      : await gitPush(cwd);
+    await record(`git.${action}`, { projectId });
+    return json({ ok: true, output });
+  } catch (error) {
+    return json({ error: (error as Error).message }, 400);
+  }
+}
+
+async function gitCreateBranchHandler(projectId: string, req: Request): Promise<Response> {
+  const cwd = await gitCwd(projectId);
+  if (cwd instanceof Response) return cwd;
+  const parsed = GitBranchCreateInput.safeParse(await readJson(req));
+  if (!parsed.success) {
+    return json({ error: "invalid_input", issues: parsed.error.issues }, 400);
+  }
+  try {
+    await gitCreateBranch(cwd, parsed.data.name, parsed.data.checkout);
+    await record("git.branch_create", { projectId, name: parsed.data.name });
+    return json({ ok: true });
+  } catch (error) {
+    return json({ error: (error as Error).message }, 400);
+  }
+}
+
+async function gitMergeHandler(projectId: string, req: Request): Promise<Response> {
+  const cwd = await gitCwd(projectId);
+  if (cwd instanceof Response) return cwd;
+  const parsed = GitMergeInput.safeParse(await readJson(req));
+  if (!parsed.success) {
+    return json({ error: "invalid_input", issues: parsed.error.issues }, 400);
+  }
+  try {
+    const output = await gitMerge(cwd, parsed.data.branch);
+    await record("git.merge", { projectId, branch: parsed.data.branch });
+    return json({ ok: true, output });
+  } catch (error) {
+    return json({ error: (error as Error).message }, 400);
+  }
+}
+
+async function gitStashCreateHandler(projectId: string, req: Request): Promise<Response> {
+  const cwd = await gitCwd(projectId);
+  if (cwd instanceof Response) return cwd;
+  const parsed = GitStashCreateInput.safeParse(await readJson(req));
+  if (!parsed.success) {
+    return json({ error: "invalid_input", issues: parsed.error.issues }, 400);
+  }
+  try {
+    const output = await gitCreateStash(
+      cwd,
+      parsed.data.message,
+      parsed.data.includeUntracked,
+    );
+    await record("git.stash_create", { projectId });
+    return json({ ok: true, output });
   } catch (error) {
     return json({ error: (error as Error).message }, 400);
   }
@@ -1193,6 +1324,7 @@ export async function handleRequest(req: Request): Promise<Response> {
     const detail = pathname.match(/^\/api\/projects\/([^/]+)$/);
     if (detail && method === "GET") return await getProjectDetail(detail[1]);
     if (detail && method === "PUT") return await updateProjectHandler(detail[1], req);
+    if (detail && method === "DELETE") return await deleteProjectHandler(detail[1]);
 
     const gitStatus = pathname.match(/^\/api\/projects\/([^/]+)\/git\/status$/);
     if (gitStatus && method === "GET") return await gitStatusHandler(gitStatus[1]);
@@ -1210,6 +1342,11 @@ export async function handleRequest(req: Request): Promise<Response> {
       const staged = url.searchParams.get("staged") === "1" ||
         url.searchParams.get("staged") === "true";
       return await gitDiffHandler(gitDiff[1], url.searchParams.get("path") ?? "", staged);
+    }
+
+    const gitShowRoute = pathname.match(/^\/api\/projects\/([^/]+)\/git\/show$/);
+    if (gitShowRoute && method === "GET") {
+      return await gitShowHandler(gitShowRoute[1], url.searchParams.get("hash") ?? "");
     }
 
     const gitStage = pathname.match(/^\/api\/projects\/([^/]+)\/git\/(stage|unstage)$/);
@@ -1230,6 +1367,33 @@ export async function handleRequest(req: Request): Promise<Response> {
     if (gitCheckout && method === "POST") {
       return await gitCheckoutHandler(gitCheckout[1], req);
     }
+
+    const gitStashApply = pathname.match(/^\/api\/projects\/([^/]+)\/git\/stash\/apply$/);
+    if (gitStashApply && method === "POST") {
+      return await gitStashApplyHandler(gitStashApply[1], req);
+    }
+
+    const gitStashCreate = pathname.match(/^\/api\/projects\/([^/]+)\/git\/stash$/);
+    if (gitStashCreate && method === "POST") {
+      return await gitStashCreateHandler(gitStashCreate[1], req);
+    }
+
+    const gitFetch = pathname.match(/^\/api\/projects\/([^/]+)\/git\/fetch$/);
+    if (gitFetch && method === "POST") return await gitSimpleActionHandler(gitFetch[1], "fetch");
+
+    const gitPull = pathname.match(/^\/api\/projects\/([^/]+)\/git\/pull$/);
+    if (gitPull && method === "POST") return await gitSimpleActionHandler(gitPull[1], "pull");
+
+    const gitPush = pathname.match(/^\/api\/projects\/([^/]+)\/git\/push$/);
+    if (gitPush && method === "POST") return await gitSimpleActionHandler(gitPush[1], "push");
+
+    const gitBranchCreate = pathname.match(/^\/api\/projects\/([^/]+)\/git\/branch$/);
+    if (gitBranchCreate && method === "POST") {
+      return await gitCreateBranchHandler(gitBranchCreate[1], req);
+    }
+
+    const gitMerge = pathname.match(/^\/api\/projects\/([^/]+)\/git\/merge$/);
+    if (gitMerge && method === "POST") return await gitMergeHandler(gitMerge[1], req);
 
     const terminal = pathname.match(/^\/api\/projects\/([^/]+)\/terminal$/);
     if (terminal && method === "GET") return await terminalHandler(terminal[1], req);
