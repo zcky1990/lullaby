@@ -60,8 +60,11 @@ finishing a change.
   exposes a read-only `use_skill` tool (progressive disclosure; allowed in Plan mode). After each
   successful Build run that used tools, `src/server/chat/skill-learn.ts` writes a deterministic
   project skill. Chat composer supports `/skill-name` (autocomplete + `skillName` on
-  `POST .../chat`) which injects the skill body into the system prompt. Enabled state lives in
-  `app_settings` (`skills_enabled`, `skills_disabled`); UI is Global Settings → Skills.
+  `POST .../chat`) which injects the skill body into the system prompt. Reserved slash
+  `/autoskill` runs `npx autoskills -y -a cursor` in the project workspace
+  (`POST /api/projects/:id/autoskills`) and installs into `.agents/skills` (needs Node >= 22.6,
+  network, `--allow-run`). Enabled state lives in `app_settings` (`skills_enabled`,
+  `skills_disabled`); UI is Global Settings → Skills.
 - **Git**: `src/integrations/git.ts` runs the `git` CLI inside `projects.workspace_path` (status,
   branches, log, diff, stage/unstage, commit, checkout with `--` path guards). UI is a
   SourceTree-like two-pane view: `GitPanel` (branches/refresh) in the aside and `GitTab`

@@ -97,6 +97,7 @@ Prefix: `/api/projects/:id/git/`
 | Method | Path | Keterangan |
 | --- | --- | --- |
 | `POST` | `/api/projects/:id/chat` | Start / lanjut agent |
+| `POST` | `/api/projects/:id/autoskills` | Jalankan `npx autoskills` di workspace (`{ dryRun? }`) |
 | `POST` | `/api/chat/change` | Accept/reject satu hunk |
 | `POST` | `/api/chat/change-all` | Accept/reject semua |
 | `GET` | `/api/projects/:id/chat/sessions` | List sesi |

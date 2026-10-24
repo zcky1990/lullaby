@@ -1,4 +1,5 @@
 import {
+  AutoskillsInput,
   ChatChangeAllInput,
   ChatChangeInput,
   ChatInput,
@@ -129,6 +130,7 @@ import {
   saveSkillsSettingsHandler,
   skillsHandler,
 } from "./routes/settings.ts";
+import { runAutoskills } from "./autoskills.ts";
 import { serializeIntegration } from "./serializers.ts";
 import { APP_TOKEN_COOKIE, appToken } from "./session.ts";
 import { sse } from "./sse.ts";
@@ -251,6 +253,40 @@ async function getProjectDetail(projectId: string): Promise<Response> {
   if (!project) return json({ error: "project_not_found" }, 404);
   const integrations = (await listIntegrations(project.id)).map(serializeIntegration);
   return json({ project, integrations });
+}
+
+async function autoskillsHandler(projectId: string, req: Request): Promise<Response> {
+  const project = await getProject(projectId);
+  if (!project) return json({ error: "project_not_found" }, 404);
+  const workspace = project.workspace_path?.trim();
+  if (!workspace) {
+    return json({
+      ok: false,
+      dryRun: false,
+      output: "",
+      skills: [],
+      error: "workspace_path belum diatur (Project Settings → Workspace).",
+    }, 400);
+  }
+
+  const body = await readJson(req).catch(() => ({}));
+  const parsed = AutoskillsInput.safeParse(body ?? {});
+  if (!parsed.success) {
+    return json({ error: "invalid_input", issues: parsed.error.issues }, 400);
+  }
+
+  const result = await runAutoskills(workspace, {
+    dryRun: parsed.data.dryRun,
+    projectName: project.name,
+    projectId: project.id,
+  });
+  await record("skills.autoskills", {
+    projectId,
+    ok: result.ok,
+    dryRun: result.dryRun,
+    count: result.skills.length,
+  });
+  return json(result, result.ok ? 200 : 502);
 }
 
 async function chatHandler(projectId: string, req: Request): Promise<Response> {
@@ -1336,6 +1372,11 @@ export async function handleRequest(req: Request): Promise<Response> {
 
     const chatRoute = pathname.match(/^\/api\/projects\/([^/]+)\/chat$/);
     if (chatRoute && method === "POST") return await chatHandler(chatRoute[1], req);
+
+    const autoskillsRoute = pathname.match(/^\/api\/projects\/([^/]+)\/autoskills$/);
+    if (autoskillsRoute && method === "POST") {
+      return await autoskillsHandler(autoskillsRoute[1], req);
+    }
 
     if (pathname === "/api/chat/change" && method === "POST") {
       return await chatChangeHandler(req);

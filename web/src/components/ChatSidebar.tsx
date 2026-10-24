@@ -31,7 +31,14 @@ import {
   type AutoBuildDetail,
 } from "@/lib/auto-build-events";
 import { CHAT_RESPONSE_EVENT, dispatchChangesApplied, dispatchReview } from "@/lib/review-events";
-import { detectSlashQuery, parseSlashSkill } from "@/lib/slash-skill";
+import {
+  AUTOSKILL_COMMAND,
+  AUTOSKILL_OPTION,
+  detectSlashQuery,
+  isAutoskillCommand,
+  matchesAutoskillQuery,
+  parseSlashSkill,
+} from "@/lib/slash-skill";
 import { buildAutoBuildPrompt } from "@/lib/ticket-columns";
 import { cn } from "@/lib/utils";
 
@@ -187,12 +194,15 @@ export function ChatSidebar({
 
   const filteredSkills = useMemo(() => {
     const query = skillQuery.trim().toLowerCase();
-    if (!query) return enabledSkills.slice(0, 12);
-    return enabledSkills
-      .filter((skill) =>
-        skill.name.includes(query) || skill.description.toLowerCase().includes(query)
-      )
-      .slice(0, 12);
+    const commandMatches = matchesAutoskillQuery(query) ? [AUTOSKILL_OPTION] : [];
+    const skills = !query
+      ? enabledSkills.slice(0, 11)
+      : enabledSkills
+        .filter((skill) =>
+          skill.name.includes(query) || skill.description.toLowerCase().includes(query)
+        )
+        .slice(0, 11);
+    return [...commandMatches, ...skills].slice(0, 12);
   }, [enabledSkills, skillQuery]);
 
   useEffect(() => {
@@ -284,7 +294,7 @@ export function ChatSidebar({
         return `/${skill.name} ${trimmed}`;
       });
     }
-    setSelectedSkill(skill);
+    setSelectedSkill(skill.name === AUTOSKILL_COMMAND ? null : skill);
     setSkillMenuOpen(false);
     setSkillQuery("");
     requestAnimationFrame(() => textareaRef.current?.focus());
@@ -476,6 +486,71 @@ export function ChatSidebar({
     return () => window.removeEventListener(AUTO_BUILD_EVENT, handler);
   }, []);
 
+  const refreshSkills = useCallback(async () => {
+    if (!projectId) return;
+    try {
+      const res = await api.getSkills(projectId);
+      setSkills(res.enabled === false ? [] : res.skills);
+    } catch {
+      // ignore refresh errors
+    }
+  }, [projectId]);
+
+  const runAutoskillCommand = async () => {
+    if (!projectId || sending || pending) return;
+    setError(undefined);
+    setInput("");
+    setAttachments([]);
+    setSelectedSkill(null);
+    setSkillMenuOpen(false);
+    const userEntry: Entry = {
+      id: crypto.randomUUID(),
+      role: "user",
+      content: `/${AUTOSKILL_COMMAND}`,
+    };
+    const runningId = crypto.randomUUID();
+    setEntries((current) => [
+      ...current,
+      userEntry,
+      {
+        id: runningId,
+        role: "assistant",
+        content: "Menjalankan `npx autoskills` di workspace… (bisa beberapa menit)",
+      },
+    ]);
+    setSending(true);
+    try {
+      const result = await api.runAutoskills(projectId);
+      const names = result.skills.map((skill) => skill.name);
+      const body = result.ok
+        ? [
+          result.dryRun ? "Dry-run selesai." : "Autoskills selesai.",
+          names.length
+            ? `Skill workspace (${names.length}): ${names.map((name) => `/${name}`).join(", ")}`
+            : "Tidak ada skill workspace baru terdeteksi (cek output CLI).",
+          result.output ? `\n\`\`\`\n${result.output.slice(0, 2500)}\n\`\`\`` : "",
+        ].filter(Boolean).join("\n")
+        : [
+          `Gagal: ${result.error ?? "autoskills error"}`,
+          result.output ? `\n\`\`\`\n${result.output.slice(0, 2500)}\n\`\`\`` : "",
+        ].filter(Boolean).join("\n");
+      setEntries((current) =>
+        current.map((entry) => (entry.id === runningId ? { ...entry, content: body } : entry))
+      );
+      if (result.ok) await refreshSkills();
+    } catch (e) {
+      setEntries((current) =>
+        current.map((entry) =>
+          entry.id === runningId
+            ? { ...entry, content: `Gagal: ${(e as Error).message}` }
+            : entry
+        )
+      );
+    } finally {
+      setSending(false);
+    }
+  };
+
   const send = async () => {
     const text = input.trim();
     if ((!text && attachments.length === 0 && !selectedSkill) || sending || pending) return;
@@ -483,13 +558,25 @@ export function ChatSidebar({
       setError("Pilih project dulu.");
       return;
     }
+
+    if (
+      isAutoskillCommand(text) ||
+      selectedSkill?.name === AUTOSKILL_COMMAND ||
+      text === `/${AUTOSKILL_COMMAND}`
+    ) {
+      await runAutoskillCommand();
+      return;
+    }
+
     if (providers.length === 0) {
       setError("Belum ada provider LLM (Global Settings → LLM Providers).");
       return;
     }
     setError(undefined);
     const parsed = parseSlashSkill(text);
-    const skillName = selectedSkill?.name ?? parsed.skillName ?? undefined;
+    const skillName = selectedSkill?.name === AUTOSKILL_COMMAND
+      ? undefined
+      : selectedSkill?.name ?? parsed.skillName ?? undefined;
     const bodyText = selectedSkill && !parsed.skillName
       ? text
       : parsed.skillName

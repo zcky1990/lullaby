@@ -620,4 +620,19 @@ export const api = {
       "/api/settings/automation",
       jsonInit("PUT", payload),
     ),
+  runAutoskills: (projectId: string, payload: { dryRun?: boolean } = {}) =>
+    request<{
+      ok: boolean;
+      dryRun: boolean;
+      output: string;
+      skills: Array<{
+        id: string;
+        name: string;
+        description: string;
+        source: string;
+        path: string;
+      }>;
+      error?: string;
+      code?: number;
+    }>(`/api/projects/${projectId}/autoskills`, jsonInit("POST", payload, { timeoutMs: 320_000 })),
 };

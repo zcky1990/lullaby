@@ -33,6 +33,15 @@ Discovery: workspace `.agents/skills` > project skills (auto) > global skills.
 Composer: `/skill-name` menyuntikkan body ke system prompt.  
 Setelah Build sukses yang memakai tools, `skill-learn.ts` dapat menulis skill project.
 
+### `/autoskill`
+
+Slash command khusus (bukan skill file): menjalankan `npx autoskills -y -a cursor` di
+`workspace_path` project via `POST /api/projects/:id/autoskills`. Skill terinstal ke
+`<workspace>/.agents/skills` dan langsung bisa dipakai `use_skill` / mention.
+
+Prasyarat: Node.js >= 22.6 + `npx` di PATH, jaringan untuk unduh registry, permission
+`--allow-run` (sudah di task `dev`/`desktop`).
+
 ## Roles
 
 Role global punya `persona` (+ opsional provider). Dipilih di composer; persona di-prepend ke

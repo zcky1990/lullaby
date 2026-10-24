@@ -19,6 +19,7 @@ peta fitur/API untuk pengguna maupun developer.
 | [features/documents.md](features/documents.md) | Dokumen lokal, Docmost, Notion, Confluence |
 | [features/tickets.md](features/tickets.md) | Tiket lokal, Jira, Kanban, sync |
 | [features/chat-agent.md](features/chat-agent.md) | Chat Plan/Build, tools, Review, skills, roles |
+| [features/autoskill.md](features/autoskill.md) | Slash `/autoskill` → npx autoskills di workspace |
 | [features/git-terminal.md](features/git-terminal.md) | Git CLI UI dan terminal PTY |
 | [features/integrations.md](features/integrations.md) | Konfigurasi & test integrasi |
 | [features/settings.md](features/settings.md) | Project Settings vs Global Settings |

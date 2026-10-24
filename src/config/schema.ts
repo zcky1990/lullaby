@@ -210,6 +210,11 @@ export const AutomationSettingsInput = z.object({
 });
 export type AutomationSettingsInput = z.infer<typeof AutomationSettingsInput>;
 
+export const AutoskillsInput = z.object({
+  dryRun: z.boolean().optional().default(false),
+});
+export type AutoskillsInput = z.infer<typeof AutoskillsInput>;
+
 export const LocalTicketStatus = z.enum(["Backlog", "To Do", "In Progress", "Test", "Done"]);
 export type LocalTicketStatus = z.infer<typeof LocalTicketStatus>;
 

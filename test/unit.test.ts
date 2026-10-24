@@ -44,8 +44,13 @@ import {
   skillNameFromEvidence,
   writeProjectSkill,
 } from "../src/server/chat/skill-learn.ts";
-import { detectSlashQuery, parseSlashSkill } from "../src/server/chat/slash-skill.ts";
+import {
+  detectSlashQuery,
+  isAutoskillCommand,
+  parseSlashSkill,
+} from "../src/server/chat/slash-skill.ts";
 import type { Run } from "../src/server/chat/types.ts";
+import { runAutoskills } from "../src/server/autoskills.ts";
 import { listSkills, parseSkillFile, projectSkillsDir, projectSlug } from "../src/server/skills.ts";
 
 Deno.test("ProjectInput trims and drops empty optional fields", () => {
@@ -105,14 +110,49 @@ Deno.test("diffLines handles new and empty files", () => {
 });
 
 Deno.test("parseSlashSkill extracts skill and remaining text", () => {
-  deepEqual(parseSlashSkill("/fix-login tighten styles"), {
-    skillName: "fix-login",
+  deepEqual(parseSlashSkill("/form-login tighten styles"), {
+    skillName: "form-login",
     text: "tighten styles",
+    command: null,
   });
-  deepEqual(parseSlashSkill("/fix-login"), { skillName: "fix-login", text: "" });
-  deepEqual(parseSlashSkill("no slash here"), { skillName: null, text: "no slash here" });
+  deepEqual(parseSlashSkill("/form-login"), {
+    skillName: "form-login",
+    text: "",
+    command: null,
+  });
+  deepEqual(parseSlashSkill("no slash here"), {
+    skillName: null,
+    text: "no slash here",
+    command: null,
+  });
   deepEqual(detectSlashQuery("hello /cre", 10), { active: true, query: "cre", start: 6 });
   equal(detectSlashQuery("hello world").active, false);
+});
+
+Deno.test("parseSlashSkill treats /autoskill as reserved command", () => {
+  deepEqual(parseSlashSkill("/autoskill"), {
+    skillName: null,
+    text: "",
+    command: "autoskill",
+  });
+  deepEqual(parseSlashSkill("/autoskill please"), {
+    skillName: null,
+    text: "please",
+    command: "autoskill",
+  });
+  equal(isAutoskillCommand("/autoskill"), true);
+  equal(isAutoskillCommand("/form-login"), false);
+});
+
+
+Deno.test("runAutoskills rejects missing workspace path", async () => {
+  const missing = await runAutoskills("/tmp/rnd-workflow-no-such-workspace-dir");
+  equal(missing.ok, false);
+  equal(Boolean(missing.error), true);
+
+  const empty = await runAutoskills("   ");
+  equal(empty.ok, false);
+  equal(empty.error?.includes("kosong"), true);
 });
 
 Deno.test("ChatInput accepts skillName", () => {
