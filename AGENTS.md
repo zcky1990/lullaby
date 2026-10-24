@@ -56,27 +56,29 @@ finishing a change.
   card moves To Do → In Progress; see `docs/automation.md`.
 - **Skills**: `src/server/skills.ts` discovers `SKILL.md` folders (frontmatter `name`/`description`)
   from `<workspace>/.agents/skills` (highest), `appDataDir()/<project-slug>/skills` (auto from Build
-  chats), and `appDataDir()/skills` (global). Chat injects the skill list into the system prompt and
-  exposes a read-only `use_skill` tool (progressive disclosure; allowed in Plan mode). After each
-  successful Build run that used tools, `src/server/chat/skill-learn.ts` writes a deterministic
-  project skill. Chat composer supports `/skill-name` (autocomplete + `skillName` on
-  `POST .../chat`) which injects the skill body into the system prompt. Reserved slash
-  `/autoskill` runs `npx autoskills -y -a cursor` in the project workspace
-  (`POST /api/projects/:id/autoskills`) and installs into `.agents/skills` (needs Node >= 22.6,
-  network, `--allow-run`). Enabled state lives in `app_settings` (`skills_enabled`,
-  `skills_disabled`); UI is Global Settings → Skills.
+  chats), `appDataDir()/skills` (global), and `src/skills/builtin` (bundled, lowest priority). Chat
+  injects the skill list into the system prompt and exposes a read-only `use_skill` tool
+  (progressive disclosure; allowed in Plan mode). After each successful Build run that used tools,
+  `src/server/chat/skill-learn.ts` writes a deterministic project skill. Chat composer supports
+  `/skill-name` (autocomplete + `skillName` on `POST .../chat`) which injects the skill body into
+  the system prompt. Builtin `/code-review` forces Plan mode and prepends git status/diff context
+  (`src/server/code-review.ts`). Reserved slash `/autoskill` runs `npx autoskills -y -a cursor` in
+  the project workspace (`POST /api/projects/:id/autoskills`) and installs into `.agents/skills`
+  (needs Node >= 22.6, network, `--allow-run`). Enabled state lives in `app_settings`
+  (`skills_enabled`, `skills_disabled`); UI is Global Settings → Skills.
 - **Git**: `src/integrations/git.ts` runs the `git` CLI inside `projects.workspace_path` (status,
   branches, log, diff, stage/unstage, commit, checkout with `--` path guards). UI is a
   SourceTree-like two-pane view: `GitPanel` (branches/refresh) in the aside and `GitTab`
   (Changes/History) in the tab; routes live under `/api/projects/:id/git/*`. Expects a git
   repository; returns a clear error otherwise.
 - **Terminal**: `src/server/terminal.ts` upgrades `/api/projects/:id/terminal` to a WebSocket and
-  runs an interactive shell in the project workspace via a real PTY (`@sigma/pty-ffi`) with resize
-  support. Output is batched binary WebSocket frames; control messages stay JSON. Needs
-  `--allow-ffi`. The Terminal activity item toggles a VS Code-like **bottom panel**
-  (`TerminalPanel`) with multiple `TerminalSession` instances (xterm.js + fit addon); sessions stay
-  mounted while the panel is hidden, and the panel height persists. WebSocket auth uses the same
-  session cookie as the HTTP API.
+  runs an interactive shell (`zsh`/`bash`, query `shell=` or global `terminal_shell` in
+  `app_settings`) in the project workspace via a real PTY (`@sigma/pty-ffi`) with resize support.
+  Output is batched binary WebSocket frames; control messages stay JSON. Needs `--allow-ffi`. The
+  Terminal activity item toggles a VS Code-like **bottom panel** (`TerminalPanel`) with multiple
+  `TerminalSession` instances (xterm.js + fit addon); sessions stay mounted while the panel is
+  hidden, and the panel height persists. Shell default: Global Settings → Terminal. WebSocket auth
+  uses the same session cookie as the HTTP API.
 - **Roles**: global `roles` table (`name`, `description`, `persona`, `provider_id`), CRUD via
   `/api/roles`. Chat sends `roleId`; `chatHandler` uses the role's provider (falling back to the
   request/first provider) and prepends the persona to the system prompt. UI: Global Settings → Roles

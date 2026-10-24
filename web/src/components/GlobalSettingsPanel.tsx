@@ -5,6 +5,7 @@ import {
   Palette,
   Server,
   Sparkles,
+  SquareTerminal,
   Users,
   Zap,
 } from "lucide-react";
@@ -18,6 +19,7 @@ export type GlobalSection =
   | "mcp"
   | "skills"
   | "automation"
+  | "terminal"
   | "about";
 
 const SECTIONS: { id: GlobalSection; label: string; icon: LucideIcon }[] = [
@@ -27,6 +29,7 @@ const SECTIONS: { id: GlobalSection; label: string; icon: LucideIcon }[] = [
   { id: "mcp", label: "MCP", icon: Server },
   { id: "skills", label: "Skills", icon: Sparkles },
   { id: "automation", label: "Automation", icon: Zap },
+  { id: "terminal", label: "Terminal", icon: SquareTerminal },
   { id: "about", label: "About", icon: Info },
 ];
 

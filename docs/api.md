@@ -19,6 +19,7 @@ Implementasi: `src/server/router.ts`. Input divalidasi Zod (`src/config/schema.t
 | `GET` | `/api/skills?projectId=` | Daftar skills + path |
 | `PUT` | `/api/settings/skills` | `{ enabled, disabled }` |
 | `GET`/`PUT` | `/api/settings/automation` | `{ autoBuildOnInProgress }` |
+| `GET`/`PUT` | `/api/settings/terminal` | `{ shell: "zsh" \| "bash" }` |
 | `GET`/`PUT` | `/api/settings/mcp` | servers, enabled, disabledTools |
 | `POST` | `/api/settings/mcp/tools` | Discover tools satu server |
 | `GET`/`POST` | `/api/llm` | List / create provider |

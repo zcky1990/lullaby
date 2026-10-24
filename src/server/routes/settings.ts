@@ -3,12 +3,14 @@ import {
   McpServerInput,
   McpSettingsInput,
   SkillsSettingsInput,
+  TerminalSettingsInput,
 } from "../../config/schema.ts";
 import { log } from "../../core/logger.ts";
 import { getAppSetting, getProject, setAppSetting } from "../../db/db.ts";
 import { json, readJson, record } from "../http.ts";
 import { listMcpTools } from "../mcp.ts";
 import {
+  builtinSkillsDir,
   globalSkillsDir,
   listSkills,
   projectSkillsDir,
@@ -16,6 +18,7 @@ import {
   readSkillsSettings,
   workspaceSkillsDir,
 } from "../skills.ts";
+import { readTerminalShellSetting, TERMINAL_SHELL_KEY } from "../terminal.ts";
 
 const MCP_SETTINGS_KEY = "mcp_servers";
 const AUTO_BUILD_KEY = "auto_build_on_in_progress";
@@ -94,6 +97,7 @@ export async function skillsHandler(projectId: string | null): Promise<Response>
     enabled: settings.enabled,
     disabled: settings.disabled,
     globalPath: globalSkillsDir(),
+    builtinPath: builtinSkillsDir(),
     workspacePath: workspace ? workspaceSkillsDir(workspace) : null,
     projectPath: slug ? projectSkillsDir(slug) : null,
     skills: skills.map((skill) => ({
@@ -135,4 +139,19 @@ export async function saveAutomationSettingsHandler(req: Request): Promise<Respo
     autoBuildOnInProgress: parsed.data.autoBuildOnInProgress,
   });
   return json({ autoBuildOnInProgress: parsed.data.autoBuildOnInProgress });
+}
+
+export async function getTerminalSettingsHandler(): Promise<Response> {
+  const shell = await readTerminalShellSetting();
+  return json({ shell });
+}
+
+export async function saveTerminalSettingsHandler(req: Request): Promise<Response> {
+  const parsed = TerminalSettingsInput.safeParse(await readJson(req));
+  if (!parsed.success) {
+    return json({ error: "invalid_input", issues: parsed.error.issues }, 400);
+  }
+  await setAppSetting(TERMINAL_SHELL_KEY, parsed.data.shell);
+  await record("settings.terminal_updated", { shell: parsed.data.shell });
+  return json({ shell: parsed.data.shell });
 }

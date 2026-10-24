@@ -27,6 +27,7 @@ import { LlmProvidersSettings } from "@/components/LlmProvidersSettings";
 import { McpSettings } from "@/components/McpSettings";
 import { RolesSettings } from "@/components/RolesSettings";
 import { SkillsSettings } from "@/components/SkillsSettings";
+import { TerminalSettings } from "@/components/TerminalSettings";
 import {
   api,
   type LlmProvider,
@@ -155,6 +156,7 @@ export function GlobalSettingsView({
   if (section === "mcp") return <McpSettings />;
   if (section === "skills") return <SkillsSettings projectId={projectId} />;
   if (section === "automation") return <AutomationSettings />;
+  if (section === "terminal") return <TerminalSettings />;
   return <About />;
 }
 

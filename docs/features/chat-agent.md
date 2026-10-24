@@ -29,9 +29,21 @@ Event UI: `web/src/lib/review-events.ts`.
 
 ## Skills
 
-Discovery: workspace `.agents/skills` > project skills (auto) > global skills.  
+Discovery: workspace `.agents/skills` > project skills (auto) > global skills > builtin
+(`src/skills/builtin`).  
 Composer: `/skill-name` menyuntikkan body ke system prompt.  
 Setelah Build sukses yang memakai tools, `skill-learn.ts` dapat menulis skill project.
+
+### `/code-review`
+
+Skill builtin (`src/skills/builtin/code-review/SKILL.md`). Saat `skillName=code-review`:
+
+- Mode dipaksa **Plan** (UI + server) — tidak menulis file lewat tools
+- Pesan user diperkaya dengan status/diff git (`src/server/code-review.ts`: unstaged, staged,
+  vs upstream merge-base bila ada)
+- Output diharapkan findings-first (severityitas: bug, regresi, security, missing tests)
+
+Detail: [code-review.md](code-review.md).
 
 ### `/autoskill`
 

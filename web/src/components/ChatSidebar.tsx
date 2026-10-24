@@ -295,6 +295,7 @@ export function ChatSidebar({
       });
     }
     setSelectedSkill(skill.name === AUTOSKILL_COMMAND ? null : skill);
+    if (skill.name === "code-review") setMode("plan");
     setSkillMenuOpen(false);
     setSkillQuery("");
     requestAnimationFrame(() => textareaRef.current?.focus());
@@ -583,6 +584,8 @@ export function ChatSidebar({
       ? parsed.text
       : text;
     const content = bodyText.trim() || (skillName ? `Ikuti skill /${skillName}.` : "Lihat lampiran.");
+    const effectiveMode: ChatMode = skillName === "code-review" ? "plan" : mode;
+    if (skillName === "code-review" && mode !== "plan") setMode("plan");
     const outgoing: ChatAttachment[] = attachments.map((item) =>
       item.type === "workspace" ? { type: "workspace", name: item.name, path: item.path ?? "" } : {
         type: item.type,
@@ -620,7 +623,7 @@ export function ChatSidebar({
         roleId: roleId ?? undefined,
         skillName,
         variant,
-        mode,
+        mode: effectiveMode,
         messages: next.map((entry, index) => ({
           role: entry.role,
           content: entry.content,

@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Spinner } from "@/components/ui/spinner";
+import { Switch } from "@/components/ui/switch";
 import { useTheme } from "@/components/ThemeProvider";
 import { api, type McpServer, type McpTool } from "@/lib/api";
 
@@ -287,7 +288,7 @@ export function McpSettings() {
   };
 
   return (
-    <section className="flex max-w-3xl flex-col gap-4">
+    <section className="flex w-full flex-col gap-4">
       <div className="flex flex-col gap-2">
         <h2 className="text-sm font-medium tracking-wider text-muted-foreground uppercase">MCP</h2>
         <p className="text-sm text-muted-foreground">
@@ -300,12 +301,15 @@ export function McpSettings() {
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-sm text-muted-foreground">{servers.length} server</span>
-          <Badge variant={enabled ? "secondary" : "outline"}>
+          <span className="text-xs text-muted-foreground">
             {enabled ? "MCP aktif" : "MCP nonaktif"}
-          </Badge>
-          <Button size="sm" variant="ghost" onClick={toggleGlobal} disabled={busy}>
-            {enabled ? "Nonaktifkan MCP" : "Aktifkan MCP"}
-          </Button>
+          </span>
+          <Switch
+            checked={enabled}
+            onCheckedChange={() => toggleGlobal()}
+            disabled={busy}
+            aria-label="Aktifkan MCP"
+          />
         </div>
         <div className="flex items-center gap-2">
           <Button
@@ -343,9 +347,6 @@ export function McpSettings() {
                 <Server className="size-4 text-muted-foreground" />
                 <span className="font-medium">{server.name}</span>
                 <Badge variant="outline">{server.transport}</Badge>
-                <Badge variant={server.enabled ? "secondary" : "outline"}>
-                  {server.enabled ? "Aktif" : "Nonaktif"}
-                </Badge>
                 <div className="ml-auto flex items-center gap-1">
                   <Button
                     size="sm"
@@ -356,9 +357,12 @@ export function McpSettings() {
                     {toolState[server.id]?.loading ? <Spinner /> : <RefreshCw />}
                     Tools
                   </Button>
-                  <Button size="sm" variant="ghost" onClick={() => toggle(server)} disabled={busy}>
-                    {server.enabled ? "Nonaktifkan" : "Aktifkan"}
-                  </Button>
+                  <Switch
+                    checked={server.enabled}
+                    onCheckedChange={() => toggle(server)}
+                    disabled={busy}
+                    aria-label={`${server.enabled ? "Nonaktifkan" : "Aktifkan"} ${server.name}`}
+                  />
                   <Button
                     size="icon"
                     variant="ghost"
@@ -405,17 +409,12 @@ export function McpSettings() {
                               <p className="text-xs text-muted-foreground">{tool.description}</p>
                             ) : null}
                           </div>
-                          <Badge variant={active ? "secondary" : "outline"}>
-                            {active ? "Aktif" : "Nonaktif"}
-                          </Badge>
-                          <Button
-                            size="sm"
-                            variant="ghost"
+                          <Switch
+                            checked={active}
                             disabled={busy || !enabled || !server.enabled}
-                            onClick={() => toggleTool(server, tool)}
-                          >
-                            {active ? "Nonaktifkan" : "Aktifkan"}
-                          </Button>
+                            onCheckedChange={() => toggleTool(server, tool)}
+                            aria-label={`${active ? "Nonaktifkan" : "Aktifkan"} ${tool.name}`}
+                          />
                         </div>
                       );
                     })

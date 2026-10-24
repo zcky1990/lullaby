@@ -14,11 +14,14 @@ Jika folder bukan repo git, API mengembalikan error yang jelas.
 
 ## Terminal
 
-- Upgrade WebSocket: `/api/projects/:id/terminal`
+- Upgrade WebSocket: `/api/projects/:id/terminal?cols=&rows=&shell=`
+- `shell` query: `zsh` | `bash` (opsional; fallback ke default global)
+- Default shell global: `GET`/`PUT` `/api/settings/terminal` → `{ shell }` (`app_settings.terminal_shell`)
 - PTY interaktif lewat `@sigma/pty-ffi` (butuh `--allow-ffi`)
 - cwd = workspace project; resize didukung
 - Output di-batch sebagai frame binary; kontrol tetap JSON
 - Auth sama dengan HTTP (cookie sesi)
 
-UI: `TerminalPanel` (tinggi tersimpan) + multi `TerminalSession` (xterm.js). Session tetap
-mounted saat panel disembunyikan.
+UI: `TerminalPanel` (tinggi tersimpan, picker zsh/bash +) + multi `TerminalSession` (xterm.js).
+Session tetap mounted saat panel disembunyikan. Global Settings → Terminal mengatur default
+untuk session baru.

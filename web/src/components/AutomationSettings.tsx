@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
-import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Spinner } from "@/components/ui/spinner";
+import { Switch } from "@/components/ui/switch";
 import { api } from "@/lib/api";
 
 export function AutomationSettings() {
@@ -44,7 +44,7 @@ export function AutomationSettings() {
   };
 
   return (
-    <section className="flex max-w-3xl flex-col gap-4">
+    <section className="flex w-full flex-col gap-4">
       <div className="flex flex-col gap-2">
         <h2 className="text-sm font-medium tracking-wider text-muted-foreground uppercase">
           Automation
@@ -70,15 +70,12 @@ export function AutomationSettings() {
               Trigger hanya To Do → In Progress. Default nonaktif.
             </span>
           </div>
-          <Button
-            size="sm"
-            variant={enabled ? "secondary" : "outline"}
-            onClick={() => void save(!enabled)}
+          <Switch
+            checked={enabled}
+            onCheckedChange={(next) => void save(next)}
             disabled={busy}
-          >
-            {busy ? <Spinner /> : null}
-            {enabled ? "Aktif" : "Nonaktif"}
-          </Button>
+            aria-label="Auto-build on In Progress"
+          />
         </div>
       )}
 

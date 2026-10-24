@@ -76,6 +76,13 @@ export interface GitCommit {
   refs: string;
 }
 
+export async function runGit(
+  cwd: string,
+  args: string[],
+): Promise<{ code: number; stdout: string; stderr: string }> {
+  return await execGit(cwd, args);
+}
+
 async function execGit(
   cwd: string,
   args: string[],

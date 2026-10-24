@@ -1,8 +1,9 @@
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { appDataDir } from "../core/paths.ts";
 import { getAppSetting } from "../db/db.ts";
 
-export type SkillSource = "global" | "workspace" | "project";
+export type SkillSource = "global" | "workspace" | "project" | "builtin";
 
 export interface SkillInfo {
   id: string;
@@ -23,6 +24,10 @@ const MAX_DESCRIPTION = 240;
 
 export function globalSkillsDir(): string {
   return join(appDataDir(), "skills");
+}
+
+export function builtinSkillsDir(): string {
+  return join(dirname(fileURLToPath(import.meta.url)), "../skills/builtin");
 }
 
 export function workspaceSkillsDir(workspace: string): string {
@@ -127,6 +132,7 @@ export async function listSkills(
     await scanSkills(projectSkillsDir(projectSlugName), "project", seen, out);
   }
   await scanSkills(globalSkillsDir(), "global", seen, out);
+  await scanSkills(builtinSkillsDir(), "builtin", seen, out);
   return out.sort((a, b) => a.name.localeCompare(b.name));
 }
 

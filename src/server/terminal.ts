@@ -1,13 +1,41 @@
 import { Pty } from "@sigma/pty-ffi";
+import type { TerminalShell } from "../config/schema.ts";
+import { getAppSetting } from "../db/db.ts";
 
 const FLUSH_MS = 8;
 const MAX_BATCH_BYTES = 32_768;
 const POLL_IDLE_MS = 8;
+export const TERMINAL_SHELL_KEY = "terminal_shell";
 
-function resolveShell(): string {
-  const shell = Deno.env.get("SHELL") || "/bin/sh";
-  if (!/^\/[A-Za-z0-9._/-]+$/.test(shell)) return "/bin/sh";
-  return shell;
+const SHELL_CANDIDATES: Record<TerminalShell, string[]> = {
+  zsh: ["/bin/zsh", "/usr/bin/zsh", "/usr/local/bin/zsh", "/opt/homebrew/bin/zsh"],
+  bash: ["/bin/bash", "/usr/bin/bash", "/usr/local/bin/bash", "/opt/homebrew/bin/bash"],
+};
+
+export function inferTerminalShell(): TerminalShell {
+  const env = Deno.env.get("SHELL") ?? "";
+  const base = env.split("/").pop()?.toLowerCase() ?? "";
+  if (base === "bash") return "bash";
+  if (base === "zsh") return "zsh";
+  return "zsh";
+}
+
+export async function readTerminalShellSetting(): Promise<TerminalShell> {
+  const raw = await getAppSetting(TERMINAL_SHELL_KEY);
+  if (raw === "zsh" || raw === "bash") return raw;
+  return inferTerminalShell();
+}
+
+export async function resolveShellPath(kind: TerminalShell): Promise<string> {
+  for (const path of SHELL_CANDIDATES[kind]) {
+    try {
+      const st = await Deno.stat(path);
+      if (st.isFile) return path;
+    } catch {
+      // try next
+    }
+  }
+  return SHELL_CANDIDATES[kind][0];
 }
 
 function shellArgs(shell: string): string[] {
@@ -37,17 +65,32 @@ export function parseTerminalSize(url: string): { cols: number; rows: number } {
   }
 }
 
+export function parseTerminalShell(url: string): TerminalShell | null {
+  try {
+    const value = new URL(url).searchParams.get("shell");
+    if (value === "zsh" || value === "bash") return value;
+  } catch {
+    // ignore
+  }
+  return null;
+}
+
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-export function handleTerminal(req: Request, cwd: string): Response {
+export function handleTerminal(
+  req: Request,
+  cwd: string,
+  defaultShell: TerminalShell = "zsh",
+): Response {
   if (req.headers.get("upgrade")?.toLowerCase() !== "websocket") {
     return new Response("WebSocket upgrade required", { status: 400 });
   }
 
   const { socket, response } = Deno.upgradeWebSocket(req);
   const initialSize = parseTerminalSize(req.url);
+  const shellKind = parseTerminalShell(req.url) ?? defaultShell;
   let pty: Pty | null = null;
   let closed = false;
   let pending: Uint8Array[] = [];
@@ -141,26 +184,28 @@ export function handleTerminal(req: Request, cwd: string): Response {
   };
 
   socket.onopen = () => {
-    const shell = resolveShell();
-    try {
-      pty = new Pty(shell, {
-        args: shellArgs(shell),
-        cwd,
-        env: {
-          ...Deno.env.toObject(),
-          TERM: "xterm-256color",
-          COLORTERM: "truecolor",
-          SHELL: shell,
-        },
-        size: initialSize,
-      });
-    } catch (error) {
-      sendJson({ type: "error", message: (error as Error).message });
-      socket.close();
-      return;
-    }
-    sendJson({ type: "ready", cwd, shell });
-    void pump();
+    void (async () => {
+      const shell = await resolveShellPath(shellKind);
+      try {
+        pty = new Pty(shell, {
+          args: shellArgs(shell),
+          cwd,
+          env: {
+            ...Deno.env.toObject(),
+            TERM: "xterm-256color",
+            COLORTERM: "truecolor",
+            SHELL: shell,
+          },
+          size: initialSize,
+        });
+      } catch (error) {
+        sendJson({ type: "error", message: (error as Error).message });
+        socket.close();
+        return;
+      }
+      sendJson({ type: "ready", cwd, shell, shellKind });
+      void pump();
+    })();
   };
 
   socket.onmessage = (event) => {

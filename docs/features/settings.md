@@ -22,6 +22,7 @@ Section nav di aside (`GlobalSettingsPanel`):
 | MCP | Server stdio/http, enable, disable tools (list saja) |
 | Skills | Enable global + toggle per skill |
 | Automation | Auto-build To Do → In Progress — [automation.md](../automation.md) |
+| Terminal | Default shell (`zsh` / `bash`) untuk session baru |
 | About | Info aplikasi |
 
 ## Preferensi UI lokal (bukan DB)

@@ -21,7 +21,16 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
+import { api, type TerminalShell } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 const HEIGHT_KEY = "rnd.terminalHeight:v1";
@@ -30,6 +39,7 @@ const MIN_HEIGHT = 140;
 interface Instance {
   id: string;
   title: string;
+  shell: TerminalShell;
 }
 
 interface Props {
@@ -78,15 +88,18 @@ export function TerminalPanel({ projectId, open, onClose }: Props) {
     Record<string, { status: TerminalStatus; detail?: string }>
   >({});
   const [resizing, setResizing] = useState(false);
+  const [shell, setShell] = useState<TerminalShell>("zsh");
+  const [defaultReady, setDefaultReady] = useState(false);
   const counterRef = useRef(1);
   const handlesRef = useRef<Map<string, TerminalHandle>>(new Map());
 
-  const addInstance = useCallback(() => {
+  const addInstance = useCallback((nextShell: TerminalShell = shell) => {
     const id = crypto.randomUUID();
-    const title = `bash ${counterRef.current++}`;
-    setInstances((current) => [...current, { id, title }]);
+    const n = counterRef.current++;
+    const title = `${nextShell} ${n}`;
+    setInstances((current) => [...current, { id, title, shell: nextShell }]);
     setActiveId(id);
-  }, []);
+  }, [shell]);
 
   const removeInstance = (id: string) => {
     handlesRef.current.delete(id);
@@ -111,11 +124,27 @@ export function TerminalPanel({ projectId, open, onClose }: Props) {
     setStatuses({});
     handlesRef.current.clear();
     counterRef.current = 1;
+    setDefaultReady(false);
+    let cancelled = false;
+    api
+      .getTerminalSettings()
+      .then((res) => {
+        if (!cancelled) setShell(res.shell);
+      })
+      .catch(() => {
+        // keep zsh fallback
+      })
+      .finally(() => {
+        if (!cancelled) setDefaultReady(true);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [projectId]);
 
   useEffect(() => {
-    if (open && projectId && instances.length === 0) addInstance();
-  }, [open, projectId, instances.length, addInstance]);
+    if (open && projectId && defaultReady && instances.length === 0) addInstance(shell);
+  }, [open, projectId, defaultReady, instances.length, addInstance, shell]);
 
   useEffect(() => {
     try {
@@ -229,13 +258,32 @@ export function TerminalPanel({ projectId, open, onClose }: Props) {
             })}
           </div>
 
+          <Select
+            value={shell}
+            onValueChange={(value) => setShell(value as TerminalShell)}
+            disabled={!projectId}
+          >
+            <SelectTrigger
+              className="my-auto h-7 w-[4.75rem] shrink-0 border-0 bg-transparent px-1.5 text-[11px] shadow-none"
+              aria-label="Shell untuk terminal baru"
+              title="Shell untuk terminal baru"
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                <SelectItem value="zsh">zsh</SelectItem>
+                <SelectItem value="bash">bash</SelectItem>
+              </SelectGroup>
+            </SelectContent>
+          </Select>
           <Button
             size="icon"
             variant="ghost"
             className="my-auto size-7 shrink-0"
-            onClick={addInstance}
+            onClick={() => addInstance(shell)}
             aria-label="Terminal baru"
-            title="Terminal baru"
+            title={`Terminal baru (${shell})`}
             disabled={!projectId}
           >
             <Plus />
@@ -352,6 +400,7 @@ export function TerminalPanel({ projectId, open, onClose }: Props) {
                   ) : null}
                   <TerminalSession
                     projectId={projectId}
+                    shell={instance.shell}
                     active={open && selected}
                     onReady={(handle) => handlesRef.current.set(instance.id, handle)}
                     onStatus={(next, detail) =>

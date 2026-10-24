@@ -124,10 +124,12 @@ import {
 import {
   getAutomationSettingsHandler,
   getMcpSettingsHandler,
+  getTerminalSettingsHandler,
   listMcpToolsHandler,
   saveAutomationSettingsHandler,
   saveMcpSettingsHandler,
   saveSkillsSettingsHandler,
+  saveTerminalSettingsHandler,
   skillsHandler,
 } from "./routes/settings.ts";
 import { runAutoskills } from "./autoskills.ts";
@@ -135,7 +137,7 @@ import { serializeIntegration } from "./serializers.ts";
 import { APP_TOKEN_COOKIE, appToken } from "./session.ts";
 import { sse } from "./sse.ts";
 import { serveAsset } from "./static.ts";
-import { handleTerminal } from "./terminal.ts";
+import { handleTerminal, readTerminalShellSetting } from "./terminal.ts";
 
 export { SECRET_MASK } from "./http.ts";
 
@@ -680,7 +682,8 @@ async function terminalHandler(projectId: string, req: Request): Promise<Respons
     return json({ error: "workspace_required" }, 400);
   }
   try {
-    return handleTerminal(req, project.workspace_path);
+    const defaultShell = await readTerminalShellSetting();
+    return handleTerminal(req, project.workspace_path, defaultShell);
   } catch (error) {
     return json({ error: (error as Error).message }, 400);
   }
@@ -1161,6 +1164,10 @@ export async function handleRequest(req: Request): Promise<Response> {
     if (pathname === "/api/settings/automation") {
       if (method === "GET") return await getAutomationSettingsHandler();
       if (method === "PUT" || method === "POST") return await saveAutomationSettingsHandler(req);
+    }
+    if (pathname === "/api/settings/terminal") {
+      if (method === "GET") return await getTerminalSettingsHandler();
+      if (method === "PUT" || method === "POST") return await saveTerminalSettingsHandler(req);
     }
 
     if (pathname === "/api/settings/mcp/tools" && method === "POST") {

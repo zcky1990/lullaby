@@ -32,6 +32,7 @@ interface Props {
   projectId: string | null;
   source: PanelDocSource;
   onSourceChange: (source: PanelDocSource) => void;
+  enabledRemotes?: DocumentSource[];
   remote: RemoteSourceState;
   selectedId: string | null;
   onSelect: (id: string, title: string, source: DocumentSource) => void;
@@ -56,6 +57,7 @@ export function DocumentPanel({
   projectId,
   source,
   onSourceChange,
+  enabledRemotes = [],
   remote,
   selectedId,
   onSelect,
@@ -76,6 +78,8 @@ export function DocumentPanel({
 
   const canCreate = source === "local" || source === "docmost";
   const { loading, configured, error, debug, documents } = remote;
+  const remoteTabs = REMOTE_TABS.filter((tab) => enabledRemotes.includes(tab.id));
+  const showSourceTabs = remoteTabs.length > 0;
 
   const submit = async () => {
     const value = title.trim();
@@ -128,27 +132,29 @@ export function DocumentPanel({
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-1 px-2 pb-2">
-        <Button
-          size="sm"
-          variant={source === "local" ? "secondary" : "ghost"}
-          className="h-7"
-          onClick={() => onSourceChange("local")}
-        >
-          Local
-        </Button>
-        {REMOTE_TABS.map((tab) => (
+      {showSourceTabs ? (
+        <div className="flex flex-wrap items-center gap-1 px-2 pb-2">
           <Button
-            key={tab.id}
             size="sm"
-            variant={source === tab.id ? "secondary" : "ghost"}
+            variant={source === "local" ? "secondary" : "ghost"}
             className="h-7"
-            onClick={() => onSourceChange(tab.id)}
+            onClick={() => onSourceChange("local")}
           >
-            {tab.label}
+            Local
           </Button>
-        ))}
-      </div>
+          {remoteTabs.map((tab) => (
+            <Button
+              key={tab.id}
+              size="sm"
+              variant={source === tab.id ? "secondary" : "ghost"}
+              className="h-7"
+              onClick={() => onSourceChange(tab.id)}
+            >
+              {tab.label}
+            </Button>
+          ))}
+        </div>
+      ) : null}
 
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent>

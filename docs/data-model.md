@@ -61,6 +61,7 @@ Key-value global.
 | `skills_enabled` | `"true"` / `"false"` |
 | `skills_disabled` | JSON skill id[] |
 | `auto_build_on_in_progress` | `"true"` / `"false"` |
+| `terminal_shell` | `"zsh"` / `"bash"` |
 
 ## Skills di disk (bukan tabel)
 
@@ -69,6 +70,7 @@ Urutan discovery (`src/server/skills.ts`):
 1. `<workspace>/.agents/skills/` (prioritas tertinggi)
 2. `{appDataDir}/project-<slug>/skills/` (hasil skill-learn)
 3. `{appDataDir}/skills/` (global)
+4. `src/skills/builtin/` (bundled; source `builtin`, prioritas terendah)
 
 Setiap skill = folder berisi `SKILL.md` + frontmatter `name` / `description`.
 

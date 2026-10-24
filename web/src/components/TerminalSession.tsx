@@ -6,6 +6,7 @@ import { Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
 import { EDITOR_FONT_STACKS, useTheme } from "@/components/ThemeProvider";
 import { Button } from "@/components/ui/button";
+import type { TerminalShell } from "@/lib/api";
 import { registerFinder } from "@/lib/find";
 import { cn } from "@/lib/utils";
 
@@ -64,6 +65,7 @@ export interface TerminalHandle {
 
 interface Props {
   projectId: string;
+  shell: TerminalShell;
   active: boolean;
   onStatus?: (status: TerminalStatus, detail?: string) => void;
   onReady?: (handle: TerminalHandle) => void;
@@ -84,7 +86,7 @@ function safeFit(fit: FitAddon | null, host: HTMLElement | null): boolean {
   }
 }
 
-export function TerminalSession({ projectId, active, onStatus, onReady }: Props) {
+export function TerminalSession({ projectId, shell, active, onStatus, onReady }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const fitRef = useRef<FitAddon | null>(null);
   const searchRef = useRef<SearchAddon | null>(null);
@@ -134,7 +136,7 @@ export function TerminalSession({ projectId, active, onStatus, onReady }: Props)
     const rows = Math.max(term.rows, 1);
     const protocol = location.protocol === "https:" ? "wss" : "ws";
     const socket = new WebSocket(
-      `${protocol}://${location.host}/api/projects/${projectId}/terminal?cols=${cols}&rows=${rows}`,
+      `${protocol}://${location.host}/api/projects/${projectId}/terminal?cols=${cols}&rows=${rows}&shell=${encodeURIComponent(shell)}`,
     );
     socket.binaryType = "arraybuffer";
     socketRef.current = socket;
@@ -208,7 +210,7 @@ export function TerminalSession({ projectId, active, onStatus, onReady }: Props)
       fitRef.current = null;
       searchRef.current = null;
     };
-  }, [projectId]);
+  }, [projectId, shell]);
 
   useEffect(() => {
     const term = termRef.current;

@@ -6,6 +6,10 @@ import {
   getProject,
   listChatMessages,
 } from "../../db/db.ts";
+import {
+  collectCodeReviewContext,
+  defaultCodeReviewUserMessage,
+} from "../code-review.ts";
 import { loadEnabledSkills, projectSlug, readSkillBody, type SkillInfo } from "../skills.ts";
 import { complete, VARIANT_TEMPERATURE } from "./llm.ts";
 import { approvalResponse, prepareWriteChange, setAdvance } from "./review.ts";
@@ -13,6 +17,8 @@ import { scheduleSkillLearn } from "./skill-learn.ts";
 import { deleteRun, pruneRuns, setRun } from "./state.ts";
 import { executeTool, resolveAttachments, toolsFor, WRITE_TOOLS } from "./tools.ts";
 import type { ChatResponse, Run, VisibleMessage } from "./types.ts";
+
+const CODE_REVIEW_SKILL = "code-review";
 
 const MAX_STEPS = 6;
 
@@ -218,27 +224,41 @@ export async function startChat(
     await appendChatMessage(session.id, lastMessage.role, lastMessage.content);
   }
 
-  const resolved = await Promise.all(
-    messages.map(async (message) => ({
-      ...message,
-      attachments: await resolveAttachments(workspace, message.attachments),
-    })),
-  );
-
   const project = await getProject(projectId);
   const slug = projectSlug(project?.name ?? "", projectId);
   const skills = await loadEnabledSkills(workspace, slug);
   const skillMap = new Map(skills.map((skill) => [skill.name, skill]));
 
   let activeSkill: { name: string; body: string } | null = null;
-  if (skillName?.trim()) {
-    const wanted = skillName.trim().toLowerCase();
-    const skill = skillMap.get(wanted);
+  const wantedSkill = skillName?.trim().toLowerCase() || "";
+  if (wantedSkill) {
+    const skill = skillMap.get(wantedSkill);
     if (!skill) {
       return { status: "error", error: "unknown_skill", sessionId: session.id };
     }
     activeSkill = { name: skill.name, body: await readSkillBody(skill) };
   }
+
+  let resolvedMessages = messages;
+  let effectiveMode = mode;
+  if (wantedSkill === CODE_REVIEW_SKILL) {
+    effectiveMode = "plan";
+    const last = messages[messages.length - 1];
+    if (last?.role === "user") {
+      const gitContext = workspace
+        ? await collectCodeReviewContext(workspace)
+        : "No workspace configured; review from the user request only.";
+      const enriched = defaultCodeReviewUserMessage(last.content, gitContext);
+      resolvedMessages = [...messages.slice(0, -1), { ...last, content: enriched }];
+    }
+  }
+
+  const resolved = await Promise.all(
+    resolvedMessages.map(async (message) => ({
+      ...message,
+      attachments: await resolveAttachments(workspace, message.attachments),
+    })),
+  );
 
   const run: Run = {
     id: crypto.randomUUID(),
@@ -249,7 +269,7 @@ export async function startChat(
     turns: [
       {
         role: "system",
-        content: systemPrompt(workspace, mode, skills, rolePersona, activeSkill),
+        content: systemPrompt(workspace, effectiveMode, skills, rolePersona, activeSkill),
       },
       ...resolved.map((message) => ({
         role: message.role,
@@ -262,7 +282,7 @@ export async function startChat(
     batchResults: new Map(),
     changes: [],
     projectId,
-    mode,
+    mode: effectiveMode,
     skills: skillMap,
     createdTickets: [],
     createdAt: Date.now(),

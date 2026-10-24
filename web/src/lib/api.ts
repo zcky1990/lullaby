@@ -133,7 +133,7 @@ export interface SkillInfo {
   id: string;
   name: string;
   description: string;
-  source: "global" | "workspace" | "project";
+  source: "global" | "workspace" | "project" | "builtin";
   path: string;
   enabled: boolean;
 }
@@ -142,6 +142,7 @@ export interface SkillsResponse {
   enabled: boolean;
   disabled: string[];
   globalPath: string;
+  builtinPath: string;
   workspacePath: string | null;
   projectPath: string | null;
   skills: SkillInfo[];
@@ -211,6 +212,7 @@ export interface LocalTicketPayload {
 }
 
 export type ChatMode = "plan" | "build";
+export type TerminalShell = "zsh" | "bash";
 
 export interface ChatPending {
   id: string;
@@ -620,6 +622,10 @@ export const api = {
       "/api/settings/automation",
       jsonInit("PUT", payload),
     ),
+  getTerminalSettings: () =>
+    request<{ shell: TerminalShell }>("/api/settings/terminal"),
+  saveTerminalSettings: (payload: { shell: TerminalShell }) =>
+    request<{ shell: TerminalShell }>("/api/settings/terminal", jsonInit("PUT", payload)),
   runAutoskills: (projectId: string, payload: { dryRun?: boolean } = {}) =>
     request<{
       ok: boolean;

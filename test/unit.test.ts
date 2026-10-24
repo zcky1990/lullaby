@@ -2,6 +2,7 @@ import { deepEqual, equal, rejects, throws } from "node:assert/strict";
 import { join, resolve } from "node:path";
 import {
   AutomationSettingsInput,
+  TerminalSettingsInput,
   ChatInput,
   GenerateTicketsInput,
   JiraConfig,
@@ -51,7 +52,14 @@ import {
 } from "../src/server/chat/slash-skill.ts";
 import type { Run } from "../src/server/chat/types.ts";
 import { runAutoskills } from "../src/server/autoskills.ts";
-import { listSkills, parseSkillFile, projectSkillsDir, projectSlug } from "../src/server/skills.ts";
+import { defaultCodeReviewUserMessage } from "../src/server/code-review.ts";
+import {
+  builtinSkillsDir,
+  listSkills,
+  parseSkillFile,
+  projectSkillsDir,
+  projectSlug,
+} from "../src/server/skills.ts";
 
 Deno.test("ProjectInput trims and drops empty optional fields", () => {
   throws(() => ProjectInput.parse({ name: "" }));
@@ -142,6 +150,39 @@ Deno.test("parseSlashSkill treats /autoskill as reserved command", () => {
   });
   equal(isAutoskillCommand("/autoskill"), true);
   equal(isAutoskillCommand("/form-login"), false);
+});
+
+Deno.test("parseSlashSkill extracts /code-review as skill", () => {
+  deepEqual(parseSlashSkill("/code-review"), {
+    skillName: "code-review",
+    text: "",
+    command: null,
+  });
+  deepEqual(parseSlashSkill("/code-review focus security"), {
+    skillName: "code-review",
+    text: "focus security",
+    command: null,
+  });
+});
+
+Deno.test("defaultCodeReviewUserMessage strips default skill chatter", () => {
+  const ctx = "Branch: main\n\nWorking tree clean.";
+  const plain = defaultCodeReviewUserMessage("Ikuti skill /code-review.", ctx);
+  equal(plain.includes("Additional request"), false);
+  equal(plain.includes("Repository change context"), true);
+  equal(plain.includes(ctx), true);
+  equal(plain.includes("code review mindset"), true);
+
+  const withExtra = defaultCodeReviewUserMessage("focus on auth", ctx);
+  equal(withExtra.includes("Additional request:\nfocus on auth"), true);
+});
+
+Deno.test("listSkills includes builtin code-review", async () => {
+  const skills = await listSkills(null, null);
+  const review = skills.find((skill) => skill.name === "code-review");
+  equal(Boolean(review), true);
+  equal(review?.source, "builtin");
+  equal(review?.path.startsWith(builtinSkillsDir()), true);
 });
 
 
@@ -551,10 +592,25 @@ Deno.test("terminal route requires auth", async () => {
 });
 
 Deno.test("parseTerminalSize clamps cols/rows from query", async () => {
-  const { clampTerminalSize, parseTerminalSize } = await import("../src/server/terminal.ts");
+  const { clampTerminalSize, parseTerminalSize, parseTerminalShell, resolveShellPath } =
+    await import("../src/server/terminal.ts");
   deepEqual(parseTerminalSize("http://127.0.0.1/t?cols=120&rows=40"), { cols: 120, rows: 40 });
   deepEqual(clampTerminalSize(0, -1), { cols: 80, rows: 24 });
   deepEqual(clampTerminalSize(9999, 9999), { cols: 500, rows: 200 });
+  equal(parseTerminalShell("http://127.0.0.1/t?shell=zsh"), "zsh");
+  equal(parseTerminalShell("http://127.0.0.1/t?shell=bash"), "bash");
+  equal(parseTerminalShell("http://127.0.0.1/t?shell=fish"), null);
+  equal(parseTerminalShell("http://127.0.0.1/t"), null);
+  const zsh = await resolveShellPath("zsh");
+  const bash = await resolveShellPath("bash");
+  equal(zsh.includes("zsh"), true);
+  equal(bash.includes("bash"), true);
+});
+
+Deno.test("TerminalSettingsInput accepts zsh and bash", () => {
+  equal(TerminalSettingsInput.parse({ shell: "zsh" }).shell, "zsh");
+  equal(TerminalSettingsInput.parse({ shell: "bash" }).shell, "bash");
+  throws(() => TerminalSettingsInput.parse({ shell: "fish" }));
 });
 
 Deno.test("projectSlug normalizes names and falls back to id", () => {

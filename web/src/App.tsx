@@ -180,6 +180,19 @@ export default function App() {
 
   const hasUnassigned = useMemo(() => tickets.some((ticket) => !ticket.assignee), [tickets]);
 
+  const enabledDocRemotes = useMemo(() => {
+    const kinds = new Set(
+      (detail?.integrations ?? [])
+        .map((item) => item.kind)
+        .filter((kind): kind is DocumentSource =>
+          kind === "docmost" || kind === "notion" || kind === "confluence"
+        ),
+    );
+    return (["docmost", "notion", "confluence"] as DocumentSource[]).filter((kind) =>
+      kinds.has(kind)
+    );
+  }, [detail]);
+
   const visibleTickets = useMemo(() => {
     if (assigneeFilter === "all") return tickets;
     if (assigneeFilter === "none") return tickets.filter((ticket) => !ticket.assignee);
@@ -531,6 +544,12 @@ export default function App() {
   const changeDocSource = useCallback((source: PanelDocSource) => {
     setDocSource(source);
   }, []);
+
+  useEffect(() => {
+    if (docSource !== "local" && !enabledDocRemotes.includes(docSource)) {
+      setDocSource("local");
+    }
+  }, [docSource, enabledDocRemotes]);
 
   const saveDocument = useCallback(
     async (pageId: string, payload: { title?: string; content: string }) => {
@@ -1017,6 +1036,7 @@ export default function App() {
               projectId={currentId}
               source={docSource}
               onSourceChange={changeDocSource}
+              enabledRemotes={enabledDocRemotes}
               remote={{
                 loading: docsLoading,
                 configured: docsConfigured,

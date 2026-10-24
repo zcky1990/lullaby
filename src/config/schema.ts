@@ -210,6 +210,14 @@ export const AutomationSettingsInput = z.object({
 });
 export type AutomationSettingsInput = z.infer<typeof AutomationSettingsInput>;
 
+export const TerminalShell = z.enum(["zsh", "bash"]);
+export type TerminalShell = z.infer<typeof TerminalShell>;
+
+export const TerminalSettingsInput = z.object({
+  shell: TerminalShell,
+});
+export type TerminalSettingsInput = z.infer<typeof TerminalSettingsInput>;
+
 export const AutoskillsInput = z.object({
   dryRun: z.boolean().optional().default(false),
 });
