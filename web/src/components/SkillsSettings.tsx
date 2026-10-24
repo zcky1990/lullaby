@@ -75,7 +75,8 @@ export function SkillsSettings({ projectId }: { projectId: string | null }) {
           Skill adalah folder berisi <span className="font-mono">SKILL.md</span> dengan frontmatter{" "}
           <span className="font-mono">name</span> dan <span className="font-mono">description</span>.
           AI memilih skill lewat tool <span className="font-mono">use_skill</span> (progressive
-          disclosure) saat deskripsinya cocok dengan tugas.
+          disclosure) saat deskripsinya cocok dengan tugas. Skill <Badge variant="outline">project</Badge>{" "}
+          di-generate otomatis setelah chat Build yang memakai tool.
         </p>
         <Separator />
       </div>
@@ -104,18 +105,22 @@ export function SkillsSettings({ projectId }: { projectId: string | null }) {
       ) : (
         <>
           <div className="flex flex-col gap-1 rounded-md border bg-muted/20 p-3 text-xs">
-            <span className="text-muted-foreground">Global</span>
-            <span className="truncate font-mono">{data?.globalPath}</span>
-            <span className="mt-1 text-muted-foreground">Workspace</span>
+            <span className="text-muted-foreground">Workspace (prioritas tertinggi)</span>
             <span className="truncate font-mono">
               {data?.workspacePath ?? "(pilih project untuk skill workspace)"}
             </span>
+            <span className="mt-1 text-muted-foreground">Project (auto-generated)</span>
+            <span className="truncate font-mono">
+              {data?.projectPath ?? "(pilih project untuk skill project)"}
+            </span>
+            <span className="mt-1 text-muted-foreground">Global</span>
+            <span className="truncate font-mono">{data?.globalPath}</span>
           </div>
 
           {!data || data.skills.length === 0 ? (
             <p className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
-              Belum ada skill. Buat folder (mis. <span className="font-mono">my-skill/SKILL.md</span>)
-              di salah satu folder di atas.
+              Belum ada skill. Jalankan chat Build, atau buat folder (mis.{" "}
+              <span className="font-mono">my-skill/SKILL.md</span>) di salah satu folder di atas.
             </p>
           ) : (
             <div className="flex flex-col gap-2">
@@ -124,7 +129,9 @@ export function SkillsSettings({ projectId }: { projectId: string | null }) {
                   <div className="flex flex-wrap items-center gap-2">
                     <Sparkles className="size-4 text-muted-foreground" />
                     <span className="font-medium">{skill.name}</span>
-                    <Badge variant="outline">{skill.source}</Badge>
+                    <Badge variant={skill.source === "project" ? "secondary" : "outline"}>
+                      {skill.source}
+                    </Badge>
                     <div className="ml-auto flex items-center gap-2">
                       <Badge variant={skill.enabled ? "secondary" : "outline"}>
                         {skill.enabled ? "Aktif" : "Nonaktif"}

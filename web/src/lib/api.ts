@@ -131,7 +131,7 @@ export interface SkillInfo {
   id: string;
   name: string;
   description: string;
-  source: "global" | "workspace";
+  source: "global" | "workspace" | "project";
   path: string;
   enabled: boolean;
 }
@@ -141,6 +141,7 @@ export interface SkillsResponse {
   disabled: string[];
   globalPath: string;
   workspacePath: string | null;
+  projectPath: string | null;
   skills: SkillInfo[];
 }
 

@@ -258,3 +258,25 @@ html[data-icon-weight="light"] svg.lucide {
 html[data-icon-weight="bold"] svg.lucide {
   stroke-width: 2.5;
 }
+
+.terminal-host .xterm {
+  height: 100%;
+  padding: 0;
+}
+
+.terminal-host .xterm-viewport {
+  overflow-y: auto !important;
+}
+
+.terminal-host .xterm-screen {
+  height: 100%;
+}
+
+.terminal-host .xterm-helpers {
+  position: absolute;
+}
+
+.terminal-host .xterm .xterm-scrollable-element > .scrollbar > .slider {
+  background: color-mix(in oklab, var(--foreground) 28%, transparent);
+  border-radius: 999px;
+}

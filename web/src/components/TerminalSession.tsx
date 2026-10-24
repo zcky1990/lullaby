@@ -1,10 +1,13 @@
 import { useEffect, useRef, useState } from "react";
+import { ChevronDown, ChevronUp, Search, X } from "lucide-react";
 import { FitAddon } from "@xterm/addon-fit";
 import { SearchAddon } from "@xterm/addon-search";
 import { Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
 import { EDITOR_FONT_STACKS, useTheme } from "@/components/ThemeProvider";
+import { Button } from "@/components/ui/button";
 import { registerFinder } from "@/lib/find";
+import { cn } from "@/lib/utils";
 
 const DARK_THEME = {
   background: "#1e1e1e",
@@ -54,10 +57,16 @@ const LIGHT_THEME = {
 
 export type TerminalStatus = "connecting" | "ready" | "closed" | "error";
 
+export interface TerminalHandle {
+  clear: () => void;
+  focus: () => void;
+}
+
 interface Props {
   projectId: string;
   active: boolean;
   onStatus?: (status: TerminalStatus, detail?: string) => void;
+  onReady?: (handle: TerminalHandle) => void;
 }
 
 function canFit(host: HTMLElement | null): boolean {
@@ -75,7 +84,7 @@ function safeFit(fit: FitAddon | null, host: HTMLElement | null): boolean {
   }
 }
 
-export function TerminalSession({ projectId, active, onStatus }: Props) {
+export function TerminalSession({ projectId, active, onStatus, onReady }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const fitRef = useRef<FitAddon | null>(null);
   const searchRef = useRef<SearchAddon | null>(null);
@@ -86,7 +95,9 @@ export function TerminalSession({ projectId, active, onStatus }: Props) {
   const [findOpen, setFindOpen] = useState(false);
   const [query, setQuery] = useState("");
   const statusRef = useRef(onStatus);
+  const onReadyRef = useRef(onReady);
   statusRef.current = onStatus;
+  onReadyRef.current = onReady;
   activeRef.current = active;
   const { resolved, editorFont, editorFontSize } = useTheme();
 
@@ -97,8 +108,11 @@ export function TerminalSession({ projectId, active, onStatus }: Props) {
       cursorBlink: true,
       fontFamily: EDITOR_FONT_STACKS[editorFont],
       fontSize: editorFontSize,
+      lineHeight: 1.2,
+      letterSpacing: 0,
       scrollback: 5000,
       theme: resolved === "dark" ? DARK_THEME : LIGHT_THEME,
+      allowTransparency: false,
     });
     const fit = new FitAddon();
     const search = new SearchAddon();
@@ -109,6 +123,10 @@ export function TerminalSession({ projectId, active, onStatus }: Props) {
     safeFit(fit, host);
     termRef.current = term;
     fitRef.current = fit;
+    onReadyRef.current?.({
+      clear: () => term.clear(),
+      focus: () => term.focus(),
+    });
     statusRef.current?.("connecting");
 
     const encoder = new TextEncoder();
@@ -248,13 +266,20 @@ export function TerminalSession({ projectId, active, onStatus }: Props) {
   }, [active]);
 
   return (
-    <div className="relative h-full w-full">
-      <div ref={hostRef} className="h-full w-full" />
+    <div className="terminal-host relative h-full w-full overflow-hidden">
+      <div
+        ref={hostRef}
+        className={cn(
+          "h-full w-full px-2 pt-1 pb-2",
+          resolved === "dark" ? "bg-[#1e1e1e]" : "bg-white",
+        )}
+      />
       {findOpen ? (
         <div
           data-terminal-find
-          className="absolute top-2 right-2 z-10 flex w-64 flex-col gap-1 rounded-md border bg-popover p-2 shadow-md"
+          className="absolute top-2 right-2 z-10 flex w-72 items-center gap-1 rounded-md border bg-popover/95 p-1.5 shadow-md backdrop-blur-sm"
         >
+          <Search className="ml-1 size-3.5 shrink-0 text-muted-foreground" />
           <input
             ref={inputRef}
             value={query}
@@ -274,12 +299,42 @@ export function TerminalSession({ projectId, active, onStatus }: Props) {
                 find(event.shiftKey);
               }
             }}
-            placeholder="Find in terminal"
-            className="border-input focus-visible:border-ring focus-visible:ring-ring/50 h-8 w-full rounded-sm border bg-transparent px-2 text-xs outline-none focus-visible:ring-[3px]"
+            placeholder="Find"
+            className="h-7 min-w-0 flex-1 bg-transparent px-1 text-xs outline-none"
           />
-          <span className="text-[10px] text-muted-foreground">
-            Enter next · Shift+Enter previous · Esc close
-          </span>
+          <Button
+            size="icon"
+            variant="ghost"
+            className="size-7"
+            onClick={() => find(true)}
+            aria-label="Previous match"
+            title="Previous"
+          >
+            <ChevronUp />
+          </Button>
+          <Button
+            size="icon"
+            variant="ghost"
+            className="size-7"
+            onClick={() => find(false)}
+            aria-label="Next match"
+            title="Next"
+          >
+            <ChevronDown />
+          </Button>
+          <Button
+            size="icon"
+            variant="ghost"
+            className="size-7"
+            onClick={() => {
+              setFindOpen(false);
+              termRef.current?.focus();
+            }}
+            aria-label="Close find"
+            title="Close"
+          >
+            <X />
+          </Button>
         </div>
       ) : null}
     </div>

@@ -28,16 +28,42 @@ const ITEMS: {
   icon: LucideIcon;
   requiresProject?: boolean;
   requiresWorkspace?: boolean;
-  bottom?: boolean;
+  group: "main" | "tools";
 }[] = [
-  { id: "workspace", label: "Workspace", icon: LayoutGrid },
-  { id: "files", label: "Explorer", icon: FolderTree, requiresProject: true, requiresWorkspace: true },
-  { id: "terminal", label: "Terminal", icon: SquareTerminal, requiresProject: true },
-  { id: "git", label: "Git", icon: GitBranch, requiresProject: true, requiresWorkspace: true },
-  { id: "document", label: "Document", icon: FileText },
-  { id: "ticket", label: "Ticket", icon: Ticket },
-  { id: "settings", label: "Project Settings", icon: Settings, requiresProject: true },
-  { id: "global", label: "Global Settings", icon: SlidersHorizontal, bottom: true },
+  { id: "workspace", label: "Workspace", icon: LayoutGrid, group: "main" },
+  {
+    id: "files",
+    label: "Explorer",
+    icon: FolderTree,
+    requiresProject: true,
+    requiresWorkspace: true,
+    group: "main",
+  },
+  { id: "document", label: "Document", icon: FileText, group: "main" },
+  { id: "ticket", label: "Ticket", icon: Ticket, group: "main" },
+  {
+    id: "settings",
+    label: "Project Settings",
+    icon: Settings,
+    requiresProject: true,
+    group: "main",
+  },
+  {
+    id: "terminal",
+    label: "Terminal",
+    icon: SquareTerminal,
+    requiresProject: true,
+    group: "tools",
+  },
+  {
+    id: "git",
+    label: "Git",
+    icon: GitBranch,
+    requiresProject: true,
+    requiresWorkspace: true,
+    group: "tools",
+  },
+  { id: "global", label: "Global Settings", icon: SlidersHorizontal, group: "tools" },
 ];
 
 interface Props {
@@ -48,6 +74,38 @@ interface Props {
   onChange: (menu: Menu) => void;
 }
 
+function MenuButton({
+  item,
+  active,
+  terminalOpen,
+  onChange,
+}: {
+  item: (typeof ITEMS)[number];
+  active: Menu;
+  terminalOpen?: boolean;
+  onChange: (menu: Menu) => void;
+}) {
+  const Icon = item.icon;
+  const selected = item.id === "terminal" ? !!terminalOpen : active === item.id;
+  return (
+    <Button
+      variant="ghost"
+      size="icon"
+      title={item.label}
+      aria-label={item.label}
+      aria-current={selected ? "page" : undefined}
+      onClick={() => onChange(item.id)}
+      className={cn(
+        "relative size-12 shrink-0 rounded-none text-muted-foreground hover:bg-accent/60 hover:text-foreground [&_svg]:size-6",
+        selected &&
+          "bg-[var(--sidebar)] text-foreground before:absolute before:inset-y-0 before:left-0 before:w-0.5 before:bg-primary",
+      )}
+    >
+      <Icon />
+    </Button>
+  );
+}
+
 export function ActivityBar({
   active,
   hasProject,
@@ -55,37 +113,40 @@ export function ActivityBar({
   terminalOpen,
   onChange,
 }: Props) {
-  const items = ITEMS.filter(
+  const visible = ITEMS.filter(
     (item) =>
       (!item.requiresProject || hasProject) && (!item.requiresWorkspace || hasWorkspace),
   );
+  const main = visible.filter((item) => item.group === "main");
+  const tools = visible.filter((item) => item.group === "tools");
 
   return (
-    <nav className="flex w-12 shrink-0 flex-col items-center gap-0.5 border-r bg-[var(--activitybar)] py-2">
-      {items.map((item) => {
-        const Icon = item.icon;
-        return (
-          <Button
+    <nav className="flex w-12 shrink-0 flex-col items-center border-r bg-[var(--activitybar)] py-2">
+      <div className="flex w-full flex-col items-center gap-0.5">
+        {main.map((item) => (
+          <MenuButton
             key={item.id}
-            variant="ghost"
-            size="icon"
-            title={item.label}
-            aria-label={item.label}
-            aria-current={
-              (item.id === "terminal" ? terminalOpen : active === item.id) ? "page" : undefined
-            }
-            onClick={() => onChange(item.id)}
-            className={cn(
-              "relative size-12 shrink-0 rounded-none text-muted-foreground hover:bg-accent/60 hover:text-foreground [&_svg]:size-6",
-              item.bottom && "mt-auto",
-              (item.id === "terminal" ? terminalOpen : active === item.id) &&
-                "bg-[var(--sidebar)] text-foreground before:absolute before:inset-y-0 before:left-0 before:w-0.5 before:bg-primary",
-            )}
-          >
-            <Icon />
-          </Button>
-        );
-      })}
+            item={item}
+            active={active}
+            terminalOpen={terminalOpen}
+            onChange={onChange}
+          />
+        ))}
+      </div>
+
+      {tools.length > 0 ? (
+        <div className="mt-auto flex w-full flex-col items-center gap-0.5 border-t border-border/60 pt-2">
+          {tools.map((item) => (
+            <MenuButton
+              key={item.id}
+              item={item}
+              active={active}
+              terminalOpen={terminalOpen}
+              onChange={onChange}
+            />
+          ))}
+        </div>
+      ) : null}
     </nav>
   );
 }

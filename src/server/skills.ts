@@ -2,7 +2,7 @@ import { join } from "node:path";
 import { appDataDir } from "../core/paths.ts";
 import { getAppSetting } from "../db/db.ts";
 
-export type SkillSource = "global" | "workspace";
+export type SkillSource = "global" | "workspace" | "project";
 
 export interface SkillInfo {
   id: string;
@@ -29,6 +29,20 @@ export function workspaceSkillsDir(workspace: string): string {
   return join(workspace, ".agents", "skills");
 }
 
+export function projectSlug(name: string, projectId?: string): string {
+  const slug = name
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 64);
+  if (slug) return slug;
+  return `project-${(projectId ?? "unknown").replace(/[^a-z0-9]/gi, "").slice(0, 8) || "unknown"}`;
+}
+
+export function projectSkillsDir(slug: string): string {
+  return join(appDataDir(), slug, "skills");
+}
+
 function parseFrontmatter(text: string): { meta: Record<string, string>; body: string } {
   if (!text.startsWith("---")) return { meta: {}, body: text };
   const end = text.indexOf("\n---", 3);
@@ -51,7 +65,7 @@ function parseFrontmatter(text: string): { meta: Record<string, string>; body: s
   return { meta, body };
 }
 
-function normalizeName(raw: string, fallback: string): string {
+export function normalizeSkillName(raw: string, fallback: string): string {
   const value = (raw || fallback).toLowerCase().replace(/[^a-z0-9_-]+/g, "-").replace(
     /^-+|-+$/g,
     "",
@@ -69,7 +83,7 @@ function fallbackDescription(body: string): string {
 
 export function parseSkillFile(text: string, fallbackName: string): ParsedSkill {
   const { meta, body } = parseFrontmatter(text);
-  const name = normalizeName(meta.name ?? "", fallbackName);
+  const name = normalizeSkillName(meta.name ?? "", fallbackName);
   const description = (meta.description ?? fallbackDescription(body)).slice(0, MAX_DESCRIPTION);
   return { name, description, body };
 }
@@ -104,10 +118,14 @@ async function scanSkills(
 
 export async function listSkills(
   workspace: string | null,
+  projectSlugName?: string | null,
 ): Promise<SkillInfo[]> {
   const out: SkillInfo[] = [];
   const seen = new Set<string>();
   if (workspace) await scanSkills(workspaceSkillsDir(workspace), "workspace", seen, out);
+  if (projectSlugName) {
+    await scanSkills(projectSkillsDir(projectSlugName), "project", seen, out);
+  }
   await scanSkills(globalSkillsDir(), "global", seen, out);
   return out.sort((a, b) => a.name.localeCompare(b.name));
 }
@@ -128,10 +146,13 @@ export async function readSkillsSettings(): Promise<{ enabled: boolean; disabled
   return { enabled, disabled };
 }
 
-export async function loadEnabledSkills(workspace: string | null): Promise<SkillInfo[]> {
+export async function loadEnabledSkills(
+  workspace: string | null,
+  projectSlugName?: string | null,
+): Promise<SkillInfo[]> {
   const settings = await readSkillsSettings();
   if (!settings.enabled) return [];
-  const skills = await listSkills(workspace);
+  const skills = await listSkills(workspace, projectSlugName);
   return skills.filter((skill) => !settings.disabled.includes(skill.id));
 }
 

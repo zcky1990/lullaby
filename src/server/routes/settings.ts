@@ -3,7 +3,14 @@ import { log } from "../../core/logger.ts";
 import { getAppSetting, getProject, setAppSetting } from "../../db/db.ts";
 import { json, readJson, record } from "../http.ts";
 import { listMcpTools } from "../mcp.ts";
-import { globalSkillsDir, listSkills, readSkillsSettings, workspaceSkillsDir } from "../skills.ts";
+import {
+  globalSkillsDir,
+  listSkills,
+  projectSkillsDir,
+  projectSlug,
+  readSkillsSettings,
+  workspaceSkillsDir,
+} from "../skills.ts";
 
 const MCP_SETTINGS_KEY = "mcp_servers";
 
@@ -74,13 +81,15 @@ export async function listMcpToolsHandler(req: Request): Promise<Response> {
 export async function skillsHandler(projectId: string | null): Promise<Response> {
   const project = projectId ? await getProject(projectId) : null;
   const workspace = project?.workspace_path ?? null;
+  const slug = project ? projectSlug(project.name, project.id) : null;
   const settings = await readSkillsSettings();
-  const skills = await listSkills(workspace);
+  const skills = await listSkills(workspace, slug);
   return json({
     enabled: settings.enabled,
     disabled: settings.disabled,
     globalPath: globalSkillsDir(),
     workspacePath: workspace ? workspaceSkillsDir(workspace) : null,
+    projectPath: slug ? projectSkillsDir(slug) : null,
     skills: skills.map((skill) => ({
       ...skill,
       enabled: !settings.disabled.includes(skill.id),

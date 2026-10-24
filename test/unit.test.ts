@@ -31,7 +31,14 @@ import {
 import { applyHunks, diffHunks, diffLines } from "../src/server/diff.ts";
 import { handleRequest } from "../src/server/router.ts";
 import { APP_TOKEN_HEADER, appToken } from "../src/server/session.ts";
-import { parseSkillFile } from "../src/server/skills.ts";
+import {
+  buildSkillMarkdown,
+  extractSkillEvidence,
+  skillNameFromEvidence,
+  writeProjectSkill,
+} from "../src/server/chat/skill-learn.ts";
+import type { Run } from "../src/server/chat/types.ts";
+import { listSkills, parseSkillFile, projectSkillsDir, projectSlug } from "../src/server/skills.ts";
 
 Deno.test("ProjectInput trims and drops empty optional fields", () => {
   throws(() => ProjectInput.parse({ name: "" }));
@@ -462,4 +469,108 @@ Deno.test("parseTerminalSize clamps cols/rows from query", async () => {
   deepEqual(parseTerminalSize("http://127.0.0.1/t?cols=120&rows=40"), { cols: 120, rows: 40 });
   deepEqual(clampTerminalSize(0, -1), { cols: 80, rows: 24 });
   deepEqual(clampTerminalSize(9999, 9999), { cols: 500, rows: 200 });
+});
+
+Deno.test("projectSlug normalizes names and falls back to id", () => {
+  equal(projectSlug("My Cool App"), "my-cool-app");
+  equal(projectSlug("  "), "project-unknown");
+  equal(projectSlug("", "abcdef12-9999"), "project-abcdef12");
+});
+
+Deno.test("skill-learn extracts evidence and builds markdown", () => {
+  const run = {
+    id: "run-1",
+    provider: { id: "p" } as Run["provider"],
+    workspace: "/tmp/ws",
+    sessionId: "sess-abc12345",
+    turns: [
+      { role: "user", content: "Fix login button styles" },
+      {
+        role: "assistant",
+        content: "",
+        toolCalls: [
+          { id: "1", name: "read_file", arguments: JSON.stringify({ path: "src/Login.tsx" }) },
+          { id: "2", name: "write_file", arguments: JSON.stringify({ path: "src/Login.tsx" }) },
+        ],
+      },
+    ],
+    pendingBatch: [],
+    pendingChanges: new Map(),
+    batchResults: new Map(),
+    changes: [{
+      path: "src/Login.tsx",
+      action: "update",
+      diff: "",
+      added: 1,
+      removed: 0,
+    }],
+    projectId: "proj-1",
+    mode: "build" as const,
+    skills: new Map(),
+    createdTickets: [],
+    createdAt: Date.now(),
+  } satisfies Run;
+
+  const evidence = extractSkillEvidence(run);
+  equal(evidence !== null, true);
+  equal(evidence!.goal.includes("Fix login"), true);
+  equal(evidence!.files.includes("src/Login.tsx"), true);
+  equal(evidence!.steps.some((step) => step.name === "write_file"), true);
+
+  const name = skillNameFromEvidence(evidence!, run.sessionId);
+  equal(name.includes("fix-login"), true);
+
+  const md = buildSkillMarkdown(name, evidence!);
+  equal(md.includes("name: "), true);
+  equal(md.includes("## Goal"), true);
+  equal(md.includes("src/Login.tsx"), true);
+  equal(md.includes("Auto-generated"), true);
+});
+
+Deno.test("listSkills prefers workspace over project over global", async () => {
+  const root = await Deno.makeTempDir();
+  const previous = Deno.env.get("RND_APP_DATA_DIR");
+  Deno.env.set("RND_APP_DATA_DIR", root);
+  try {
+    const slug = "demo-app";
+    const workspace = await Deno.makeTempDir();
+    const writeSkill = async (dir: string, name: string, description: string) => {
+      const skillDir = join(dir, name);
+      await Deno.mkdir(skillDir, { recursive: true });
+      await Deno.writeTextFile(
+        join(skillDir, "SKILL.md"),
+        `---\nname: ${name}\ndescription: ${description}\n---\n\nBody for ${name}.\n`,
+      );
+    };
+
+    await writeSkill(join(root, "skills"), "shared-skill", "from global");
+    await writeSkill(projectSkillsDir(slug), "shared-skill", "from project");
+    await writeSkill(projectSkillsDir(slug), "project-only", "project only");
+    await writeSkill(join(workspace, ".agents", "skills"), "shared-skill", "from workspace");
+
+    const skills = await listSkills(workspace, slug);
+    const shared = skills.find((skill) => skill.name === "shared-skill");
+    const projectOnly = skills.find((skill) => skill.name === "project-only");
+    equal(shared?.source, "workspace");
+    equal(shared?.description, "from workspace");
+    equal(projectOnly?.source, "project");
+
+    const written = await writeProjectSkill(
+      slug,
+      "learned-task",
+      buildSkillMarkdown("learned-task", {
+        goal: "Add logging",
+        steps: [{ name: "write_file", path: "src/log.ts" }],
+        files: ["src/log.ts"],
+        tickets: [],
+      }),
+    );
+    equal(written.endsWith("SKILL.md"), true);
+    const after = await listSkills(workspace, slug);
+    equal(after.some((skill) => skill.name === "learned-task" && skill.source === "project"), true);
+  } finally {
+    if (previous === undefined) Deno.env.delete("RND_APP_DATA_DIR");
+    else Deno.env.set("RND_APP_DATA_DIR", previous);
+    await Deno.remove(root, { recursive: true }).catch(() => {});
+  }
 });

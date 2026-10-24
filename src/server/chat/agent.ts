@@ -3,11 +3,13 @@ import {
   appendChatMessage,
   createChatSession,
   getChatSession,
+  getProject,
   listChatMessages,
 } from "../../db/db.ts";
-import { loadEnabledSkills, type SkillInfo } from "../skills.ts";
+import { loadEnabledSkills, projectSlug, type SkillInfo } from "../skills.ts";
 import { complete, VARIANT_TEMPERATURE } from "./llm.ts";
 import { approvalResponse, prepareWriteChange, setAdvance } from "./review.ts";
+import { scheduleSkillLearn } from "./skill-learn.ts";
 import { deleteRun, pruneRuns, setRun } from "./state.ts";
 import { executeTool, resolveAttachments, toolsFor, WRITE_TOOLS } from "./tools.ts";
 import type { ChatResponse, Run, VisibleMessage } from "./types.ts";
@@ -103,6 +105,7 @@ export async function advance(run: Run): Promise<ChatResponse> {
       if (response.toolCalls.length === 0) {
         run.turns.push({ role: "assistant", content: response.text });
         await appendChatMessage(run.sessionId, "assistant", response.text, run.changes);
+        scheduleSkillLearn(run);
         deleteRun(run.id);
         return {
           status: "done",
@@ -160,6 +163,7 @@ export async function advance(run: Run): Promise<ChatResponse> {
     }
     const message = "(berhenti: batas langkah tercapai)";
     await appendChatMessage(run.sessionId, "assistant", message, run.changes);
+    scheduleSkillLearn(run);
     deleteRun(run.id);
     return {
       status: "done",
@@ -212,7 +216,9 @@ export async function startChat(
     })),
   );
 
-  const skills = await loadEnabledSkills(workspace);
+  const project = await getProject(projectId);
+  const slug = projectSlug(project?.name ?? "", projectId);
+  const skills = await loadEnabledSkills(workspace, slug);
   const skillMap = new Map(skills.map((skill) => [skill.name, skill]));
 
   const run: Run = {

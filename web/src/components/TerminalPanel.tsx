@@ -1,11 +1,31 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Plus, SquareTerminal, X } from "lucide-react";
-import { TerminalSession, type TerminalStatus } from "@/components/TerminalSession";
+import {
+  ChevronDown,
+  Eraser,
+  FolderOpen,
+  Plus,
+  SquareTerminal,
+  Trash2,
+  X,
+} from "lucide-react";
+import {
+  TerminalSession,
+  type TerminalHandle,
+  type TerminalStatus,
+} from "@/components/TerminalSession";
 import { Button } from "@/components/ui/button";
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty";
+import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
 
 const HEIGHT_KEY = "rnd.terminalHeight:v1";
-const MIN_HEIGHT = 120;
+const MIN_HEIGHT = 140;
 
 interface Instance {
   id: string;
@@ -25,7 +45,29 @@ function readHeight(): number {
   } catch {
     // ignore
   }
-  return 260;
+  return 280;
+}
+
+function statusLabel(status: TerminalStatus | undefined): string {
+  switch (status) {
+    case "ready":
+      return "Ready";
+    case "connecting":
+      return "Connecting";
+    case "error":
+      return "Error";
+    case "closed":
+      return "Exited";
+    default:
+      return "";
+  }
+}
+
+function shortenPath(path: string | undefined): string {
+  if (!path) return "";
+  const home = path.match(/^\/Users\/[^/]+(.*)$/);
+  if (home) return `~${home[1] || ""}`;
+  return path;
 }
 
 export function TerminalPanel({ projectId, open, onClose }: Props) {
@@ -35,16 +77,19 @@ export function TerminalPanel({ projectId, open, onClose }: Props) {
   const [statuses, setStatuses] = useState<
     Record<string, { status: TerminalStatus; detail?: string }>
   >({});
+  const [resizing, setResizing] = useState(false);
   const counterRef = useRef(1);
+  const handlesRef = useRef<Map<string, TerminalHandle>>(new Map());
 
   const addInstance = useCallback(() => {
     const id = crypto.randomUUID();
-    const title = `Terminal ${counterRef.current++}`;
+    const title = `bash ${counterRef.current++}`;
     setInstances((current) => [...current, { id, title }]);
     setActiveId(id);
   }, []);
 
   const removeInstance = (id: string) => {
+    handlesRef.current.delete(id);
     setInstances((current) => {
       const next = current.filter((item) => item.id !== id);
       setActiveId((active) => {
@@ -64,6 +109,7 @@ export function TerminalPanel({ projectId, open, onClose }: Props) {
     setInstances([]);
     setActiveId(null);
     setStatuses({});
+    handlesRef.current.clear();
     counterRef.current = 1;
   }, [projectId]);
 
@@ -83,6 +129,7 @@ export function TerminalPanel({ projectId, open, onClose }: Props) {
     event.preventDefault();
     const startY = event.clientY;
     const startHeight = height;
+    setResizing(true);
 
     const onMove = (moveEvent: PointerEvent) => {
       const next = Math.min(
@@ -92,6 +139,7 @@ export function TerminalPanel({ projectId, open, onClose }: Props) {
       setHeight(next);
     };
     const onUp = () => {
+      setResizing(false);
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
     };
@@ -101,12 +149,14 @@ export function TerminalPanel({ projectId, open, onClose }: Props) {
 
   const active = instances.find((item) => item.id === activeId);
   const activeStatus = activeId ? statuses[activeId] : undefined;
+  const cwd = shortenPath(activeStatus?.detail);
 
   return (
     <div
       className={cn(
-        "flex shrink-0 flex-col border-t bg-[var(--background)]",
+        "flex shrink-0 flex-col border-t bg-background",
         !open && "hidden",
+        resizing && "select-none",
       )}
       style={{ height }}
     >
@@ -114,50 +164,63 @@ export function TerminalPanel({ projectId, open, onClose }: Props) {
         onPointerDown={startResize}
         role="separator"
         aria-orientation="horizontal"
-        className="hover:bg-primary/40 h-1 shrink-0 cursor-row-resize transition-colors"
-      />
+        aria-label="Resize terminal"
+        className="group relative flex h-1.5 shrink-0 cursor-row-resize items-center justify-center"
+      >
+        <span
+          className={cn(
+            "h-0.5 w-10 rounded-full bg-border transition-colors group-hover:bg-primary/60",
+            resizing && "bg-primary",
+          )}
+        />
+      </div>
 
-      <div className="flex h-[35px] shrink-0 items-center justify-between gap-2 border-b px-2">
-        <div className="flex min-w-0 items-center gap-1">
-          <SquareTerminal className="mx-1 size-4 shrink-0 text-muted-foreground" />
-          <div className="flex min-w-0 items-center gap-1 overflow-x-auto">
+      <div className="flex h-9 shrink-0 items-stretch justify-between gap-2 border-b bg-[var(--tabbar)] px-1">
+        <div className="flex min-w-0 items-stretch gap-1">
+          <div className="flex items-center gap-1.5 px-2 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
+            <SquareTerminal className="size-3.5 shrink-0" />
+            <span>Terminal</span>
+          </div>
+
+          <div className="flex min-w-0 items-stretch overflow-x-auto">
             {instances.map((instance) => {
               const status = statuses[instance.id]?.status;
+              const selected = instance.id === activeId;
               return (
                 <div
                   key={instance.id}
                   className={cn(
-                    "group flex h-[30px] shrink-0 items-center gap-1 rounded-t border-t-2 px-2 text-xs",
-                    instance.id === activeId
-                      ? "border-t-primary bg-[var(--tabbar)] text-foreground"
-                      : "border-t-transparent text-muted-foreground hover:bg-accent",
+                    "group flex h-full shrink-0 items-center gap-1.5 border-t-2 px-2.5 text-xs",
+                    selected
+                      ? "border-t-primary bg-background text-foreground"
+                      : "border-t-transparent text-muted-foreground hover:bg-accent/70",
                   )}
                 >
                   <button
                     type="button"
                     onClick={() => setActiveId(instance.id)}
-                    className="flex items-center gap-1.5"
+                    className="flex max-w-40 items-center gap-1.5"
                     title={instance.title}
                   >
                     <span
                       className={cn(
-                        "size-1.5 rounded-full",
-                        status === "ready"
-                          ? "bg-emerald-500"
-                          : status === "error"
-                          ? "bg-red-500"
-                          : status === "closed"
-                          ? "bg-muted-foreground"
-                          : "bg-amber-500",
+                        "size-1.5 shrink-0 rounded-full",
+                        status === "ready" && "bg-emerald-500",
+                        status === "error" && "bg-destructive",
+                        status === "closed" && "bg-muted-foreground",
+                        (!status || status === "connecting") && "animate-pulse bg-amber-500",
                       )}
                     />
-                    <span className="max-w-32 truncate">{instance.title}</span>
+                    <span className="truncate font-mono text-[12px]">{instance.title}</span>
                   </button>
                   <button
                     type="button"
                     onClick={() => removeInstance(instance.id)}
                     aria-label={`Tutup ${instance.title}`}
-                    className="rounded p-0.5 opacity-60 hover:bg-accent hover:opacity-100"
+                    className={cn(
+                      "rounded p-0.5 hover:bg-accent",
+                      selected ? "opacity-60" : "opacity-0 group-hover:opacity-60",
+                    )}
                   >
                     <X className="size-3" />
                   </button>
@@ -165,10 +228,11 @@ export function TerminalPanel({ projectId, open, onClose }: Props) {
               );
             })}
           </div>
+
           <Button
             size="icon"
             variant="ghost"
-            className="size-7 shrink-0"
+            className="my-auto size-7 shrink-0"
             onClick={addInstance}
             aria-label="Terminal baru"
             title="Terminal baru"
@@ -178,56 +242,127 @@ export function TerminalPanel({ projectId, open, onClose }: Props) {
           </Button>
         </div>
 
-        <div className="flex min-w-0 shrink-0 items-center gap-2 text-[11px] text-muted-foreground">
-          {activeStatus?.detail ? (
-            <span className="max-w-72 truncate font-mono">{activeStatus.detail}</span>
-          ) : active ? (
-            <span className="truncate">{active.title}</span>
+        <div className="flex min-w-0 shrink-0 items-center gap-1 px-1">
+          {cwd ? (
+            <span
+              className="mr-1 hidden max-w-64 items-center gap-1 truncate font-mono text-[11px] text-muted-foreground sm:inline-flex"
+              title={activeStatus?.detail}
+            >
+              <FolderOpen className="size-3 shrink-0 opacity-70" />
+              {cwd}
+            </span>
           ) : null}
+          {activeStatus?.status ? (
+            <span
+              className={cn(
+                "mr-1 hidden rounded px-1.5 py-0.5 text-[10px] font-medium tracking-wide uppercase sm:inline",
+                activeStatus.status === "ready" && "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400",
+                activeStatus.status === "connecting" && "bg-amber-500/15 text-amber-700 dark:text-amber-400",
+                activeStatus.status === "error" && "bg-destructive/15 text-destructive",
+                activeStatus.status === "closed" && "bg-muted text-muted-foreground",
+              )}
+            >
+              {statusLabel(activeStatus.status)}
+            </span>
+          ) : null}
+          <Button
+            size="icon"
+            variant="ghost"
+            className="size-7"
+            disabled={!activeId}
+            onClick={() => activeId && handlesRef.current.get(activeId)?.clear()}
+            aria-label="Clear terminal"
+            title="Clear"
+          >
+            <Eraser />
+          </Button>
+          <Button
+            size="icon"
+            variant="ghost"
+            className="size-7"
+            disabled={!activeId}
+            onClick={() => activeId && removeInstance(activeId)}
+            aria-label="Kill terminal"
+            title="Kill terminal"
+          >
+            <Trash2 />
+          </Button>
           <Button
             size="icon"
             variant="ghost"
             className="size-7"
             onClick={onClose}
             aria-label="Sembunyikan terminal"
-            title="Sembunyikan panel terminal"
+            title="Sembunyikan panel"
           >
-            <X />
+            <ChevronDown />
           </Button>
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 p-1">
+      <div className="relative min-h-0 flex-1 bg-background">
         {!projectId ? (
-          <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
-            Pilih project dulu untuk membuka terminal.
-          </div>
+          <Empty className="h-full border-0 p-6">
+            <EmptyHeader>
+              <EmptyMedia variant="icon">
+                <SquareTerminal />
+              </EmptyMedia>
+              <EmptyTitle>Belum ada project</EmptyTitle>
+              <EmptyDescription>Pilih project di Workspace untuk membuka terminal.</EmptyDescription>
+            </EmptyHeader>
+          </Empty>
         ) : instances.length === 0 ? (
-          <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
-            Klik + untuk membuat terminal baru.
-          </div>
+          <Empty className="h-full border-0 p-6">
+            <EmptyHeader>
+              <EmptyMedia variant="icon">
+                <Plus />
+              </EmptyMedia>
+              <EmptyTitle>Tidak ada terminal</EmptyTitle>
+              <EmptyDescription>Klik + untuk membuat session baru.</EmptyDescription>
+            </EmptyHeader>
+          </Empty>
         ) : (
           <div className="relative h-full w-full">
-            {instances.map((instance) => (
-              <div
-                key={instance.id}
-                className={cn(
-                  "absolute inset-0 h-full w-full",
-                  instance.id !== activeId && "invisible pointer-events-none",
-                )}
-                aria-hidden={instance.id !== activeId}
-              >
-                <TerminalSession
-                  projectId={projectId}
-                  active={open && instance.id === activeId}
-                  onStatus={(status, detail) =>
-                    setStatuses((current) => ({
-                      ...current,
-                      [instance.id]: { status, detail },
-                    }))}
-                />
-              </div>
-            ))}
+            {instances.map((instance) => {
+              const status = statuses[instance.id]?.status;
+              const selected = instance.id === activeId;
+              return (
+                <div
+                  key={instance.id}
+                  className={cn(
+                    "absolute inset-0 h-full w-full",
+                    !selected && "invisible pointer-events-none",
+                  )}
+                  aria-hidden={!selected}
+                >
+                  {status === "connecting" && selected ? (
+                    <div className="pointer-events-none absolute inset-x-0 top-2 z-10 flex justify-center">
+                      <span className="inline-flex items-center gap-1.5 rounded-md border bg-popover/95 px-2 py-1 text-[11px] text-muted-foreground shadow-sm backdrop-blur-sm">
+                        <Spinner className="size-3" />
+                        Connecting…
+                      </span>
+                    </div>
+                  ) : null}
+                  {status === "error" && selected ? (
+                    <div className="pointer-events-none absolute inset-x-0 top-2 z-10 flex justify-center">
+                      <span className="inline-flex max-w-[90%] items-center truncate rounded-md border border-destructive/30 bg-destructive/10 px-2 py-1 text-[11px] text-destructive shadow-sm">
+                        {statuses[instance.id]?.detail || "Terminal error"}
+                      </span>
+                    </div>
+                  ) : null}
+                  <TerminalSession
+                    projectId={projectId}
+                    active={open && selected}
+                    onReady={(handle) => handlesRef.current.set(instance.id, handle)}
+                    onStatus={(next, detail) =>
+                      setStatuses((current) => ({
+                        ...current,
+                        [instance.id]: { status: next, detail },
+                      }))}
+                  />
+                </div>
+              );
+            })}
           </div>
         )}
       </div>

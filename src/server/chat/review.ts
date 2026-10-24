@@ -2,6 +2,7 @@ import type { ChatChange } from "../../db/db.ts";
 import { readWorkspaceFile, writeWorkspaceFile } from "../../fs/workspace.ts";
 import { applyHunks, diffHunks, diffLines } from "../diff.ts";
 import { safeParse } from "./llm.ts";
+import { scheduleSkillLearn } from "./skill-learn.ts";
 import { deleteRun, getRun, pruneRuns, setRun } from "./state.ts";
 import type { ChatResponse, PendingChange, PendingFileChange, Run, ToolCall } from "./types.ts";
 
@@ -136,6 +137,7 @@ async function settle(run: Run): Promise<ChatResponse> {
   run.pendingBatch = [];
   run.batchResults.clear();
   if (run.provider.id === "test" || !run.turns.some((turn) => turn.role !== "tool")) {
+    scheduleSkillLearn(run);
     deleteRun(run.id);
     return {
       status: "done",

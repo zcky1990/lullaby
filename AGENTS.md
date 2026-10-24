@@ -47,10 +47,12 @@ finishing a change.
   deleted only while unsynced (`DELETE` rejects tickets with `jira_key`). Syncing is manual
   (`POST /local-tickets/:id/sync` → Jira issue) and sets `jira_key`/`sync_status`.
 - **Skills**: `src/server/skills.ts` discovers `SKILL.md` folders (frontmatter `name`/`description`)
-  from `appDataDir()/skills` (global) and `<workspace>/.agents/skills` (workspace wins on duplicate
-  names). Chat injects the skill list into the system prompt and exposes a read-only `use_skill`
-  tool (progressive disclosure; allowed in Plan mode). Enabled state lives in `app_settings`
-  (`skills_enabled`, `skills_disabled`); UI is Global Settings → Skills.
+  from `<workspace>/.agents/skills` (highest), `appDataDir()/<project-slug>/skills` (auto from Build
+  chats), and `appDataDir()/skills` (global). Chat injects the skill list into the system prompt and
+  exposes a read-only `use_skill` tool (progressive disclosure; allowed in Plan mode). After each
+  successful Build run that used tools, `src/server/chat/skill-learn.ts` writes a deterministic
+  project skill. Enabled state lives in `app_settings` (`skills_enabled`, `skills_disabled`); UI is
+  Global Settings → Skills.
 - **Git**: `src/integrations/git.ts` runs the `git` CLI inside `projects.workspace_path` (status,
   branches, log, diff, stage/unstage, commit, checkout with `--` path guards). UI is a
   SourceTree-like two-pane view: `GitPanel` (branches/refresh) in the aside and `GitTab`
