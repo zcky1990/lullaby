@@ -43,6 +43,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { type EditorTab, type TabKind, TabsBar } from "@/components/TabsBar";
+import { PANEL_FOR_KIND, useEditorTabs } from "@/hooks/useEditorTabs";
 import { TicketCreateDialog } from "@/components/TicketCreateDialog";
 import { TicketPanel } from "@/components/TicketPanel";
 import { TicketDetailDialog } from "@/components/TicketDetailDialog";
@@ -103,17 +104,6 @@ function readPanelWidth(): number {
   return 256;
 }
 
-const PANEL_FOR_KIND: Record<TabKind, Menu> = {
-  workspace: "workspace",
-  ticket: "ticket",
-  git: "git",
-  settings: "settings",
-  global: "global",
-  review: "files",
-  document: "document",
-  file: "files",
-};
-
 export default function App() {
   const [menu, setMenu] = useState<Menu>("workspace");
   const [settingsSection, setSettingsSection] = useState<SettingsSection>("workspace");
@@ -127,8 +117,17 @@ export default function App() {
   const [roles, setRoles] = useState<Role[]>([]);
   const [addingRole, setAddingRole] = useState(false);
 
-  const [tabs, setTabs] = useState<EditorTab[]>([]);
-  const [activeTabId, setActiveTabId] = useState<string | null>(null);
+  const {
+    tabs,
+    setTabs,
+    tabsRef,
+    activeTabId,
+    setActiveTabId,
+    focusTab,
+    patchTab,
+    closeTab,
+    openSingleton,
+  } = useEditorTabs(setMenu, currentId);
 
   const [docs, setDocs] = useState<DocSummary[]>([]);
   const [docsConfigured, setDocsConfigured] = useState(true);
@@ -322,20 +321,6 @@ export default function App() {
     }
   }, []);
 
-  const focusTab = useCallback((tab: EditorTab) => {
-    setTabs((current) =>
-      current.some((item) => item.id === tab.id)
-        ? current.map((item) => (item.id === tab.id ? { ...item, title: tab.title } : item))
-        : [...current, tab],
-    );
-    setActiveTabId(tab.id);
-    setMenu(PANEL_FOR_KIND[tab.kind]);
-  }, []);
-
-  const patchTab = useCallback((id: string, patch: Partial<EditorTab>) => {
-    setTabs((current) => current.map((tab) => (tab.id === id ? { ...tab, ...patch } : tab)));
-  }, []);
-
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
       if (!(event.metaKey || event.ctrlKey) || !event.shiftKey) return;
@@ -350,31 +335,6 @@ export default function App() {
     window.addEventListener("keydown", handler, { capture: true });
     return () => window.removeEventListener("keydown", handler, { capture: true });
   }, [tabs, activeTabId, patchTab]);
-
-  const closeTab = useCallback(
-    (id: string) => {
-      const index = tabs.findIndex((tab) => tab.id === id);
-      if (index === -1) return;
-      const next = tabs.filter((tab) => tab.id !== id);
-      setTabs(next);
-      if (activeTabId === id) {
-        setActiveTabId(next[Math.max(0, index - 1)]?.id ?? next[0]?.id ?? null);
-      }
-    },
-    [tabs, activeTabId],
-  );
-
-  const openSingleton = useCallback(
-    (kind: TabKind, title: string) => {
-      if (kind === "global") {
-        focusTab({ id: "global", kind, title });
-        return;
-      }
-      if (!currentId) return;
-      focusTab({ id: `${kind}:${currentId}`, kind, title });
-    },
-    [currentId, focusTab],
-  );
 
   const openDocument = useCallback(
     async (pageId: string, title: string) => {
@@ -464,7 +424,9 @@ export default function App() {
         setReview(null);
         setTabs((current) => current.filter((tab) => tab.kind !== "review"));
         setActiveTabId((current) =>
-          current && tabs.some((tab) => tab.id === current && tab.kind === "review") ? null : current
+          current && tabsRef.current.some((tab) => tab.id === current && tab.kind === "review")
+            ? null
+            : current
         );
         return;
       }
@@ -497,7 +459,7 @@ export default function App() {
     };
     window.addEventListener(REVIEW_EVENT, handler);
     return () => window.removeEventListener(REVIEW_EVENT, handler);
-  }, [tabs]);
+  }, []);
 
   useEffect(() => {
     const handler = (event: Event) => {
@@ -760,9 +722,12 @@ export default function App() {
   };
 
   const testIntegration = async (payload: IntegrationPayload): Promise<TestResult> =>
-    (await api.testIntegration(payload)).result;
+    (await api.testIntegration(payload, currentId ?? undefined)).result;
 
-  const testLlm = async (payload: LlmProviderPayload): Promise<TestResult> =>
+  const testLlm = async (
+    payload: LlmProviderPayload,
+    providerId?: string,
+  ): Promise<TestResult> =>
     (
       await api.testRaw({
         kind: "llm",
@@ -772,6 +737,7 @@ export default function App() {
           provider: payload.provider,
           model: payload.model ?? "",
           apiKey: payload.apiKey ?? "",
+          ...(providerId ? { providerId } : {}),
         },
       })
     ).result;
@@ -848,9 +814,7 @@ export default function App() {
             tickets={tickets}
             visibleTickets={visibleTickets}
             assigneeFilter={assigneeFilter}
-            boardKey={`${currentId}:${assigneeFilter}:${visibleTickets
-              .map((ticket) => `${ticket.key}.${ticket.status ?? ""}`)
-              .join(",")}`}
+            boardKey={`${currentId}:${assigneeFilter}`}
             onMove={moveTicket}
             onOpenDetail={(ticket) => {
               setDetailTicket(ticket);

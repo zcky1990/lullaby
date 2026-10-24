@@ -13,18 +13,26 @@ async function run(command: string, args: string[]): Promise<string | null> {
   }
 }
 
+function escapeAppleScript(value: string): string {
+  return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+}
+
+function escapePowerShell(value: string): string {
+  return value.replace(/'/g, "''");
+}
+
 export async function pickDirectory(title = "Pilih workspace"): Promise<string | null> {
   switch (Deno.build.os) {
     case "darwin":
       return await run("osascript", [
         "-e",
-        `POSIX path of (choose folder with prompt "${title}")`,
+        `POSIX path of (choose folder with prompt "${escapeAppleScript(title)}")`,
       ]);
     case "windows": {
       const script = [
         "Add-Type -AssemblyName System.Windows.Forms",
         "$d = New-Object System.Windows.Forms.FolderBrowserDialog",
-        `$d.Description = "${title}"`,
+        `$d.Description = '${escapePowerShell(title)}'`,
         "if ($d.ShowDialog() -eq 'OK') { $d.SelectedPath }",
       ].join("; ");
       return await run("powershell", ["-NoProfile", "-Command", script]);

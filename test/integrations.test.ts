@@ -1,7 +1,12 @@
 import { equal, rejects } from "node:assert/strict";
 import { getDocument, listDocuments } from "../src/integrations/docmost.ts";
 import type { DocmostConfig } from "../src/config/schema.ts";
-import { getTicket, listTickets, transitionTicket } from "../src/integrations/jira.ts";
+import {
+  createTicket,
+  getTicket,
+  listTickets,
+  transitionTicket,
+} from "../src/integrations/jira.ts";
 import type { JiraConfig } from "../src/config/schema.ts";
 
 const TOKEN = "Bearer tok";
@@ -119,5 +124,38 @@ Deno.test("jira: listTickets via GET search/jql, detail, transition", async () =
 
   await transitionTicket(cfg, "PROJ-1", "Done");
   await rejects(() => transitionTicket(cfg, "PROJ-1", "Nonexistent"));
+  await server.shutdown();
+});
+
+Deno.test("jira: createTicket posts issue and returns key", async () => {
+  let body = "";
+  const { server, port } = startMock(async (req) => {
+    const auth = req.headers.get("authorization") ?? "";
+    if (!auth.startsWith("Basic ") && auth !== TOKEN) {
+      return json({ error: "unauth" }, 401);
+    }
+    const { pathname } = new URL(req.url);
+    if (pathname.endsWith("/issue") && req.method === "POST") {
+      body = await req.text();
+      return json({ key: "PROJ-9", id: "10009" }, 201);
+    }
+    return new Response("nf", { status: 404 });
+  });
+  const cfg: JiraConfig = {
+    baseUrl: `http://127.0.0.1:${await port}`,
+    deployment: "cloud",
+    cloudId: undefined,
+    projectKey: "PROJ",
+    email: "bot",
+    apiToken: "tk",
+  };
+  const created = await createTicket(cfg, {
+    summary: "New ticket",
+    description: "<p>Hello</p>",
+    type: "Task",
+    priority: "High",
+  });
+  equal(created.key, "PROJ-9");
+  equal(body.includes("New ticket"), true);
   await server.shutdown();
 });

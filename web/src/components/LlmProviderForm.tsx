@@ -18,7 +18,7 @@ import type { LlmProvider, LlmProviderPayload, TestResult } from "@/lib/api";
 interface Props {
   provider?: LlmProvider | null;
   onSave: (payload: LlmProviderPayload) => Promise<void>;
-  onTest: (payload: LlmProviderPayload) => Promise<TestResult>;
+  onTest: (payload: LlmProviderPayload, providerId?: string) => Promise<TestResult>;
   onDelete: () => Promise<void>;
   onCancel?: () => void;
 }
@@ -28,6 +28,7 @@ export function LlmProviderForm({ provider, onSave, onTest, onDelete, onCancel }
   const [config, setConfig] = useState<Record<string, string>>(() => {
     const out: Record<string, string> = {};
     for (const field of PROVIDER_FIELDS) {
+      if (field.secret) continue;
       const raw = provider?.[field.key as keyof LlmProvider];
       if (raw != null) out[field.key] = String(raw);
     }
@@ -63,7 +64,7 @@ export function LlmProviderForm({ provider, onSave, onTest, onDelete, onCancel }
     setBusy(true);
     setResult(null);
     try {
-      setResult(await onTest(payload()));
+      setResult(await onTest(payload(), provider?.id));
     } catch (error) {
       setResult({ ok: false, message: (error as Error).message, latencyMs: 0 });
     } finally {
@@ -91,8 +92,14 @@ export function LlmProviderForm({ provider, onSave, onTest, onDelete, onCancel }
             <Label htmlFor={`llm-${suffix}-${field.key}`}>{field.label}</Label>
             <Input
               id={`llm-${suffix}-${field.key}`}
+              type={field.type === "password" || field.secret ? "password" : "text"}
+              autoComplete="off"
               value={config[field.key] ?? ""}
-              placeholder={field.placeholder}
+              placeholder={
+                field.secret && (provider?.hasApiKey || provider?.apiKey)
+                  ? "Tersimpan — isi untuk mengganti"
+                  : field.placeholder
+              }
               onChange={(e) => setConfig((c) => ({ ...c, [field.key]: e.target.value }))}
             />
           </div>

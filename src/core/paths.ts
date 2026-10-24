@@ -1,6 +1,9 @@
 import { join } from "node:path";
 
 export function appDataDir(): string {
+  const override = Deno.env.get("RND_APP_DATA_DIR")?.trim();
+  if (override) return override;
+
   const home = Deno.env.get("HOME") ?? Deno.env.get("USERPROFILE") ?? Deno.cwd();
   switch (Deno.build.os) {
     case "darwin":

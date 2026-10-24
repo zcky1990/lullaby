@@ -293,7 +293,7 @@ export async function getDiff(cwd: string, path: string, staged: boolean): Promi
   return "";
 }
 
-function checkedPaths(cwd: string, paths: string[]): string[] {
+export function checkedPaths(cwd: string, paths: string[]): string[] {
   return paths.map((path) => {
     if (!resolveWithin(cwd, path)) throw new Error(`Path di luar workspace: ${path}`);
     return path;

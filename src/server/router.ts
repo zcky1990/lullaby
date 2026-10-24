@@ -1,5 +1,4 @@
 import {
-  ChatApproveInput,
   ChatChangeAllInput,
   ChatChangeInput,
   ChatInput,
@@ -12,37 +11,28 @@ import {
   IntegrationInput,
   type IntegrationKind,
   JiraConfig,
-  LlmProviderInput,
   LocalDocumentInput,
   LocalDocumentSyncInput,
   LocalDocumentUpdateInput,
   LocalTicketInput,
   LocalTicketUpdateInput,
-  McpServerInput,
-  McpSettingsInput,
+  parseIntegrationConfig,
   ProjectInput,
   ProjectUpdateInput,
-  RoleInput,
-  SkillsSettingsInput,
+  TicketTransitionInput,
   UpdateDocumentInput,
   UpdateFileInput,
 } from "../config/schema.ts";
-import { appDataDir } from "../core/paths.ts";
 import { log } from "../core/logger.ts";
 import {
-  appendEvent,
-  createLlmProvider,
   createLocalTicket,
   createProject,
-  createRole,
   deleteChatSession,
-  deleteLlmProvider,
   deleteLocalTicket,
-  deleteRole,
-  getAppSetting,
   getChatSession,
   getIntegration,
   getLlmProvider,
+  getLocalDocumentMeta,
   getLocalTicket,
   getProject,
   getRole,
@@ -53,7 +43,6 @@ import {
   listLocalDocumentMeta,
   listLocalTickets,
   listProjects,
-  listRoles,
   type LocalTicketRow,
   markLocalDocumentSynced,
   markLocalDocumentSyncError,
@@ -61,12 +50,8 @@ import {
   markLocalTicketSyncError,
   moveLocalDocumentMeta,
   recentEvents,
-  type RoleRow,
-  setAppSetting,
-  updateLlmProvider,
   updateLocalTicket,
   updateProject,
-  updateRole,
   upsertIntegration,
 } from "../db/db.ts";
 import {
@@ -86,8 +71,6 @@ import {
   stagePaths as gitStage,
   unstagePaths as gitUnstage,
 } from "../integrations/git.ts";
-import { listMcpTools } from "./mcp.ts";
-import { globalSkillsDir, listSkills, readSkillsSettings, workspaceSkillsDir } from "./skills.ts";
 import { listDirectory, readWorkspaceFile, writeWorkspaceFile } from "../fs/workspace.ts";
 import {
   createDocument,
@@ -97,7 +80,6 @@ import {
 } from "../integrations/docmost.ts";
 import { createTicket, getTicket, listTickets, transitionTicket } from "../integrations/jira.ts";
 import {
-  approveChat,
   decideAllChatChanges,
   decideChatChange,
   generateTicketsFromDocument,
@@ -105,52 +87,43 @@ import {
   type VisibleMessage,
 } from "./chat.ts";
 import { testIntegration } from "../integrations/index.ts";
-import { publish } from "./bus.ts";
-import { APP_TOKEN_COOKIE, APP_TOKEN_HEADER, appToken } from "./session.ts";
+import {
+  HttpError,
+  isAuthorized,
+  isMaskedSecret,
+  json,
+  mergeConfigSecrets,
+  readJson,
+  record,
+} from "./http.ts";
+import {
+  createLlmHandler,
+  deleteLlmHandler,
+  listLlmHandler,
+  updateLlmHandler,
+} from "./routes/llm.ts";
+import {
+  createRoleHandler,
+  deleteRoleHandler,
+  listRolesHandler,
+  updateRoleHandler,
+} from "./routes/roles.ts";
+import {
+  getMcpSettingsHandler,
+  listMcpToolsHandler,
+  saveMcpSettingsHandler,
+  saveSkillsSettingsHandler,
+  skillsHandler,
+} from "./routes/settings.ts";
+import { serializeIntegration } from "./serializers.ts";
+import { APP_TOKEN_COOKIE, appToken } from "./session.ts";
 import { sse } from "./sse.ts";
 import { serveAsset } from "./static.ts";
 import { handleTerminal } from "./terminal.ts";
 
+export { SECRET_MASK } from "./http.ts";
+
 const VERSION = "0.1.0";
-const MAX_BODY_BYTES = 26_000_000;
-
-function json(data: unknown, status = 200): Response {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: { "content-type": "application/json; charset=utf-8" },
-  });
-}
-
-function cookieValue(req: Request, name: string): string | null {
-  const header = req.headers.get("cookie");
-  if (!header) return null;
-  for (const part of header.split(";")) {
-    const [key, ...rest] = part.trim().split("=");
-    if (key === name) return rest.join("=");
-  }
-  return null;
-}
-
-function isAuthorized(req: Request): boolean {
-  const expected = appToken();
-  return cookieValue(req, APP_TOKEN_COOKIE) === expected ||
-    req.headers.get(APP_TOKEN_HEADER) === expected;
-}
-
-async function readJson(req: Request): Promise<unknown> {
-  try {
-    const text = await req.text();
-    if (text.length > MAX_BODY_BYTES) return {};
-    return JSON.parse(text);
-  } catch {
-    return {};
-  }
-}
-
-async function record(type: string, payload: unknown): Promise<void> {
-  await appendEvent(type, payload);
-  publish({ type, payload });
-}
 
 async function createProjectHandler(req: Request): Promise<Response> {
   const parsed = ProjectInput.safeParse(await readJson(req));
@@ -233,62 +206,30 @@ async function upsertIntegrationHandler(
     return json({ error: "invalid_input", issues: parsed.error.issues }, 400);
   }
 
+  const existing = await getIntegration(projectId, kind);
+  let existingConfig: Record<string, unknown> = {};
+  if (existing) {
+    try {
+      existingConfig = JSON.parse(existing.config) as Record<string, unknown>;
+    } catch {
+      existingConfig = {};
+    }
+  }
+  const config = mergeConfigSecrets(parsed.data.config, existingConfig);
+  const kindParsed = parseIntegrationConfig(kind, config);
+  if (!kindParsed.success) {
+    return json({ error: "invalid_config", issues: kindParsed.error.issues }, 400);
+  }
+
   const integration = await upsertIntegration({
-    id: crypto.randomUUID(),
+    id: existing?.id ?? crypto.randomUUID(),
     projectId,
     kind,
     mode: parsed.data.mode,
-    config: parsed.data.config,
+    config: kindParsed.data as Record<string, unknown>,
   });
   await record("integration.saved", { projectId, kind });
   return json({ integration: serializeIntegration(integration) });
-}
-
-function serializeIntegration(row: {
-  kind: string;
-  mode: string;
-  config: string;
-  updated_at: string;
-}) {
-  return {
-    kind: row.kind,
-    mode: row.mode,
-    config: JSON.parse(row.config) as Record<string, unknown>,
-    updatedAt: row.updated_at,
-  };
-}
-
-function serializeLlm(row: {
-  id: string;
-  name: string;
-  provider: string;
-  model: string | null;
-  base_url: string | null;
-  api_key: string | null;
-  mode: string;
-  updated_at: string;
-}) {
-  return {
-    id: row.id,
-    name: row.name,
-    provider: row.provider,
-    model: row.model,
-    baseUrl: row.base_url,
-    apiKey: row.api_key,
-    mode: row.mode,
-    updatedAt: row.updated_at,
-  };
-}
-
-function serializeRole(row: RoleRow) {
-  return {
-    id: row.id,
-    name: row.name,
-    description: row.description ?? undefined,
-    persona: row.persona,
-    providerId: row.provider_id ?? undefined,
-    updatedAt: row.updated_at,
-  };
 }
 
 async function getProjectDetail(projectId: string): Promise<Response> {
@@ -296,99 +237,6 @@ async function getProjectDetail(projectId: string): Promise<Response> {
   if (!project) return json({ error: "project_not_found" }, 404);
   const integrations = (await listIntegrations(project.id)).map(serializeIntegration);
   return json({ project, integrations });
-}
-
-async function roleProviderExists(providerId?: string): Promise<boolean> {
-  if (!providerId) return true;
-  return (await getLlmProvider(providerId)) !== null;
-}
-
-async function listRolesHandler(): Promise<Response> {
-  return json({ roles: (await listRoles()).map(serializeRole) });
-}
-
-async function createRoleHandler(req: Request): Promise<Response> {
-  const parsed = RoleInput.safeParse(await readJson(req));
-  if (!parsed.success) {
-    return json({ error: "invalid_input", issues: parsed.error.issues }, 400);
-  }
-  if (!(await roleProviderExists(parsed.data.providerId))) {
-    return json({ error: "provider_not_found" }, 400);
-  }
-  const role = await createRole(parsed.data);
-  await record("role.created", { id: role.id, name: role.name });
-  return json({ role: serializeRole(role) }, 201);
-}
-
-async function updateRoleHandler(roleId: string, req: Request): Promise<Response> {
-  const existing = await getRole(roleId);
-  if (!existing) return json({ error: "role_not_found" }, 404);
-  const parsed = RoleInput.safeParse(await readJson(req));
-  if (!parsed.success) {
-    return json({ error: "invalid_input", issues: parsed.error.issues }, 400);
-  }
-  if (!(await roleProviderExists(parsed.data.providerId))) {
-    return json({ error: "provider_not_found" }, 400);
-  }
-  const role = await updateRole(roleId, parsed.data);
-  await record("role.saved", { id: roleId });
-  return json({ role: serializeRole(role!) });
-}
-
-async function deleteRoleHandler(roleId: string): Promise<Response> {
-  const existing = await getRole(roleId);
-  if (!existing) return json({ error: "role_not_found" }, 404);
-  await deleteRole(roleId);
-  await record("role.deleted", { id: roleId });
-  return json({ ok: true });
-}
-
-async function createLlmHandler(req: Request): Promise<Response> {
-  const parsed = LlmProviderInput.safeParse(await readJson(req));
-  if (!parsed.success) {
-    return json({ error: "invalid_input", issues: parsed.error.issues }, 400);
-  }
-
-  const provider = await createLlmProvider({
-    id: crypto.randomUUID(),
-    name: parsed.data.name,
-    provider: parsed.data.provider,
-    model: parsed.data.model,
-    baseUrl: parsed.data.baseUrl,
-    apiKey: parsed.data.apiKey,
-    mode: parsed.data.mode,
-  });
-  await record("llm.created", { name: provider.name });
-  return json({ provider: serializeLlm(provider) }, 201);
-}
-
-async function updateLlmHandler(providerId: string, req: Request): Promise<Response> {
-  const existing = await getLlmProvider(providerId);
-  if (!existing) return json({ error: "provider_not_found" }, 404);
-
-  const parsed = LlmProviderInput.safeParse(await readJson(req));
-  if (!parsed.success) {
-    return json({ error: "invalid_input", issues: parsed.error.issues }, 400);
-  }
-
-  const provider = await updateLlmProvider(providerId, {
-    name: parsed.data.name,
-    provider: parsed.data.provider,
-    model: parsed.data.model,
-    baseUrl: parsed.data.baseUrl,
-    apiKey: parsed.data.apiKey,
-    mode: parsed.data.mode,
-  });
-  await record("llm.saved", { providerId });
-  return json({ provider: serializeLlm(provider!) });
-}
-
-async function deleteLlmHandler(providerId: string): Promise<Response> {
-  const existing = await getLlmProvider(providerId);
-  if (!existing) return json({ error: "provider_not_found" }, 404);
-  await deleteLlmProvider(providerId);
-  await record("llm.deleted", { providerId });
-  return json({ ok: true });
 }
 
 async function chatHandler(projectId: string, req: Request): Promise<Response> {
@@ -453,21 +301,13 @@ async function chatChangeAllHandler(req: Request): Promise<Response> {
   return json(result);
 }
 
-async function chatApproveHandler(req: Request): Promise<Response> {
-  const parsed = ChatApproveInput.safeParse(await readJson(req));
-  if (!parsed.success) {
-    return json({ error: "invalid_input", issues: parsed.error.issues }, 400);
-  }
-  const result = await approveChat(parsed.data.runId, parsed.data.id, parsed.data.action);
-  return json(result);
-}
-
 function parseChanges(value: string | null): unknown[] {
   if (!value) return [];
   try {
     const parsed = JSON.parse(value);
     return Array.isArray(parsed) ? parsed : [];
-  } catch {
+  } catch (error) {
+    log.debug("corrupt chat changes JSON", { error: String(error) });
     return [];
   }
 }
@@ -559,8 +399,8 @@ async function getLocalDocumentHandler(projectId: string, path: string): Promise
 
   try {
     const doc = await readLocalDocument(root, path);
-    const meta = (await listLocalDocumentMeta(projectId)).find((row) => row.path === doc.path);
-    return json({ document: { ...doc, ...localDocumentPayload(doc, meta) } });
+    const meta = await getLocalDocumentMeta(projectId, doc.path);
+    return json({ document: { ...doc, ...localDocumentPayload(doc, meta ?? undefined) } });
   } catch (error) {
     return json({ error: (error as Error).message }, 404);
   }
@@ -603,8 +443,8 @@ async function updateLocalDocumentHandler(projectId: string, req: Request): Prom
     if (doc.path !== parsed.data.path) {
       await moveLocalDocumentMeta(projectId, parsed.data.path, doc.path);
     }
-    const meta = (await listLocalDocumentMeta(projectId)).find((row) => row.path === doc.path);
-    return json({ document: { ...doc, ...localDocumentPayload(doc, meta) } });
+    const meta = await getLocalDocumentMeta(projectId, doc.path);
+    return json({ document: { ...doc, ...localDocumentPayload(doc, meta ?? undefined) } });
   } catch (error) {
     return json({ error: (error as Error).message }, 400);
   }
@@ -628,97 +468,33 @@ async function syncLocalDocumentHandler(projectId: string, req: Request): Promis
   const spaceId = parsedCfg.data.spaceId?.trim() || project.docmost_space_id?.trim();
   if (!spaceId) return json({ error: "Space ID Docmost belum diisi." }, 400);
 
+  let pageId = "";
   try {
     const doc = await readLocalDocument(root, parsed.data.path);
-    const meta = (await listLocalDocumentMeta(projectId)).find((row) => row.path === doc.path);
-    let pageId = meta?.page_id ?? "";
+    const meta = await getLocalDocumentMeta(projectId, doc.path);
+    pageId = meta?.page_id ?? "";
 
-    if (pageId) {
-      await updateDocument(parsedCfg.data, {
-        pageId,
-        title: doc.title,
-        content: doc.content,
-      });
-    } else {
+    if (!pageId) {
       const created = await createDocument(parsedCfg.data, { spaceId, title: doc.title });
       pageId = created.id;
-      await updateDocument(parsedCfg.data, { pageId, title: doc.title, content: doc.content });
+      await markLocalDocumentSynced(projectId, doc.path, pageId);
     }
+
+    await updateDocument(parsedCfg.data, {
+      pageId,
+      title: doc.title,
+      content: doc.content,
+    });
 
     await markLocalDocumentSynced(projectId, doc.path, pageId);
     await record("document.synced", { projectId, path: doc.path, pageId });
-    const updatedMeta = (await listLocalDocumentMeta(projectId)).find((row) =>
-      row.path === doc.path
-    );
-    return json({ document: { ...doc, ...localDocumentPayload(doc, updatedMeta) } });
+    const updatedMeta = await getLocalDocumentMeta(projectId, doc.path);
+    return json({ document: { ...doc, ...localDocumentPayload(doc, updatedMeta ?? undefined) } });
   } catch (error) {
     const message = (error as Error).message;
+    if (pageId) await markLocalDocumentSynced(projectId, parsed.data.path, pageId);
     await markLocalDocumentSyncError(projectId, parsed.data.path, message);
     return json({ error: message }, 502);
-  }
-}
-
-const MCP_SETTINGS_KEY = "mcp_servers";
-
-function parseStringArray(raw: string | null): string[] {
-  if (!raw) return [];
-  try {
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed.map(String) : [];
-  } catch {
-    return [];
-  }
-}
-
-async function getMcpSettingsHandler(): Promise<Response> {
-  const raw = await getAppSetting(MCP_SETTINGS_KEY);
-  let servers: unknown = [];
-  if (raw) {
-    try {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) servers = parsed;
-    } catch {
-      servers = [];
-    }
-  }
-  const enabled = (await getAppSetting("mcp_enabled")) !== "false";
-  const disabledTools = parseStringArray(await getAppSetting("mcp_disabled_tools"));
-  return json({ servers, enabled, disabledTools });
-}
-
-async function saveMcpSettingsHandler(req: Request): Promise<Response> {
-  const parsed = McpSettingsInput.safeParse(await readJson(req));
-  if (!parsed.success) {
-    return json({ error: "invalid_input", issues: parsed.error.issues }, 400);
-  }
-  const servers = parsed.data.servers.map((server) => ({
-    ...server,
-    id: server.id ?? crypto.randomUUID(),
-  }));
-  await setAppSetting(MCP_SETTINGS_KEY, JSON.stringify(servers));
-  await setAppSetting("mcp_enabled", parsed.data.enabled ? "true" : "false");
-  await setAppSetting("mcp_disabled_tools", JSON.stringify(parsed.data.disabledTools));
-  await record("settings.mcp_updated", {
-    count: servers.length,
-    enabled: parsed.data.enabled,
-  });
-  return json({
-    servers,
-    enabled: parsed.data.enabled,
-    disabledTools: parsed.data.disabledTools,
-  });
-}
-
-async function listMcpToolsHandler(req: Request): Promise<Response> {
-  const body = (await readJson(req)) as { server?: unknown };
-  const parsed = McpServerInput.safeParse(body?.server);
-  if (!parsed.success) {
-    return json({ error: "invalid_input", issues: parsed.error.issues }, 400);
-  }
-  try {
-    return json({ tools: await listMcpTools(parsed.data) });
-  } catch (error) {
-    return json({ error: (error as Error).message }, 502);
   }
 }
 
@@ -835,8 +611,11 @@ async function gitCheckoutHandler(projectId: string, req: Request): Promise<Resp
 async function terminalHandler(projectId: string, req: Request): Promise<Response> {
   const project = await getProject(projectId);
   if (!project) return json({ error: "project_not_found" }, 404);
+  if (!project.workspace_path) {
+    return json({ error: "workspace_required" }, 400);
+  }
   try {
-    return handleTerminal(req, project.workspace_path ?? null);
+    return handleTerminal(req, project.workspace_path);
   } catch (error) {
     return json({ error: (error as Error).message }, 400);
   }
@@ -870,43 +649,37 @@ async function generateTicketsHandler(projectId: string, req: Request): Promise<
   }
 }
 
-async function skillsHandler(projectId: string | null): Promise<Response> {
-  const project = projectId ? await getProject(projectId) : null;
-  const workspace = project?.workspace_path ?? null;
-  const settings = await readSkillsSettings();
-  const skills = await listSkills(workspace);
-  return json({
-    enabled: settings.enabled,
-    disabled: settings.disabled,
-    globalPath: globalSkillsDir(),
-    workspacePath: workspace ? workspaceSkillsDir(workspace) : null,
-    skills: skills.map((skill) => ({
-      ...skill,
-      enabled: !settings.disabled.includes(skill.id),
-    })),
-  });
-}
-
-async function saveSkillsSettingsHandler(req: Request): Promise<Response> {
-  const parsed = SkillsSettingsInput.safeParse(await readJson(req));
-  if (!parsed.success) {
-    return json({ error: "invalid_input", issues: parsed.error.issues }, 400);
-  }
-  await setAppSetting("skills_enabled", parsed.data.enabled ? "true" : "false");
-  await setAppSetting("skills_disabled", JSON.stringify(parsed.data.disabled));
-  await record("settings.skills_updated", {
-    enabled: parsed.data.enabled,
-    disabled: parsed.data.disabled.length,
-  });
-  return json({ ok: true });
-}
-
 async function testIntegrationHandler(req: Request): Promise<Response> {
-  const parsed = IntegrationInput.safeParse(await readJson(req));
+  const body = await readJson(req) as Record<string, unknown>;
+  const parsed = IntegrationInput.safeParse(body);
   if (!parsed.success) {
     return json({ error: "invalid_input", issues: parsed.error.issues }, 400);
   }
-  const result = await testIntegration(parsed.data);
+
+  let config = { ...parsed.data.config };
+  const projectId = typeof body.projectId === "string" ? body.projectId : null;
+  if (projectId && parsed.data.kind !== "llm") {
+    const existing = await getIntegration(projectId, parsed.data.kind as IntegrationKind);
+    if (existing) {
+      let existingConfig: Record<string, unknown> = {};
+      try {
+        existingConfig = JSON.parse(existing.config) as Record<string, unknown>;
+      } catch {
+        existingConfig = {};
+      }
+      config = mergeConfigSecrets(config, existingConfig);
+    }
+  }
+  if (parsed.data.kind === "llm") {
+    const providerId = typeof config.providerId === "string" ? config.providerId : null;
+    delete config.providerId;
+    if (providerId && isMaskedSecret(config.apiKey)) {
+      const existing = await getLlmProvider(providerId);
+      if (existing?.api_key) config.apiKey = existing.api_key;
+    }
+  }
+
+  const result = await testIntegration({ ...parsed.data, config });
   await record("integration.tested", { kind: parsed.data.kind, ok: result.ok });
   return json({ result });
 }
@@ -1215,12 +988,14 @@ async function transitionTicketHandler(
   const parsed = JiraConfig.safeParse(ctx.config);
   if (!parsed.success) return json({ error: "invalid_config" }, 400);
 
-  const body = (await readJson(req)) as { status?: string };
-  if (!body?.status) return json({ error: "status_required" }, 400);
+  const body = TicketTransitionInput.safeParse(await readJson(req));
+  if (!body.success) {
+    return json({ error: "invalid_input", issues: body.error.issues }, 400);
+  }
 
   try {
-    await transitionTicket(parsed.data, key, body.status);
-    await record("ticket.transitioned", { key, status: body.status });
+    await transitionTicket(parsed.data, key, body.data.status);
+    await record("ticket.transitioned", { key, status: body.data.status });
     return json({ ok: true });
   } catch (error) {
     return json({ error: (error as Error).message }, 400);
@@ -1233,6 +1008,14 @@ export async function handleRequest(req: Request): Promise<Response> {
   const method = req.method.toUpperCase();
 
   try {
+    if (pathname === "/api/health" && method === "GET") {
+      return json({ ok: true, name: "rnd-workflow", version: VERSION });
+    }
+
+    if (pathname.startsWith("/api/") && !isAuthorized(req)) {
+      return json({ error: "unauthorized" }, 401);
+    }
+
     if (pathname === "/api/skills" && method === "GET") {
       return await skillsHandler(url.searchParams.get("projectId"));
     }
@@ -1248,14 +1031,6 @@ export async function handleRequest(req: Request): Promise<Response> {
     if (pathname === "/api/settings/mcp") {
       if (method === "GET") return await getMcpSettingsHandler();
       if (method === "PUT" || method === "POST") return await saveMcpSettingsHandler(req);
-    }
-
-    if (pathname === "/api/health" && method === "GET") {
-      return json({ ok: true, name: "rnd-workflow", version: VERSION, dataDir: appDataDir() });
-    }
-
-    if (pathname.startsWith("/api/") && !isAuthorized(req)) {
-      return json({ error: "unauthorized" }, 401);
     }
 
     if (pathname === "/api/events" && method === "GET") return sse(req);
@@ -1424,9 +1199,7 @@ export async function handleRequest(req: Request): Promise<Response> {
     }
 
     if (pathname === "/api/llm") {
-      if (method === "GET") {
-        return json({ providers: (await listLlmProviders()).map(serializeLlm) });
-      }
+      if (method === "GET") return await listLlmHandler();
       if (method === "POST") return await createLlmHandler(req);
     }
 
@@ -1462,10 +1235,6 @@ export async function handleRequest(req: Request): Promise<Response> {
       return await chatChangeAllHandler(req);
     }
 
-    if (pathname === "/api/chat/approve" && method === "POST") {
-      return await chatApproveHandler(req);
-    }
-
     const integration = pathname.match(/^\/api\/projects\/([^/]+)\/integrations\/([a-z]+)$/);
     if (integration && (method === "PUT" || method === "POST")) {
       return await upsertIntegrationHandler(integration[1], integration[2] as IntegrationKind, req);
@@ -1484,9 +1253,10 @@ export async function handleRequest(req: Request): Promise<Response> {
       if (asset) {
         if ((asset.headers.get("content-type") ?? "").startsWith("text/html")) {
           const headers = new Headers(asset.headers);
+          // Desktop serves http://127.0.0.1 — omit Secure. Add "; Secure" if ever TLS.
           headers.append(
             "set-cookie",
-            `${APP_TOKEN_COOKIE}=${appToken()}; Path=/; SameSite=Strict`,
+            `${APP_TOKEN_COOKIE}=${appToken()}; Path=/; SameSite=Strict; HttpOnly`,
           );
           return new Response(asset.body, { status: asset.status, headers });
         }
@@ -1496,6 +1266,7 @@ export async function handleRequest(req: Request): Promise<Response> {
 
     return json({ error: "not_found", path: pathname }, 404);
   } catch (error) {
+    if (error instanceof HttpError) return json(error.body, error.status);
     log.error("request failed", { path: pathname, error: String(error) });
     return json({ error: "internal_error", message: (error as Error).message }, 500);
   }

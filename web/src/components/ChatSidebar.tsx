@@ -30,6 +30,7 @@ import { cn } from "@/lib/utils";
 const MarkdownView = lazy(() => import("@/components/MarkdownView"));
 
 interface Entry {
+  id: string;
   role: "user" | "assistant";
   content: string;
   changes?: FileChange[];
@@ -70,6 +71,8 @@ const MAX_ATTACHMENTS = 6;
 const TEXT_FILE =
   /\.(txt|md|markdown|json|jsonc|ts|tsx|js|jsx|mjs|cjs|css|scss|html|xml|yml|yaml|toml|ini|env|rb|py|go|rs|java|kt|swift|php|sh|bash|zsh|sql|csv|log|diff|patch)$/i;
 
+const SAFE_IMAGE_MIME = new Set(["image/png", "image/jpeg", "image/jpg", "image/gif", "image/webp"]);
+
 function readAsDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -80,9 +83,15 @@ function readAsDataUrl(file: File): Promise<string> {
 }
 
 async function readAttachment(file: File): Promise<AttachmentDraft> {
-  const isImage = file.type.startsWith("image/");
-  const isText = file.type.startsWith("text/") || TEXT_FILE.test(file.name);
-  if (!isImage && !isText) throw new Error(`Tipe file tidak didukung: ${file.name}`);
+  const mime = (file.type || "").toLowerCase();
+  const isImage = SAFE_IMAGE_MIME.has(mime);
+  const isText = mime.startsWith("text/") || TEXT_FILE.test(file.name);
+  if (!isImage && !isText) {
+    if (mime.startsWith("image/")) {
+      throw new Error(`Tipe gambar tidak didukung (pakai PNG/JPEG/GIF/WebP): ${file.name}`);
+    }
+    throw new Error(`Tipe file tidak didukung: ${file.name}`);
+  }
   if (isImage) {
     if (file.size > MAX_IMAGE_BYTES) {
       throw new Error(`Gambar terlalu besar (maks 3 MB): ${file.name}`);
@@ -91,7 +100,7 @@ async function readAttachment(file: File): Promise<AttachmentDraft> {
       id: crypto.randomUUID(),
       name: file.name,
       type: "image",
-      mime: file.type || "image/png",
+      mime,
       data: await readAsDataUrl(file),
     };
   }
@@ -274,6 +283,7 @@ export function ChatSidebar({
       setEntries((current) => [
         ...current,
         {
+          id: crypto.randomUUID(),
           role: "assistant",
           content: response.message,
           changes: response.changes ?? [],
@@ -316,7 +326,7 @@ export function ChatSidebar({
       return;
     }
     if (providers.length === 0) {
-      setError("Belum ada provider LLM (Project Settings → LLM).");
+      setError("Belum ada provider LLM (Global Settings → LLM Providers).");
       return;
     }
     setError(undefined);
@@ -337,7 +347,10 @@ export function ChatSidebar({
     }));
     setInput("");
     setAttachments([]);
-    const next: Entry[] = [...entries, { role: "user", content, attachments: shown }];
+    const next: Entry[] = [
+      ...entries,
+      { id: crypto.randomUUID(), role: "user", content, attachments: shown },
+    ];
     setEntries(next);
     setSending(true);
     try {
@@ -353,21 +366,6 @@ export function ChatSidebar({
           ...(index === next.length - 1 && outgoing.length ? { attachments: outgoing } : {}),
         })),
       });
-      handleResponse(response);
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setSending(false);
-    }
-  };
-
-  const approve = async (action: "once" | "always" | "deny") => {
-    if (!pending) return;
-    const item = pending.items[0];
-    setSending(true);
-    setError(undefined);
-    try {
-      const response = await api.chatApprove({ runId: pending.runId, id: item.id, action });
       handleResponse(response);
     } catch (e) {
       setError((e as Error).message);
@@ -392,6 +390,7 @@ export function ChatSidebar({
       setSessionId(value);
       setEntries(
         detail.messages.map((message) => ({
+          id: crypto.randomUUID(),
           role: message.role,
           content: message.content,
           changes: message.changes,
@@ -501,9 +500,9 @@ export function ChatSidebar({
           )
           : (
             <div className="flex flex-col gap-3">
-              {entries.map((entry, index) => (
+              {entries.map((entry) => (
                 <div
-                  key={index}
+                  key={entry.id}
                   className={cn(
                     "text-md",
                     entry.role === "user"
@@ -581,43 +580,6 @@ export function ChatSidebar({
               >
                 Buka review
               </Button>
-            </div>
-          )
-          : pending
-          ? (
-            <div className="flex flex-col gap-2 rounded-md border bg-card p-3">
-              <p className="text-xs font-medium">Persetujuan diperlukan</p>
-              <p className="text-sm">
-                <span className="font-mono">{pending.items[0].summary}</span>
-              </p>
-              <div className="flex flex-wrap gap-2">
-                <Button size="sm" onClick={() => approve("once")} disabled={sending}>
-                  Allow once
-                </Button>
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  onClick={() => approve("always")}
-                  disabled={sending}
-                >
-                  Always allow
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => approve("deny")}
-                  disabled={sending}
-                >
-                  No
-                </Button>
-              </div>
-              {pending.items.length > 1
-                ? (
-                  <p className="text-xs text-muted-foreground">
-                    {pending.items.length - 1} permintaan lain menunggu.
-                  </p>
-                )
-                : null}
             </div>
           )
           : null}
@@ -726,7 +688,7 @@ export function ChatSidebar({
               ref={fileInputRef}
               type="file"
               multiple
-              accept="image/*,text/*,.md,.markdown,.json,.jsonc,.ts,.tsx,.js,.jsx,.mjs,.cjs,.css,.scss,.html,.xml,.yml,.yaml,.toml,.ini,.env,.rb,.py,.go,.rs,.java,.kt,.swift,.php,.sh,.bash,.zsh,.sql,.csv,.log,.diff,.patch"
+              accept="image/png,image/jpeg,image/gif,image/webp,text/*,.md,.markdown,.json,.jsonc,.ts,.tsx,.js,.jsx,.mjs,.cjs,.css,.scss,.html,.xml,.yml,.yaml,.toml,.ini,.env,.rb,.py,.go,.rs,.java,.kt,.swift,.php,.sh,.bash,.zsh,.sql,.csv,.log,.diff,.patch"
               className="hidden"
               onChange={(event) => {
                 const files = event.target.files;

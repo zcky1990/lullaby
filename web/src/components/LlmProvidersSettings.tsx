@@ -9,7 +9,7 @@ interface Props {
   providers: LlmProvider[];
   addingProvider: boolean;
   onAddProvider: (value: boolean) => void;
-  onTestLlm: (payload: LlmProviderPayload) => Promise<TestResult>;
+  onTestLlm: (payload: LlmProviderPayload, providerId?: string) => Promise<TestResult>;
   onSaveLlm: (id: string | null, payload: LlmProviderPayload) => Promise<void>;
   onDeleteLlm: (id: string) => Promise<void>;
 }

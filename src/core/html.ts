@@ -1,4 +1,6 @@
-const ALLOWED_TAGS = new Set([
+import sanitizeHtmlLib from "sanitize-html";
+
+const ALLOWED_TAGS = [
   "p",
   "div",
   "br",
@@ -22,7 +24,7 @@ const ALLOWED_TAGS = new Set([
   "li",
   "blockquote",
   "a",
-]);
+];
 
 const BLOCK_TAGS = new Set([
   "p",
@@ -70,31 +72,29 @@ function decodeEntities(text: string): string {
   });
 }
 
-function escapeAttr(value: string): string {
-  return value.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
-}
-
 export function sanitizeHtml(input: string): string {
   if (!input) return "";
-  let html = input
-    .replace(/<!--[\s\S]*?-->/g, "")
-    .replace(/<(script|style)[\s\S]*?<\/\1>/gi, "");
-
-  html = html.replace(/<\/?([a-z0-9]+)([^>]*)>/gi, (match, rawTag: string, rawAttrs: string) => {
-    const tag = rawTag.toLowerCase();
-    if (!ALLOWED_TAGS.has(tag)) return "";
-    if (match.startsWith("</")) return `</${tag}>`;
-    if (tag === "a") {
-      const hrefMatch = /href\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i.exec(rawAttrs);
-      const href = (hrefMatch?.[1] ?? hrefMatch?.[2] ?? hrefMatch?.[3] ?? "").trim();
-      if (!/^https?:\/\//i.test(href)) return "<a>";
-      return `<a href="${escapeAttr(href)}" target="_blank" rel="noreferrer">`;
-    }
-    return `<${tag}>`;
+  const clean = sanitizeHtmlLib(input, {
+    allowedTags: ALLOWED_TAGS,
+    allowedAttributes: {
+      a: ["href", "target", "rel"],
+    },
+    allowedSchemes: ["http", "https"],
+    allowProtocolRelative: false,
+    transformTags: {
+      a: (_tagName: string, attribs: Record<string, string>) => {
+        const href = attribs.href ?? "";
+        if (!/^https?:\/\//i.test(href)) {
+          return { tagName: "a", attribs: {} };
+        }
+        return {
+          tagName: "a",
+          attribs: { href, target: "_blank", rel: "noreferrer" },
+        };
+      },
+    },
   });
-
-  html = html.replace(/\son[a-z]+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, "");
-  return html.trim().slice(0, 20_000);
+  return clean.trim().slice(0, 20_000);
 }
 
 interface HtmlNode {

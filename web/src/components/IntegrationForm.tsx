@@ -12,7 +12,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { FieldDef } from "@/lib/integrations";
-import type { Integration, IntegrationPayload, TestResult } from "@/lib/api";
+import { SECRET_MASK, type Integration, type IntegrationPayload, type TestResult } from "@/lib/api";
 
 interface Props {
   kind: string;
@@ -26,8 +26,9 @@ interface Props {
 function initialConfig(fields: FieldDef[], value?: Integration): Record<string, string> {
   const out: Record<string, string> = {};
   for (const field of fields) {
+    if (field.secret) continue;
     const raw = value?.config?.[field.key];
-    if (raw != null) out[field.key] = String(raw);
+    if (raw != null && String(raw) !== SECRET_MASK) out[field.key] = String(raw);
   }
   return out;
 }
@@ -41,7 +42,14 @@ export function IntegrationForm({ kind, fields, value, onSave, onTest, onCancel 
 
   const payload = (): IntegrationPayload => {
     const clean: Record<string, string> = {};
-    for (const [key, val] of Object.entries(config)) if (val) clean[key] = val;
+    for (const field of fields) {
+      const val = config[field.key];
+      if (field.secret) {
+        if (val) clean[field.key] = val;
+        continue;
+      }
+      if (val) clean[field.key] = val;
+    }
     return { kind, mode, config: clean };
   };
 
@@ -97,8 +105,14 @@ export function IntegrationForm({ kind, fields, value, onSave, onTest, onCancel 
             ) : (
               <Input
                 id={`${kind}-${field.key}`}
+                type={field.type === "password" || field.secret ? "password" : "text"}
+                autoComplete="off"
                 value={config[field.key] ?? ""}
-                placeholder={field.placeholder}
+                placeholder={
+                  field.secret && value?.hasSecrets
+                    ? "Tersimpan — isi untuk mengganti"
+                    : field.placeholder
+                }
                 onChange={(e) => setConfig((c) => ({ ...c, [field.key]: e.target.value }))}
               />
             )}

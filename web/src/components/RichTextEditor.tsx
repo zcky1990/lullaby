@@ -12,6 +12,7 @@ import {
   Underline,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { sanitizeHtml } from "@/lib/sanitize-html";
 import { cn } from "@/lib/utils";
 
 interface Props {
@@ -40,15 +41,30 @@ export function RichTextEditor({ value, onChange, placeholder, disabled, classNa
   useEffect(() => {
     const element = ref.current;
     if (!element) return;
-    if (value !== element.innerHTML) element.innerHTML = value;
+    const safe = sanitizeHtml(value);
+    if (safe !== element.innerHTML) element.innerHTML = safe;
   }, [value]);
 
-  const emit = () => onChange(ref.current?.innerHTML ?? "");
+  const emit = () => {
+    const raw = ref.current?.innerHTML ?? "";
+    const clean = sanitizeHtml(raw);
+    if (ref.current && clean !== raw) ref.current.innerHTML = clean;
+    onChange(clean);
+  };
 
   const exec = (command: string, arg?: string) => {
     if (disabled) return;
     ref.current?.focus();
     document.execCommand(command, false, arg);
+    emit();
+  };
+
+  const onPaste = (event: React.ClipboardEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    const html = event.clipboardData.getData("text/html");
+    const text = event.clipboardData.getData("text/plain");
+    const clean = html ? sanitizeHtml(html) : text.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    document.execCommand("insertHTML", false, clean);
     emit();
   };
 
@@ -96,8 +112,10 @@ export function RichTextEditor({ value, onChange, placeholder, disabled, classNa
           contentEditable={!disabled}
           role="textbox"
           aria-multiline="true"
+          aria-label={placeholder ?? "Rich text editor"}
           onInput={emit}
           onBlur={emit}
+          onPaste={onPaste}
           suppressContentEditableWarning
           className={cn(
             "min-h-28 w-full px-3 py-2 text-sm outline-none",

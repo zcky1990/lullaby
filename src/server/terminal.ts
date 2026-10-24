@@ -1,101 +1,199 @@
-const encoder = new TextEncoder();
+import { Pty } from "@sigma/pty-ffi";
 
-function shellArgs(shell: string): string[] {
-  if (Deno.build.os === "darwin") {
-    return ["-q", "/dev/null", shell, "-i"];
-  }
-  return ["-q", "-f", "-c", `${shell} -i`, "/dev/null"];
+const FLUSH_MS = 8;
+const MAX_BATCH_BYTES = 32_768;
+const POLL_IDLE_MS = 8;
+
+function resolveShell(): string {
+  const shell = Deno.env.get("SHELL") || "/bin/sh";
+  if (!/^\/[A-Za-z0-9._/-]+$/.test(shell)) return "/bin/sh";
+  return shell;
 }
 
-export function handleTerminal(req: Request, cwd: string | null): Response {
+function shellArgs(shell: string): string[] {
+  const base = shell.split("/").pop() ?? shell;
+  if (base === "zsh" || base === "bash" || base === "fish") return ["-i"];
+  return [];
+}
+
+export function clampTerminalSize(cols: number, rows: number): { cols: number; rows: number } {
+  const nextCols = Number.isFinite(cols) && cols > 0 ? Math.floor(cols) : 80;
+  const nextRows = Number.isFinite(rows) && rows > 0 ? Math.floor(rows) : 24;
+  return {
+    cols: Math.min(Math.max(nextCols, 2), 500),
+    rows: Math.min(Math.max(nextRows, 1), 200),
+  };
+}
+
+export function parseTerminalSize(url: string): { cols: number; rows: number } {
+  try {
+    const parsed = new URL(url);
+    return clampTerminalSize(
+      Number(parsed.searchParams.get("cols")),
+      Number(parsed.searchParams.get("rows")),
+    );
+  } catch {
+    return { cols: 80, rows: 24 };
+  }
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+export function handleTerminal(req: Request, cwd: string): Response {
   if (req.headers.get("upgrade")?.toLowerCase() !== "websocket") {
     return new Response("WebSocket upgrade required", { status: 400 });
   }
 
   const { socket, response } = Deno.upgradeWebSocket(req);
-  let child: Deno.ChildProcess | null = null;
-  let writer: WritableStreamDefaultWriter<Uint8Array> | null = null;
+  const initialSize = parseTerminalSize(req.url);
+  let pty: Pty | null = null;
   let closed = false;
+  let pending: Uint8Array[] = [];
+  let pendingLen = 0;
+  let flushTimer: ReturnType<typeof setTimeout> | undefined;
 
-  const send = (payload: unknown) => {
+  const sendJson = (payload: unknown) => {
     if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(payload));
+  };
+
+  const flush = () => {
+    if (flushTimer !== undefined) {
+      clearTimeout(flushTimer);
+      flushTimer = undefined;
+    }
+    if (!pendingLen || socket.readyState !== WebSocket.OPEN) {
+      pending = [];
+      pendingLen = 0;
+      return;
+    }
+    const out = new Uint8Array(pendingLen);
+    let offset = 0;
+    for (const chunk of pending) {
+      out.set(chunk, offset);
+      offset += chunk.byteLength;
+    }
+    pending = [];
+    pendingLen = 0;
+    socket.send(out);
+  };
+
+  const enqueue = (chunk: Uint8Array) => {
+    if (!chunk.byteLength || closed) return;
+    pending.push(chunk);
+    pendingLen += chunk.byteLength;
+    if (pendingLen >= MAX_BATCH_BYTES) {
+      flush();
+      return;
+    }
+    if (flushTimer === undefined) {
+      flushTimer = setTimeout(flush, FLUSH_MS);
+    }
   };
 
   const cleanup = () => {
     if (closed) return;
     closed = true;
+    if (flushTimer !== undefined) {
+      clearTimeout(flushTimer);
+      flushTimer = undefined;
+    }
+    pending = [];
+    pendingLen = 0;
     try {
-      writer?.close().catch(() => {});
+      pty?.close();
     } catch {
       // ignore
     }
-    try {
-      child?.kill("SIGTERM");
-    } catch {
-      // already exited
+    pty = null;
+  };
+
+  const pump = async () => {
+    while (!closed && pty) {
+      let got = false;
+      try {
+        for (let i = 0; i < 64; i++) {
+          const { data, done } = pty.readBytes();
+          if (done) {
+            flush();
+            sendJson({ type: "exit", code: pty.exitCode ?? 0 });
+            cleanup();
+            if (socket.readyState === WebSocket.OPEN) socket.close();
+            return;
+          }
+          if (data.byteLength) {
+            enqueue(data);
+            got = true;
+          } else {
+            break;
+          }
+        }
+      } catch (error) {
+        flush();
+        sendJson({ type: "error", message: (error as Error).message });
+        cleanup();
+        if (socket.readyState === WebSocket.OPEN) socket.close();
+        return;
+      }
+      await sleep(got ? 0 : POLL_IDLE_MS);
     }
   };
 
   socket.onopen = () => {
-    const shell = Deno.env.get("SHELL") || "/bin/sh";
-    const directory = cwd || Deno.env.get("HOME") || Deno.cwd();
+    const shell = resolveShell();
     try {
-      child = new Deno.Command("/usr/bin/script", {
+      pty = new Pty(shell, {
         args: shellArgs(shell),
-        cwd: directory,
-        env: { TERM: "xterm-256color", COLORTERM: "truecolor" },
-        stdin: "piped",
-        stdout: "piped",
-        stderr: "piped",
-      }).spawn();
+        cwd,
+        env: {
+          ...Deno.env.toObject(),
+          TERM: "xterm-256color",
+          COLORTERM: "truecolor",
+          SHELL: shell,
+        },
+        size: initialSize,
+      });
     } catch (error) {
-      send({ type: "error", message: (error as Error).message });
+      sendJson({ type: "error", message: (error as Error).message });
       socket.close();
       return;
     }
-
-    writer = child.stdin.getWriter();
-    send({ type: "ready", cwd: directory, shell });
-
-    const pump = async (stream: ReadableStream<Uint8Array>) => {
-      const reader = stream.getReader();
-      const decoder = new TextDecoder();
-      try {
-        while (true) {
-          const { value, done } = await reader.read();
-          if (done) break;
-          if (value) send({ type: "data", data: decoder.decode(value, { stream: true }) });
-        }
-      } catch {
-        // stream closed
-      } finally {
-        reader.releaseLock();
-      }
-    };
-
-    void pump(child.stdout);
-    void pump(child.stderr);
-
-    child.status.then((status) => {
-      send({ type: "exit", code: status.code });
-      cleanup();
-      if (socket.readyState === WebSocket.OPEN) socket.close();
-    }).catch(() => {
-      cleanup();
-    });
+    sendJson({ type: "ready", cwd, shell });
+    void pump();
   };
 
   socket.onmessage = (event) => {
-    if (typeof event.data !== "string") return;
+    if (closed || !pty) return;
+    if (typeof event.data !== "string") {
+      const applyBytes = (bytes: Uint8Array) => {
+        if (!bytes.byteLength || !pty) return;
+        try {
+          pty.write(new TextDecoder().decode(bytes));
+        } catch {
+          // ignore write failures
+        }
+      };
+      if (event.data instanceof ArrayBuffer) {
+        applyBytes(new Uint8Array(event.data));
+      } else if (event.data instanceof Uint8Array) {
+        applyBytes(event.data);
+      } else if (event.data instanceof Blob) {
+        void event.data.arrayBuffer().then((buf) => applyBytes(new Uint8Array(buf)));
+      }
+      return;
+    }
     try {
       const message = JSON.parse(event.data) as {
         type?: string;
         data?: string;
+        cols?: number;
+        rows?: number;
       };
-      if (message.type === "input" && typeof message.data === "string" && writer) {
-        writer.write(encoder.encode(message.data)).catch(() => {});
+      if (message.type === "input" && typeof message.data === "string") {
+        pty.write(message.data);
       } else if (message.type === "resize") {
-        // PTY resize is not supported through the script wrapper.
+        pty.resize(clampTerminalSize(Number(message.cols), Number(message.rows)));
       }
     } catch {
       // ignore malformed messages

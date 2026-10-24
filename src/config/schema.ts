@@ -145,13 +145,6 @@ export const ChatChangeAllInput = z.object({
 });
 export type ChatChangeAllInput = z.infer<typeof ChatChangeAllInput>;
 
-export const ChatApproveInput = z.object({
-  runId: z.string().trim().min(1),
-  id: z.string().trim().min(1),
-  action: z.enum(["once", "always", "deny"]),
-});
-export type ChatApproveInput = z.infer<typeof ChatApproveInput>;
-
 export const McpTransport = z.enum(["stdio", "http"]);
 export type McpTransport = z.infer<typeof McpTransport>;
 
@@ -242,6 +235,11 @@ export const UpdateDocumentInput = z.object({
 });
 export type UpdateDocumentInput = z.infer<typeof UpdateDocumentInput>;
 
+export const TicketTransitionInput = z.object({
+  status: z.string().trim().min(1).max(80),
+});
+export type TicketTransitionInput = z.infer<typeof TicketTransitionInput>;
+
 export const DocmostConfig = z.object({
   baseUrl: httpUrl,
   apiToken: z.string().trim().optional(),
@@ -268,3 +266,16 @@ export const GithubConfig = z.object({
 export type DocmostConfig = z.infer<typeof DocmostConfig>;
 export type JiraConfig = z.infer<typeof JiraConfig>;
 export type GithubConfig = z.infer<typeof GithubConfig>;
+
+export function parseIntegrationConfig(kind: IntegrationKind, config: Record<string, unknown>) {
+  switch (kind) {
+    case "docmost":
+      return DocmostConfig.safeParse(config);
+    case "jira":
+      return JiraConfig.safeParse(config);
+    case "github":
+      return GithubConfig.safeParse(config);
+    case "llm":
+      return { success: true as const, data: config };
+  }
+}

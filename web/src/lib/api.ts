@@ -1,3 +1,7 @@
+import { ApiError } from "@/lib/api-error";
+
+export { ApiError };
+
 export interface Project {
   id: string;
   name: string;
@@ -15,6 +19,7 @@ export interface Integration {
   mode: string;
   config: Record<string, unknown>;
   updatedAt: string;
+  hasSecrets?: boolean;
 }
 
 export interface LlmProvider {
@@ -24,9 +29,12 @@ export interface LlmProvider {
   model: string | null;
   baseUrl: string | null;
   apiKey: string | null;
+  hasApiKey?: boolean;
   mode: string;
   updatedAt: string;
 }
+
+export const SECRET_MASK = "••••••••";
 
 export interface ProjectDetail {
   project: Project;
@@ -338,25 +346,47 @@ export interface LlmProviderPayload {
   mode: string;
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(path, init);
-  let data: unknown = null;
+export type RequestOptions = RequestInit & {
+  timeoutMs?: number;
+};
+
+async function request<T>(path: string, init?: RequestOptions): Promise<T> {
+  const timeoutMs = init?.timeoutMs ?? 60_000;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const onAbort = () => controller.abort();
+  init?.signal?.addEventListener("abort", onAbort);
   try {
-    data = await res.json();
-  } catch {
-    data = null;
+    const { timeoutMs: _timeout, signal: _signal, ...rest } = init ?? {};
+    const res = await fetch(path, { ...rest, signal: controller.signal });
+    let data: unknown = null;
+    try {
+      data = await res.json();
+    } catch {
+      data = null;
+    }
+    if (!res.ok) {
+      const error = (data as { error?: string } | null)?.error ?? `HTTP ${res.status}`;
+      throw new ApiError(res.status, error, data);
+    }
+    return data as T;
+  } catch (error) {
+    if (error instanceof ApiError) throw error;
+    if ((error as Error).name === "AbortError") {
+      throw new ApiError(408, "Request timeout");
+    }
+    throw error;
+  } finally {
+    clearTimeout(timer);
+    init?.signal?.removeEventListener("abort", onAbort);
   }
-  if (!res.ok) {
-    const error = (data as { error?: string } | null)?.error ?? `HTTP ${res.status}`;
-    throw new Error(error);
-  }
-  return data as T;
 }
 
-const jsonInit = (method: string, body: unknown): RequestInit => ({
+const jsonInit = (method: string, body: unknown, options?: { timeoutMs?: number }): RequestOptions => ({
   method,
   headers: { "content-type": "application/json" },
   body: JSON.stringify(body),
+  ...(options?.timeoutMs ? { timeoutMs: options.timeoutMs } : {}),
 });
 
 export const api = {
@@ -474,8 +504,11 @@ export const api = {
       `/api/projects/${projectId}/integrations/${payload.kind}`,
       jsonInit("PUT", payload),
     ),
-  testIntegration: (payload: IntegrationPayload) =>
-    request<{ result: TestResult }>("/api/integrations/test", jsonInit("POST", payload)),
+  testIntegration: (payload: IntegrationPayload, projectId?: string) =>
+    request<{ result: TestResult }>(
+      "/api/integrations/test",
+      jsonInit("POST", projectId ? { ...payload, projectId } : payload),
+    ),
   listRoles: () => request<{ roles: Role[] }>("/api/roles"),
   createRole: (payload: { name: string; description?: string; persona: string; providerId?: string }) =>
     request<{ role: Role }>("/api/roles", jsonInit("POST", payload)),
@@ -501,13 +534,18 @@ export const api = {
       mode?: ChatMode;
       messages: { role: string; content: string; attachments?: ChatAttachment[] }[];
     },
-  ) => request<ChatResponse>(`/api/projects/${projectId}/chat`, jsonInit("POST", payload)),
-  chatApprove: (payload: { runId: string; id: string; action: "once" | "always" | "deny" }) =>
-    request<ChatResponse>("/api/chat/approve", jsonInit("POST", payload)),
+  ) =>
+    request<ChatResponse>(
+      `/api/projects/${projectId}/chat`,
+      jsonInit("POST", payload, { timeoutMs: 180_000 }),
+    ),
   chatChange: (payload: { runId: string; callId: string; hunk: number; accept: boolean }) =>
-    request<ChatResponse>("/api/chat/change", jsonInit("POST", payload)),
+    request<ChatResponse>("/api/chat/change", jsonInit("POST", payload, { timeoutMs: 180_000 })),
   chatChangeAll: (payload: { runId: string; accept: boolean }) =>
-    request<ChatResponse>("/api/chat/change-all", jsonInit("POST", payload)),
+    request<ChatResponse>(
+      "/api/chat/change-all",
+      jsonInit("POST", payload, { timeoutMs: 180_000 }),
+    ),
   listChatSessions: (projectId: string) =>
     request<{ sessions: ChatSession[] }>(`/api/projects/${projectId}/chat/sessions`),
   getChatSession: (projectId: string, sessionId: string) =>

@@ -79,6 +79,7 @@ export function FileTreePanel({ projectId, selectedPath, onOpenFile }: Props) {
       return (
         <div key={entry.path}>
           <button
+            type="button"
             onClick={() => (isDir ? toggle(entry) : onOpenFile(entry.path))}
             draggable={!isDir}
             onDragStart={(event) => {
@@ -93,6 +94,8 @@ export function FileTreePanel({ projectId, selectedPath, onOpenFile }: Props) {
               entry.path === selectedPath && "bg-accent",
             )}
             title={entry.name}
+            aria-expanded={isDir ? isOpen : undefined}
+            aria-level={depth + 1}
           >
             {isDir ? (
               <ChevronRight

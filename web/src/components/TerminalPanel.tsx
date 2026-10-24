@@ -207,22 +207,28 @@ export function TerminalPanel({ projectId, open, onClose }: Props) {
             Klik + untuk membuat terminal baru.
           </div>
         ) : (
-          instances.map((instance) => (
-            <div
-              key={instance.id}
-              className={cn("h-full w-full", instance.id !== activeId && "hidden")}
-            >
-              <TerminalSession
-                projectId={projectId}
-                active={open && instance.id === activeId}
-                onStatus={(status, detail) =>
-                  setStatuses((current) => ({
-                    ...current,
-                    [instance.id]: { status, detail },
-                  }))}
-              />
-            </div>
-          ))
+          <div className="relative h-full w-full">
+            {instances.map((instance) => (
+              <div
+                key={instance.id}
+                className={cn(
+                  "absolute inset-0 h-full w-full",
+                  instance.id !== activeId && "invisible pointer-events-none",
+                )}
+                aria-hidden={instance.id !== activeId}
+              >
+                <TerminalSession
+                  projectId={projectId}
+                  active={open && instance.id === activeId}
+                  onStatus={(status, detail) =>
+                    setStatuses((current) => ({
+                      ...current,
+                      [instance.id]: { status, detail },
+                    }))}
+                />
+              </div>
+            ))}
+          </div>
         )}
       </div>
     </div>

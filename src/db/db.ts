@@ -99,7 +99,7 @@ CREATE TABLE IF NOT EXISTS roles (
   name        TEXT NOT NULL,
   description TEXT,
   persona     TEXT NOT NULL DEFAULT '',
-  provider_id TEXT,
+  provider_id TEXT REFERENCES llm_providers(id) ON DELETE SET NULL,
   created_at  TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -156,10 +156,30 @@ CREATE TABLE IF NOT EXISTS local_tickets (
 );
 `;
 
+const ENSURE_COLUMN_TABLES = new Set(["projects", "llm_providers", "chat_messages"]);
+
 function ensureColumn(db: DatabaseSync, table: string, column: string, ddl: string): void {
+  if (!ENSURE_COLUMN_TABLES.has(table) || !/^[a-z_][a-z0-9_]*$/i.test(column)) {
+    throw new Error(`ensureColumn: invalid table/column (${table}.${column})`);
+  }
   const info = db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>;
   if (!info.some((row) => row.name === column)) {
     db.exec(`ALTER TABLE ${table} ADD COLUMN ${ddl}`);
+  }
+}
+
+function withTransaction(db: DatabaseSync, fn: () => void): void {
+  db.exec("BEGIN");
+  try {
+    fn();
+    db.exec("COMMIT");
+  } catch (error) {
+    try {
+      db.exec("ROLLBACK");
+    } catch {
+      // ignore rollback errors
+    }
+    throw error;
   }
 }
 
@@ -168,6 +188,22 @@ function migrate(db: DatabaseSync): void {
   ensureColumn(db, "projects", "document_path", "document_path TEXT");
   ensureColumn(db, "llm_providers", "api_key", "api_key TEXT");
   ensureColumn(db, "chat_messages", "changes", "changes TEXT");
+
+  try {
+    db.exec(`
+      CREATE INDEX IF NOT EXISTS idx_chat_sessions_project ON chat_sessions(project_id);
+      CREATE INDEX IF NOT EXISTS idx_chat_messages_session ON chat_messages(session_id);
+      CREATE INDEX IF NOT EXISTS idx_local_tickets_project ON local_tickets(project_id);
+      CREATE INDEX IF NOT EXISTS idx_events_created_at ON events(created_at);
+      CREATE INDEX IF NOT EXISTS idx_roles_provider ON roles(provider_id);
+    `);
+    db.prepare(
+      "UPDATE roles SET provider_id = NULL WHERE provider_id IS NOT NULL " +
+        "AND provider_id NOT IN (SELECT id FROM llm_providers)",
+    ).run();
+  } catch {
+    // DB may be locked/readonly when another process holds it (e.g. desktop + tests).
+  }
 
   const llmInfo = db.prepare("PRAGMA table_info(llm_providers)").all() as Array<{ name: string }>;
   if (llmInfo.some((row) => row.name === "project_id")) {
@@ -459,7 +495,10 @@ export async function updateLlmProvider(
 
 export async function deleteLlmProvider(id: string): Promise<void> {
   const db = await getDb();
-  db.prepare("DELETE FROM llm_providers WHERE id = ?").run(id);
+  withTransaction(db, () => {
+    db.prepare("UPDATE roles SET provider_id = NULL WHERE provider_id = ?").run(id);
+    db.prepare("DELETE FROM llm_providers WHERE id = ?").run(id);
+  });
 }
 
 export interface ChatSessionRow {
@@ -532,22 +571,26 @@ export async function appendChatMessage(
   changes: ChatChange[] = [],
 ): Promise<void> {
   const db = await getDb();
-  db.prepare(
-    "INSERT INTO chat_messages (id, session_id, role, content, changes) VALUES (?, ?, ?, ?, ?)",
-  ).run(
-    crypto.randomUUID(),
-    sessionId,
-    role,
-    content,
-    changes.length ? JSON.stringify(changes) : null,
-  );
-  db.prepare("UPDATE chat_sessions SET updated_at = datetime('now') WHERE id = ?").run(sessionId);
+  withTransaction(db, () => {
+    db.prepare(
+      "INSERT INTO chat_messages (id, session_id, role, content, changes) VALUES (?, ?, ?, ?, ?)",
+    ).run(
+      crypto.randomUUID(),
+      sessionId,
+      role,
+      content,
+      changes.length ? JSON.stringify(changes) : null,
+    );
+    db.prepare("UPDATE chat_sessions SET updated_at = datetime('now') WHERE id = ?").run(sessionId);
+  });
 }
 
 export async function deleteChatSession(id: string): Promise<void> {
   const db = await getDb();
-  db.prepare("DELETE FROM chat_messages WHERE session_id = ?").run(id);
-  db.prepare("DELETE FROM chat_sessions WHERE id = ?").run(id);
+  withTransaction(db, () => {
+    db.prepare("DELETE FROM chat_messages WHERE session_id = ?").run(id);
+    db.prepare("DELETE FROM chat_sessions WHERE id = ?").run(id);
+  });
 }
 
 export interface LocalTicketRow {
@@ -687,6 +730,17 @@ export async function listLocalDocumentMeta(projectId: string): Promise<LocalDoc
   );
 }
 
+export async function getLocalDocumentMeta(
+  projectId: string,
+  path: string,
+): Promise<LocalDocumentMetaRow | null> {
+  const db = await getDb();
+  const row = db
+    .prepare("SELECT * FROM local_documents WHERE project_id = ? AND path = ?")
+    .get(projectId, path);
+  return (row as LocalDocumentMetaRow | undefined) ?? null;
+}
+
 export async function markLocalDocumentSynced(
   projectId: string,
   path: string,
@@ -723,22 +777,27 @@ export async function moveLocalDocumentMeta(
 ): Promise<void> {
   if (from === to) return;
   const db = await getDb();
-  const existing = db
-    .prepare("SELECT * FROM local_documents WHERE project_id = ? AND path = ?")
-    .get(projectId, from) as LocalDocumentMetaRow | undefined;
-  db.prepare("DELETE FROM local_documents WHERE project_id = ? AND path = ?").run(projectId, from);
-  if (!existing) return;
-  db.prepare(
-    "INSERT INTO local_documents (project_id, path, page_id, sync_status, sync_error, synced_at, updated_at) " +
-      "VALUES (?, ?, ?, ?, ?, ?, datetime('now'))",
-  ).run(
-    projectId,
-    to,
-    existing.page_id,
-    existing.sync_status,
-    existing.sync_error,
-    existing.synced_at,
-  );
+  withTransaction(db, () => {
+    const existing = db
+      .prepare("SELECT * FROM local_documents WHERE project_id = ? AND path = ?")
+      .get(projectId, from) as LocalDocumentMetaRow | undefined;
+    db.prepare("DELETE FROM local_documents WHERE project_id = ? AND path = ?").run(
+      projectId,
+      from,
+    );
+    if (!existing) return;
+    db.prepare(
+      "INSERT INTO local_documents (project_id, path, page_id, sync_status, sync_error, synced_at, updated_at) " +
+        "VALUES (?, ?, ?, ?, ?, ?, datetime('now'))",
+    ).run(
+      projectId,
+      to,
+      existing.page_id,
+      existing.sync_status,
+      existing.sync_error,
+      existing.synced_at,
+    );
+  });
 }
 
 export async function deleteLocalDocumentMeta(projectId: string, path: string): Promise<void> {

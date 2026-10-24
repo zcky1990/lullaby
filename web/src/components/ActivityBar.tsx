@@ -71,6 +71,9 @@ export function ActivityBar({
             size="icon"
             title={item.label}
             aria-label={item.label}
+            aria-current={
+              (item.id === "terminal" ? terminalOpen : active === item.id) ? "page" : undefined
+            }
             onClick={() => onChange(item.id)}
             className={cn(
               "relative size-12 shrink-0 rounded-none text-muted-foreground hover:bg-accent/60 hover:text-foreground [&_svg]:size-6",

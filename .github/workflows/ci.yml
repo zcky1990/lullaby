@@ -28,4 +28,6 @@ jobs:
       - name: Format check
         run: deno fmt --check
       - name: Test
-        run: deno test -A
+        run: deno test -A --coverage=coverage test/
+      - name: Coverage summary
+        run: deno coverage coverage

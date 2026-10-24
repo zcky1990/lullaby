@@ -57,11 +57,12 @@ finishing a change.
   (Changes/History) in the tab; routes live under `/api/projects/:id/git/*`. Expects a git
   repository; returns a clear error otherwise.
 - **Terminal**: `src/server/terminal.ts` upgrades `/api/projects/:id/terminal` to a WebSocket and
-  runs an interactive shell in the project workspace via `script` (PTY). The Terminal activity item
-  toggles a VS Code-like **bottom panel** (`TerminalPanel`) with multiple `TerminalSession`
-  instances (xterm.js + fit addon, termcn-inspired styling); sessions stay mounted while the panel
-  is hidden, and the panel height persists. WebSocket auth uses the same session cookie as the HTTP
-  API.
+  runs an interactive shell in the project workspace via a real PTY (`@sigma/pty-ffi`) with resize
+  support. Output is batched binary WebSocket frames; control messages stay JSON. Needs
+  `--allow-ffi`. The Terminal activity item toggles a VS Code-like **bottom panel**
+  (`TerminalPanel`) with multiple `TerminalSession` instances (xterm.js + fit addon); sessions stay
+  mounted while the panel is hidden, and the panel height persists. WebSocket auth uses the same
+  session cookie as the HTTP API.
 - **Roles**: global `roles` table (`name`, `description`, `persona`, `provider_id`), CRUD via
   `/api/roles`. Chat sends `roleId`; `chatHandler` uses the role's provider (falling back to the
   request/first provider) and prepends the persona to the system prompt. UI: Global Settings → Roles

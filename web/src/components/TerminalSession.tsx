@@ -60,20 +60,39 @@ interface Props {
   onStatus?: (status: TerminalStatus, detail?: string) => void;
 }
 
+function canFit(host: HTMLElement | null): boolean {
+  if (!host?.isConnected) return false;
+  return host.clientWidth >= 16 && host.clientHeight >= 16;
+}
+
+function safeFit(fit: FitAddon | null, host: HTMLElement | null): boolean {
+  if (!fit || !canFit(host)) return false;
+  try {
+    fit.fit();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function TerminalSession({ projectId, active, onStatus }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const fitRef = useRef<FitAddon | null>(null);
   const searchRef = useRef<SearchAddon | null>(null);
   const termRef = useRef<Terminal | null>(null);
+  const socketRef = useRef<WebSocket | null>(null);
+  const activeRef = useRef(active);
   const inputRef = useRef<HTMLInputElement>(null);
   const [findOpen, setFindOpen] = useState(false);
   const [query, setQuery] = useState("");
   const statusRef = useRef(onStatus);
   statusRef.current = onStatus;
+  activeRef.current = active;
   const { resolved, editorFont, editorFontSize } = useTheme();
 
   useEffect(() => {
     if (!hostRef.current) return;
+    const host = hostRef.current;
     const term = new Terminal({
       cursorBlink: true,
       fontFamily: EDITOR_FONT_STACKS[editorFont],
@@ -86,37 +105,62 @@ export function TerminalSession({ projectId, active, onStatus }: Props) {
     term.loadAddon(fit);
     term.loadAddon(search);
     searchRef.current = search;
-    term.open(hostRef.current);
-    fit.fit();
+    term.open(host);
+    safeFit(fit, host);
     termRef.current = term;
     fitRef.current = fit;
     statusRef.current?.("connecting");
 
+    const encoder = new TextEncoder();
+    const cols = Math.max(term.cols, 2);
+    const rows = Math.max(term.rows, 1);
     const protocol = location.protocol === "https:" ? "wss" : "ws";
     const socket = new WebSocket(
-      `${protocol}://${location.host}/api/projects/${projectId}/terminal`,
+      `${protocol}://${location.host}/api/projects/${projectId}/terminal?cols=${cols}&rows=${rows}`,
     );
+    socket.binaryType = "arraybuffer";
+    socketRef.current = socket;
 
-    const send = (payload: unknown) => {
+    const sendJson = (payload: unknown) => {
       if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(payload));
     };
 
+    const sendInput = (data: string) => {
+      if (socket.readyState !== WebSocket.OPEN || !data) return;
+      socket.send(encoder.encode(data));
+    };
+
+    const resizeIfVisible = () => {
+      if (!activeRef.current) return;
+      if (!safeFit(fit, host)) return;
+      if (term.cols > 1 && term.rows > 1) {
+        sendJson({ type: "resize", cols: term.cols, rows: term.rows });
+      }
+    };
+
     socket.onopen = () => {
-      send({ type: "resize", cols: term.cols, rows: term.rows });
+      if (term.cols > 1 && term.rows > 1) {
+        sendJson({ type: "resize", cols: term.cols, rows: term.rows });
+      }
     };
     socket.onmessage = (event) => {
-      if (typeof event.data !== "string") return;
+      if (typeof event.data !== "string") {
+        const bytes = event.data instanceof ArrayBuffer
+          ? new Uint8Array(event.data)
+          : event.data instanceof Uint8Array
+          ? event.data
+          : null;
+        if (bytes?.byteLength) term.write(bytes);
+        return;
+      }
       try {
         const message = JSON.parse(event.data) as {
           type?: string;
-          data?: string;
           cwd?: string;
           message?: string;
           code?: number;
         };
-        if (message.type === "data" && typeof message.data === "string") {
-          term.write(message.data);
-        } else if (message.type === "ready") {
+        if (message.type === "ready") {
           statusRef.current?.("ready", message.cwd);
         } else if (message.type === "exit") {
           statusRef.current?.("closed");
@@ -131,18 +175,16 @@ export function TerminalSession({ projectId, active, onStatus }: Props) {
     socket.onerror = () => statusRef.current?.("error");
     socket.onclose = () => statusRef.current?.("closed");
 
-    const input = term.onData((data) => send({ type: "input", data }));
+    const input = term.onData((data) => sendInput(data));
 
-    const observer = new ResizeObserver(() => {
-      fit.fit();
-      send({ type: "resize", cols: term.cols, rows: term.rows });
-    });
-    observer.observe(hostRef.current);
+    const observer = new ResizeObserver(() => resizeIfVisible());
+    observer.observe(host);
 
     return () => {
       observer.disconnect();
       input.dispose();
       socket.close();
+      socketRef.current = null;
       term.dispose();
       termRef.current = null;
       fitRef.current = null;
@@ -156,12 +198,33 @@ export function TerminalSession({ projectId, active, onStatus }: Props) {
     term.options.theme = resolved === "dark" ? DARK_THEME : LIGHT_THEME;
     term.options.fontFamily = EDITOR_FONT_STACKS[editorFont];
     term.options.fontSize = editorFontSize;
-  }, [resolved, editorFont, editorFontSize]);
+    if (active) safeFit(fitRef.current, hostRef.current);
+  }, [resolved, editorFont, editorFontSize, active]);
 
   useEffect(() => {
     if (!active) return;
-    const frame = requestAnimationFrame(() => fitRef.current?.fit());
-    return () => cancelAnimationFrame(frame);
+    let cancelled = false;
+    let attempts = 0;
+    const tryFit = () => {
+      if (cancelled) return;
+      if (safeFit(fitRef.current, hostRef.current)) {
+        const term = termRef.current;
+        const socket = socketRef.current;
+        if (term && term.cols > 1 && term.rows > 1) {
+          term.refresh(0, term.rows - 1);
+          if (socket?.readyState === WebSocket.OPEN) {
+            socket.send(JSON.stringify({ type: "resize", cols: term.cols, rows: term.rows }));
+          }
+        }
+        return;
+      }
+      if (attempts++ < 12) requestAnimationFrame(tryFit);
+    };
+    const frame = requestAnimationFrame(tryFit);
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(frame);
+    };
   }, [active]);
 
   const find = (backwards: boolean) => {

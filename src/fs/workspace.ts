@@ -25,10 +25,28 @@ export interface FileReadResult {
 
 export function resolveWithin(root: string, rel: string): string | null {
   const rootAbs = resolve(root);
+  let realRoot: string;
+  try {
+    realRoot = Deno.realPathSync(rootAbs);
+  } catch {
+    return null;
+  }
+
   const target = resolve(rootAbs, rel && rel.length > 0 ? rel : ".");
-  if (target === rootAbs) return target;
-  if (!target.startsWith(rootAbs + sep)) return null;
-  return target;
+  if (target !== rootAbs && !target.startsWith(rootAbs + sep)) return null;
+
+  let probe = target;
+  while (true) {
+    try {
+      const realProbe = Deno.realPathSync(probe);
+      if (realProbe === realRoot || realProbe.startsWith(realRoot + sep)) return target;
+      return null;
+    } catch {
+      const parent = dirname(probe);
+      if (parent === probe) return null;
+      probe = parent;
+    }
+  }
 }
 
 function joinChild(dir: string, name: string): string {

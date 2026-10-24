@@ -1,4 +1,5 @@
-import { equal, rejects, throws } from "node:assert/strict";
+import { deepEqual, equal, rejects, throws } from "node:assert/strict";
+import { join, resolve } from "node:path";
 import {
   ChatInput,
   GenerateTicketsInput,
@@ -9,6 +10,7 @@ import {
   McpSettingsInput,
   ProjectInput,
   RoleInput,
+  TicketTransitionInput,
   UpdateFileInput,
 } from "../src/config/schema.ts";
 import { htmlToAdf, htmlToPlainText, sanitizeHtml } from "../src/core/html.ts";
@@ -19,7 +21,16 @@ import {
   slugifyDocumentTitle,
   updateLocalDocument,
 } from "../src/fs/documents.ts";
+import { resolveWithin } from "../src/fs/workspace.ts";
+import { checkedPaths, normalizeWorkspacePath } from "../src/integrations/git.ts";
+import {
+  decideAllChatChanges,
+  decideChatChange,
+  seedPendingWriteForTest,
+} from "../src/server/chat.ts";
 import { applyHunks, diffHunks, diffLines } from "../src/server/diff.ts";
+import { handleRequest } from "../src/server/router.ts";
+import { APP_TOKEN_HEADER, appToken } from "../src/server/session.ts";
 import { parseSkillFile } from "../src/server/skills.ts";
 
 Deno.test("ProjectInput trims and drops empty optional fields", () => {
@@ -325,4 +336,130 @@ Deno.test("RoleInput validates persona and provider id", () => {
     providerId: "prov-1",
   });
   equal(withProvider.providerId, "prov-1");
+});
+
+Deno.test("TicketTransitionInput validates status", () => {
+  equal(TicketTransitionInput.parse({ status: " Done " }).status, "Done");
+  throws(() => TicketTransitionInput.parse({ status: "" }));
+  throws(() => TicketTransitionInput.parse({}));
+});
+
+Deno.test("resolveWithin rejects path traversal", async () => {
+  const root = await Deno.makeTempDir();
+  try {
+    equal(resolveWithin(root, "src/app.ts"), resolve(root, "src/app.ts"));
+    equal(resolveWithin(root, "../escape"), null);
+    equal(resolveWithin(root, "foo/../../escape"), null);
+    equal(resolveWithin(root, "."), resolve(root));
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("resolveWithin rejects symlink escape", async () => {
+  const root = await Deno.makeTempDir();
+  const outside = await Deno.makeTempDir();
+  try {
+    await Deno.writeTextFile(join(outside, "secret.txt"), "nope");
+    await Deno.symlink(outside, join(root, "link"));
+    equal(resolveWithin(root, "link/secret.txt"), null);
+    equal(resolveWithin(root, "link"), null);
+  } finally {
+    await Deno.remove(root, { recursive: true });
+    await Deno.remove(outside, { recursive: true });
+  }
+});
+
+Deno.test("API requires auth except health", async () => {
+  const health = await handleRequest(new Request("http://127.0.0.1/api/health"));
+  equal(health.status, 200);
+  const body = await health.json() as { ok?: boolean; dataDir?: string };
+  equal(body.ok, true);
+  equal(body.dataDir, undefined);
+
+  const projects = await handleRequest(new Request("http://127.0.0.1/api/projects"));
+  equal(projects.status, 401);
+
+  const mcp = await handleRequest(
+    new Request("http://127.0.0.1/api/settings/mcp/tools", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "{}",
+    }),
+  );
+  equal(mcp.status, 401);
+
+  const skills = await handleRequest(new Request("http://127.0.0.1/api/skills"));
+  equal(skills.status, 401);
+
+  const withToken = await handleRequest(
+    new Request("http://127.0.0.1/api/settings/mcp", {
+      headers: { [APP_TOKEN_HEADER]: appToken() },
+    }),
+  );
+  equal(withToken.status === 401, false);
+});
+
+Deno.test("decideChatChange accepts and rejects hunks against workspace", async () => {
+  const root = await Deno.makeTempDir();
+  try {
+    const seeded = await seedPendingWriteForTest({
+      workspace: root,
+      path: "note.txt",
+      before: "alpha\nbeta\n",
+      after: "alpha\ngamma\n",
+    });
+    equal(seeded.hunkCount >= 1, true);
+
+    const rejected = await decideAllChatChanges(seeded.runId, false);
+    if (rejected.status === "error") throw new Error(rejected.error);
+    equal(await Deno.readTextFile(join(root, "note.txt")), "alpha\nbeta\n");
+
+    const seeded2 = await seedPendingWriteForTest({
+      workspace: root,
+      path: "note.txt",
+      before: "alpha\nbeta\n",
+      after: "alpha\ngamma\n",
+    });
+    const accepted = await decideAllChatChanges(seeded2.runId, true);
+    if (accepted.status === "error") throw new Error(accepted.error);
+    equal(await Deno.readTextFile(join(root, "note.txt")), "alpha\ngamma\n");
+
+    const seeded3 = await seedPendingWriteForTest({
+      workspace: root,
+      path: "note.txt",
+      before: "one\n",
+      after: "two\n",
+    });
+    const one = await decideChatChange(seeded3.runId, seeded3.callId, 0, true);
+    if (one.status === "error") throw new Error(one.error);
+    equal(await Deno.readTextFile(join(root, "note.txt")), "two\n");
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("git checkedPaths rejects escapes and normalizes ~", async () => {
+  equal(normalizeWorkspacePath("~").length > 1, true);
+  const root = await Deno.makeTempDir();
+  try {
+    throws(() => checkedPaths(root, ["../escape"]));
+    equal(checkedPaths(root, ["src/a.ts"])[0], "src/a.ts");
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("terminal route requires auth", async () => {
+  const res = await handleRequest(
+    new Request("http://127.0.0.1/api/projects/demo/terminal"),
+  );
+  equal(res.status, 401);
+});
+
+Deno.test("parseTerminalSize clamps cols/rows from query", async () => {
+  const { clampTerminalSize, parseTerminalSize } = await import("../src/server/terminal.ts");
+  deepEqual(parseTerminalSize("http://127.0.0.1/t?cols=120&rows=40"), { cols: 120, rows: 40 });
+  deepEqual(clampTerminalSize(0, -1), { cols: 80, rows: 24 });
+  deepEqual(clampTerminalSize(9999, 9999), { cols: 500, rows: 200 });
 });
