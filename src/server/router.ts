@@ -121,8 +121,10 @@ import {
   updateRoleHandler,
 } from "./routes/roles.ts";
 import {
+  getAutomationSettingsHandler,
   getMcpSettingsHandler,
   listMcpToolsHandler,
+  saveAutomationSettingsHandler,
   saveMcpSettingsHandler,
   saveSkillsSettingsHandler,
   skillsHandler,
@@ -1118,6 +1120,11 @@ export async function handleRequest(req: Request): Promise<Response> {
 
     if (pathname === "/api/settings/skills" && (method === "PUT" || method === "POST")) {
       return await saveSkillsSettingsHandler(req);
+    }
+
+    if (pathname === "/api/settings/automation") {
+      if (method === "GET") return await getAutomationSettingsHandler();
+      if (method === "PUT" || method === "POST") return await saveAutomationSettingsHandler(req);
     }
 
     if (pathname === "/api/settings/mcp/tools" && method === "POST") {

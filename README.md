@@ -5,8 +5,9 @@ Desktop workspace untuk alur **Docmost PRD → draft tiket → Jira → coding l
 kredensial, integrasi, filesystem, dan I/O sistem terjadi di sana; UI di-render di webview lewat
 HTTP lokal.
 
-Dokumen desain ada di `feature/` (`overview.md`, `PLAN.md`, `CODE_EDITING_LOOP.md`,
-`STACK_RECOMMENDATION.md`, `STACK_TS.md`, `configuration.md`, `docmost.md`, `jira.md`).
+**Dokumentasi lengkap:** [`docs/`](docs/README.md) (overview, arsitektur, API, fitur).  
+Catatan desain historis: `feature/` (`overview.md`, `PLAN.md`, `CODE_EDITING_LOOP.md`, …).  
+Konvensi kontributor: [`AGENTS.md`](AGENTS.md).
 
 ## Arsitektur
 

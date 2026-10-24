@@ -26,8 +26,13 @@ import {
   type Role,
   type SkillInfo,
 } from "@/lib/api";
+import {
+  AUTO_BUILD_EVENT,
+  type AutoBuildDetail,
+} from "@/lib/auto-build-events";
 import { CHAT_RESPONSE_EVENT, dispatchChangesApplied, dispatchReview } from "@/lib/review-events";
 import { detectSlashQuery, parseSlashSkill } from "@/lib/slash-skill";
+import { buildAutoBuildPrompt } from "@/lib/ticket-columns";
 import { cn } from "@/lib/utils";
 
 const MarkdownView = lazy(() => import("@/components/MarkdownView"));
@@ -391,6 +396,21 @@ export function ChatSidebar({
   const responseRef = useRef(handleResponse);
   responseRef.current = handleResponse;
 
+  const sendingRef = useRef(sending);
+  sendingRef.current = sending;
+  const pendingRef = useRef(pending);
+  pendingRef.current = pending;
+  const projectIdRef = useRef(projectId);
+  projectIdRef.current = projectId;
+  const providersRef = useRef(providers);
+  providersRef.current = providers;
+  const providerIdRef = useRef(providerId);
+  providerIdRef.current = providerId;
+  const roleIdRef = useRef(roleId);
+  roleIdRef.current = roleId;
+  const variantRef = useRef(variant);
+  variantRef.current = variant;
+
   useEffect(() => {
     const handler = (event: Event) => {
       const response = (event as CustomEvent<ChatResponse>).detail;
@@ -398,6 +418,62 @@ export function ChatSidebar({
     };
     window.addEventListener(CHAT_RESPONSE_EVENT, handler);
     return () => window.removeEventListener(CHAT_RESPONSE_EVENT, handler);
+  }, []);
+
+  useEffect(() => {
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent<AutoBuildDetail>).detail;
+      if (!detail) return;
+      void (async () => {
+        if (sendingRef.current || pendingRef.current) return;
+        const activeProjectId = projectIdRef.current;
+        if (!activeProjectId || detail.projectId !== activeProjectId) return;
+        if (providersRef.current.length === 0) {
+          setError("Belum ada provider LLM (Global Settings → LLM Providers).");
+          return;
+        }
+
+        const content = buildAutoBuildPrompt(detail);
+        setMode("build");
+        try {
+          localStorage.setItem("rnd.chatMode:v1", "build");
+        } catch {
+          // ignore
+        }
+        setSessionId(null);
+        setAttachments([]);
+        setSelectedSkill(null);
+        setPending(null);
+        setError(undefined);
+        dispatchReview(null, null);
+
+        const next: Entry[] = [
+          {
+            id: crypto.randomUUID(),
+            role: "user",
+            content,
+          },
+        ];
+        setEntries(next);
+        setSending(true);
+        try {
+          const response = await api.chat(activeProjectId, {
+            providerId: providerIdRef.current || undefined,
+            roleId: roleIdRef.current ?? undefined,
+            variant: variantRef.current,
+            mode: "build",
+            messages: [{ role: "user", content }],
+          });
+          responseRef.current(response);
+        } catch (e) {
+          setError((e as Error).message);
+        } finally {
+          setSending(false);
+        }
+      })();
+    };
+    window.addEventListener(AUTO_BUILD_EVENT, handler);
+    return () => window.removeEventListener(AUTO_BUILD_EVENT, handler);
   }, []);
 
   const send = async () => {

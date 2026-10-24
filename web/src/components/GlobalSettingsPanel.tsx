@@ -1,4 +1,13 @@
-import { Cpu, Info, type LucideIcon, Palette, Server, Sparkles, Users } from "lucide-react";
+import {
+  Cpu,
+  Info,
+  type LucideIcon,
+  Palette,
+  Server,
+  Sparkles,
+  Users,
+  Zap,
+} from "lucide-react";
 import { PanelHeader } from "@/components/PanelHeader";
 import { cn } from "@/lib/utils";
 
@@ -8,6 +17,7 @@ export type GlobalSection =
   | "roles"
   | "mcp"
   | "skills"
+  | "automation"
   | "about";
 
 const SECTIONS: { id: GlobalSection; label: string; icon: LucideIcon }[] = [
@@ -16,6 +26,7 @@ const SECTIONS: { id: GlobalSection; label: string; icon: LucideIcon }[] = [
   { id: "roles", label: "Roles", icon: Users },
   { id: "mcp", label: "MCP", icon: Server },
   { id: "skills", label: "Skills", icon: Sparkles },
+  { id: "automation", label: "Automation", icon: Zap },
   { id: "about", label: "About", icon: Info },
 ];
 

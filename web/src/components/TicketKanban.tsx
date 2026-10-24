@@ -12,24 +12,9 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import type { TicketSummary } from "@/lib/api";
+import { CANONICAL_COLUMNS, canonicalTicketColumn } from "@/lib/ticket-columns";
 
 export type TicketColumns = Record<string, TicketSummary[]>;
-
-const CANONICAL: { title: string; matcher: RegExp }[] = [
-  { title: "Backlog", matcher: /backlog|icebox/i },
-  { title: "To Do", matcher: /to ?do|todo|open|new|selected|refine/i },
-  { title: "In Progress", matcher: /progress|doing|develop|implement/i },
-  { title: "Test", matcher: /test|qa|review|verify|staging|uat/i },
-  { title: "Done", matcher: /done|complete|closed|resolve|finish|release|deploy/i },
-];
-
-function canonicalColumn(status?: string): string {
-  if (!status) return "Backlog";
-  for (const column of CANONICAL) {
-    if (column.matcher.test(status)) return column.title;
-  }
-  return status;
-}
 
 interface Board {
   columns: TicketColumns;
@@ -40,15 +25,15 @@ function buildBoard(tickets: TicketSummary[]): Board {
   const columns: TicketColumns = {};
   const target: Record<string, string> = {};
 
-  for (const column of CANONICAL) columns[column.title] = [];
+  for (const column of CANONICAL_COLUMNS) columns[column.title] = [];
 
   for (const ticket of tickets) {
-    const column = canonicalColumn(ticket.status);
+    const column = canonicalTicketColumn(ticket.status);
     (columns[column] ??= []).push(ticket);
     if (!target[column] && ticket.status) target[column] = ticket.status;
   }
 
-  for (const column of CANONICAL) {
+  for (const column of CANONICAL_COLUMNS) {
     if (!target[column.title]) target[column.title] = column.title;
   }
 

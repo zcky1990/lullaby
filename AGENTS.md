@@ -1,5 +1,7 @@
 # AGENTS.md
 
+Product/engineering docs for humans: [`docs/README.md`](docs/README.md).
+
 ## Commands
 
 - Build client + assets: `deno task build` (`build:web` + `assets`)
@@ -49,7 +51,9 @@ finishing a change.
   `create_ticket`); `GET /tickets` merges unsynced local tickets with Jira. Local tickets are
   editable from `TicketDetailDialog` (`PATCH /local-tickets/:id`, rich text description) and can be
   deleted only while unsynced (`DELETE` rejects tickets with `jira_key`). Syncing is manual
-  (`POST /local-tickets/:id/sync` → Jira issue) and sets `jira_key`/`sync_status`.
+  (`POST /local-tickets/:id/sync` → Jira issue) and sets `jira_key`/`sync_status`. Global
+  Automation (`auto_build_on_in_progress`, default off) starts a new Build chat when a Kanban
+  card moves To Do → In Progress; see `docs/automation.md`.
 - **Skills**: `src/server/skills.ts` discovers `SKILL.md` folders (frontmatter `name`/`description`)
   from `<workspace>/.agents/skills` (highest), `appDataDir()/<project-slug>/skills` (auto from Build
   chats), and `appDataDir()/skills` (global). Chat injects the skill list into the system prompt and
@@ -83,6 +87,9 @@ finishing a change.
   `POST /api/settings/mcp/tools` connects with `initialize` + `tools/list` (`src/server/mcp.ts`,
   stdio or http) so each server's tools can be discovered and enabled/disabled. Tool execution from
   chat is not wired yet.
+- **Automation**: global `auto_build_on_in_progress` in `app_settings` (GET/PUT
+  `/api/settings/automation`). UI: Global Settings → Automation. When on, Kanban To Do → In
+  Progress opens Chat Build with a ticket prompt (`docs/automation.md`).
 - **List/menus**: `ActivityBar` (left rail) opens tabs in the main area (`TabsBar`).
   Workspace/Explorer/Document/Project Settings/Ticket keep a **separate** side panel in `<aside>`
   (`WorkspacePanel`, `FileTreePanel`, `DocumentPanel`, `SettingsPanel`, `TicketPanel`);

@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { AutomationSettings } from "@/components/AutomationSettings";
 import { LlmProvidersSettings } from "@/components/LlmProvidersSettings";
 import { McpSettings } from "@/components/McpSettings";
 import { RolesSettings } from "@/components/RolesSettings";
@@ -153,6 +154,7 @@ export function GlobalSettingsView({
   }
   if (section === "mcp") return <McpSettings />;
   if (section === "skills") return <SkillsSettings projectId={projectId} />;
+  if (section === "automation") return <AutomationSettings />;
   return <About />;
 }
 

@@ -1,6 +1,7 @@
 import { deepEqual, equal, rejects, throws } from "node:assert/strict";
 import { join, resolve } from "node:path";
 import {
+  AutomationSettingsInput,
   ChatInput,
   GenerateTicketsInput,
   JiraConfig,
@@ -13,6 +14,11 @@ import {
   TicketTransitionInput,
   UpdateFileInput,
 } from "../src/config/schema.ts";
+import {
+  buildAutoBuildPrompt,
+  canonicalTicketColumn,
+  isTodoToInProgress,
+} from "../src/tickets/status.ts";
 import { htmlToAdf, htmlToPlainText, sanitizeHtml } from "../src/core/html.ts";
 import {
   createLocalDocument,
@@ -613,4 +619,34 @@ Deno.test("listSkills prefers workspace over project over global", async () => {
     else Deno.env.set("RND_APP_DATA_DIR", previous);
     await Deno.remove(root, { recursive: true }).catch(() => {});
   }
+});
+
+Deno.test("AutomationSettingsInput defaults autoBuildOnInProgress to false", () => {
+  equal(AutomationSettingsInput.parse({}).autoBuildOnInProgress, false);
+  equal(AutomationSettingsInput.parse({ autoBuildOnInProgress: true }).autoBuildOnInProgress, true);
+});
+
+Deno.test("ticket status helpers detect To Do to In Progress", () => {
+  equal(canonicalTicketColumn("To Do"), "To Do");
+  equal(canonicalTicketColumn("Doing"), "In Progress");
+  equal(canonicalTicketColumn("In Development"), "In Progress");
+  equal(isTodoToInProgress("To Do", "In Progress"), true);
+  equal(isTodoToInProgress("Open", "Doing"), true);
+  equal(isTodoToInProgress("Backlog", "In Progress"), false);
+  equal(isTodoToInProgress("To Do", "Done"), false);
+});
+
+Deno.test("buildAutoBuildPrompt includes key summary and description", () => {
+  const withDesc = buildAutoBuildPrompt({
+    key: "PROJ-1",
+    summary: "Fix login",
+    description: "Users cannot sign in",
+  });
+  equal(withDesc.includes("PROJ-1"), true);
+  equal(withDesc.includes("Fix login"), true);
+  equal(withDesc.includes("Users cannot sign in"), true);
+
+  const bare = buildAutoBuildPrompt({ key: "L-1", summary: "Tiny" });
+  equal(bare.includes("Tiny"), true);
+  equal(bare.includes("Implementasikan"), true);
 });

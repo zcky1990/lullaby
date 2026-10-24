@@ -203,6 +203,12 @@ export const SkillsSettingsInput = z.object({
   disabled: z.array(z.string().trim().min(1).max(120)).max(200),
 });
 export type McpSettingsInput = z.infer<typeof McpSettingsInput>;
+export type SkillsSettingsInput = z.infer<typeof SkillsSettingsInput>;
+
+export const AutomationSettingsInput = z.object({
+  autoBuildOnInProgress: z.boolean().default(false),
+});
+export type AutomationSettingsInput = z.infer<typeof AutomationSettingsInput>;
 
 export const LocalTicketStatus = z.enum(["Backlog", "To Do", "In Progress", "Test", "Done"]);
 export type LocalTicketStatus = z.infer<typeof LocalTicketStatus>;

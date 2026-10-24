@@ -170,6 +170,7 @@ export interface LocalDocumentsResponse {
 export interface TicketSummary {
   key: string;
   summary: string;
+  description?: string;
   status?: string;
   assignee?: string;
   priority?: string;
@@ -612,4 +613,11 @@ export const api = {
     request<McpSettingsResponse>("/api/settings/mcp", jsonInit("PUT", payload)),
   listMcpTools: (server: McpServer) =>
     request<{ tools: McpTool[] }>("/api/settings/mcp/tools", jsonInit("POST", { server })),
+  getAutomationSettings: () =>
+    request<{ autoBuildOnInProgress: boolean }>("/api/settings/automation"),
+  saveAutomationSettings: (payload: { autoBuildOnInProgress: boolean }) =>
+    request<{ autoBuildOnInProgress: boolean }>(
+      "/api/settings/automation",
+      jsonInit("PUT", payload),
+    ),
 };

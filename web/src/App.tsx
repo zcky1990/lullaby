@@ -55,7 +55,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { triggerFind } from "@/lib/find";
+import { dispatchAutoBuild } from "@/lib/auto-build-events";
 import { CHANGES_APPLIED_EVENT, REVIEW_EVENT, type ReviewDetail } from "@/lib/review-events";
+import { isTodoToInProgress } from "@/lib/ticket-columns";
 import { cn } from "@/lib/utils";
 import {
   api,
@@ -150,6 +152,7 @@ export default function App() {
   const [detailOpen, setDetailOpen] = useState(false);
   const [createTicketOpen, setCreateTicketOpen] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
+  const [autoBuildOnInProgress, setAutoBuildOnInProgress] = useState(false);
   const [terminalOpen, setTerminalOpen] = useState(false);
   const [gitStatusData, setGitStatusData] = useState<GitStatus | null>(null);
   const [gitBranchList, setGitBranchList] = useState<GitBranch[]>([]);
@@ -207,6 +210,15 @@ export default function App() {
     try {
       const result = await api.listRoles();
       setRoles(result.roles);
+    } catch (error) {
+      console.error(error);
+    }
+  }, []);
+
+  const loadAutomationSettings = useCallback(async () => {
+    try {
+      const result = await api.getAutomationSettings();
+      setAutoBuildOnInProgress(result.autoBuildOnInProgress);
     } catch (error) {
       console.error(error);
     }
@@ -601,7 +613,8 @@ export default function App() {
     loadProjects().catch(console.error);
     loadLlmProviders().catch(console.error);
     loadRoles().catch(console.error);
-  }, [loadProjects, loadLlmProviders, loadRoles]);
+    loadAutomationSettings().catch(console.error);
+  }, [loadProjects, loadLlmProviders, loadRoles, loadAutomationSettings]);
 
   useEffect(() => {
     if (!currentId) return;
@@ -776,7 +789,7 @@ export default function App() {
     await loadLlmProviders();
   };
 
-  const moveTicket = async (key: string, _from: string, to: string) => {
+  const moveTicket = async (key: string, from: string, to: string) => {
     if (!currentId) return;
     const ticket = tickets.find((item) => item.key === key);
     if (ticket?.source === "local" && ticket.localId) {
@@ -785,6 +798,33 @@ export default function App() {
       await api.transitionTicket(currentId, key, to);
     }
     await loadTickets(currentId);
+
+    if (!isTodoToInProgress(from, to) || llmProviders.length === 0) return;
+    try {
+      const settings = await api.getAutomationSettings();
+      setAutoBuildOnInProgress(settings.autoBuildOnInProgress);
+      if (!settings.autoBuildOnInProgress) return;
+    } catch {
+      if (!autoBuildOnInProgress) return;
+    }
+
+    let description = ticket?.description?.trim() || undefined;
+    if (!description) {
+      try {
+        const detail = await api.getTicket(currentId, key);
+        description = detail.ticket.description?.trim() || undefined;
+      } catch {
+        // continue with summary only
+      }
+    }
+
+    setChatOpen(true);
+    dispatchAutoBuild({
+      projectId: currentId,
+      key,
+      summary: ticket?.summary ?? key,
+      description,
+    });
   };
 
   const updateWorkspace = async (path: string, documentPath?: string) => {

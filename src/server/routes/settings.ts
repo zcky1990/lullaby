@@ -1,4 +1,9 @@
-import { McpServerInput, McpSettingsInput, SkillsSettingsInput } from "../../config/schema.ts";
+import {
+  AutomationSettingsInput,
+  McpServerInput,
+  McpSettingsInput,
+  SkillsSettingsInput,
+} from "../../config/schema.ts";
 import { log } from "../../core/logger.ts";
 import { getAppSetting, getProject, setAppSetting } from "../../db/db.ts";
 import { json, readJson, record } from "../http.ts";
@@ -13,6 +18,7 @@ import {
 } from "../skills.ts";
 
 const MCP_SETTINGS_KEY = "mcp_servers";
+const AUTO_BUILD_KEY = "auto_build_on_in_progress";
 
 function parseStringArray(raw: string | null): string[] {
   if (!raw) return [];
@@ -109,4 +115,24 @@ export async function saveSkillsSettingsHandler(req: Request): Promise<Response>
     disabled: parsed.data.disabled.length,
   });
   return json({ ok: true });
+}
+
+export async function getAutomationSettingsHandler(): Promise<Response> {
+  const autoBuildOnInProgress = (await getAppSetting(AUTO_BUILD_KEY)) === "true";
+  return json({ autoBuildOnInProgress });
+}
+
+export async function saveAutomationSettingsHandler(req: Request): Promise<Response> {
+  const parsed = AutomationSettingsInput.safeParse(await readJson(req));
+  if (!parsed.success) {
+    return json({ error: "invalid_input", issues: parsed.error.issues }, 400);
+  }
+  await setAppSetting(
+    AUTO_BUILD_KEY,
+    parsed.data.autoBuildOnInProgress ? "true" : "false",
+  );
+  await record("settings.automation_updated", {
+    autoBuildOnInProgress: parsed.data.autoBuildOnInProgress,
+  });
+  return json({ autoBuildOnInProgress: parsed.data.autoBuildOnInProgress });
 }
