@@ -132,7 +132,8 @@ export async function runAutoskills(
       dryRun,
       output,
       skills: [],
-      error: `autoskills exit ${result.code}. Butuh Node.js >= 22.6 dan jaringan untuk unduh registry.`,
+      error:
+        `autoskills exit ${result.code}. Butuh Node.js >= 22.6 dan jaringan untuk unduh registry.`,
       code: result.code,
     };
   }

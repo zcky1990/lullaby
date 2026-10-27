@@ -1,8 +1,4 @@
-import {
-  checkGitRepository,
-  getStatus,
-  runGit,
-} from "../integrations/git.ts";
+import { checkGitRepository, getStatus, runGit } from "../integrations/git.ts";
 
 const MAX_DIFF_CHARS = 60_000;
 
@@ -41,7 +37,10 @@ export async function collectCodeReviewContext(workspace: string): Promise<strin
   const diffs: Array<{ label: string; args: string[] }> = [
     { label: "Unstaged diff", args: ["diff", "--no-color"] },
     { label: "Staged diff", args: ["diff", "--cached", "--no-color"] },
-    { label: "Diff vs upstream merge-base (if any)", args: ["diff", "--no-color", "@{upstream}...HEAD"] },
+    {
+      label: "Diff vs upstream merge-base (if any)",
+      args: ["diff", "--no-color", "@{upstream}...HEAD"],
+    },
   ];
 
   for (const item of diffs) {
@@ -52,7 +51,9 @@ export async function collectCodeReviewContext(workspace: string): Promise<strin
   }
 
   if (parts.length <= 2) {
-    parts.push("No non-empty diffs collected. Ask which files/paths to review, or use list_files/read_file.");
+    parts.push(
+      "No non-empty diffs collected. Ask which files/paths to review, or use list_files/read_file.",
+    );
   }
 
   return parts.join("\n\n");

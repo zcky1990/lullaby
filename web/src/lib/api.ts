@@ -134,6 +134,14 @@ export interface GitCommitDetail extends GitCommit {
   diff: string;
 }
 
+export interface PromptsSettings {
+  systemPrompt: string;
+  planPrompt: string;
+  defaultSystemPrompt: string;
+  defaultPlanPrompt: string;
+  customized: { systemPrompt: boolean; planPrompt: boolean };
+}
+
 export interface McpTool {
   name: string;
   description?: string;
@@ -638,6 +646,14 @@ export const api = {
       `/api/projects/${projectId}/git/checkout`,
       jsonInit("POST", { branch }),
     ),
+  gitClone: (
+    projectId: string,
+    payload: { url: string; protocol?: "https" | "ssh" },
+  ) =>
+    request<{ ok: boolean; path: string; output: string; project: Project }>(
+      `/api/projects/${projectId}/git/clone`,
+      jsonInit("POST", payload, { timeoutMs: 320_000 }),
+    ),
   gitFetch: (projectId: string) =>
     request<{ ok: boolean; output: string }>(
       `/api/projects/${projectId}/git/fetch`,
@@ -671,6 +687,9 @@ export const api = {
       `/api/projects/${projectId}/git/stash`,
       jsonInit("POST", payload),
     ),
+  getPrompts: () => request<PromptsSettings>("/api/settings/prompts"),
+  savePrompts: (payload: { systemPrompt: string; planPrompt: string }) =>
+    request<{ ok: boolean }>("/api/settings/prompts", jsonInit("PUT", payload)),
   getMcpSettings: () => request<McpSettingsResponse>("/api/settings/mcp"),
   saveMcpSettings: (payload: {
     servers: McpServer[];

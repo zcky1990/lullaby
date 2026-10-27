@@ -156,6 +156,15 @@ export const GitStashCreateInput = z.object({
 });
 export type GitStashCreateInput = z.infer<typeof GitStashCreateInput>;
 
+export const GitCloneProtocol = z.enum(["https", "ssh"]);
+export type GitCloneProtocol = z.infer<typeof GitCloneProtocol>;
+
+export const GitCloneInput = z.object({
+  url: z.string().trim().min(1).max(2000),
+  protocol: GitCloneProtocol.default("https"),
+});
+export type GitCloneInput = z.infer<typeof GitCloneInput>;
+
 export const UpdateFileInput = z.object({
   path: z.string().trim().min(1).max(1000),
   content: z.string().max(2_000_000),
@@ -219,6 +228,11 @@ export const McpSettingsInput = z.object({
   servers: z.array(McpServerInput).max(20),
   enabled: z.boolean().default(true),
   disabledTools: z.array(z.string().trim().min(1).max(200)).max(1000).default([]),
+});
+
+export const PromptsSettingsInput = z.object({
+  systemPrompt: z.string().max(20_000),
+  planPrompt: z.string().max(20_000),
 });
 
 export const SkillsSettingsInput = z.object({

@@ -2,9 +2,9 @@ import { deepEqual, equal, rejects, throws } from "node:assert/strict";
 import { join, resolve } from "node:path";
 import {
   AutomationSettingsInput,
-  TerminalSettingsInput,
   ChatInput,
   GenerateTicketsInput,
+  GitCloneInput,
   JiraConfig,
   LlmProviderInput,
   LocalTicketInput,
@@ -12,6 +12,7 @@ import {
   McpSettingsInput,
   ProjectInput,
   RoleInput,
+  TerminalSettingsInput,
   TicketTransitionInput,
   UpdateFileInput,
 } from "../src/config/schema.ts";
@@ -31,6 +32,8 @@ import {
 import { resolveWithin } from "../src/fs/workspace.ts";
 import {
   checkedPaths,
+  isSafeGitUrl,
+  normalizeCloneUrl,
   normalizeWorkspacePath,
   showCommit,
 } from "../src/integrations/git.ts";
@@ -188,7 +191,6 @@ Deno.test("listSkills includes builtin code-review", async () => {
   equal(review?.source, "builtin");
   equal(review?.path.startsWith(builtinSkillsDir()), true);
 });
-
 
 Deno.test("runAutoskills rejects missing workspace path", async () => {
   const missing = await runAutoskills("/tmp/rnd-workflow-no-such-workspace-dir");
@@ -601,6 +603,30 @@ Deno.test("git checkedPaths rejects escapes and normalizes ~", async () => {
   }
 });
 
+Deno.test("GitCloneInput and URL helpers", () => {
+  equal(GitCloneInput.parse({ url: "https://github.com/org/repo.git" }).protocol, "https");
+  equal(
+    GitCloneInput.parse({ url: "org/repo", protocol: "ssh" }).protocol,
+    "ssh",
+  );
+  throws(() => GitCloneInput.parse({ url: "" }));
+  throws(() => GitCloneInput.parse({ url: "org/repo", protocol: "ftp" }));
+  equal(isSafeGitUrl("https://github.com/org/repo.git"), true);
+  equal(isSafeGitUrl("git@github.com:org/repo.git"), true);
+  equal(isSafeGitUrl("org/repo"), true);
+  equal(isSafeGitUrl("https://evil.com/repo;rm -rf /"), false);
+  equal(
+    normalizeCloneUrl("https://github.com/org/demo.git", "ssh"),
+    "git@github.com:org/demo.git",
+  );
+  equal(
+    normalizeCloneUrl("git@github.com:org/demo.git", "https"),
+    "https://github.com/org/demo.git",
+  );
+  equal(normalizeCloneUrl("org/demo", "https"), "https://github.com/org/demo.git");
+  equal(normalizeCloneUrl("org/demo", "ssh"), "git@github.com:org/demo.git");
+});
+
 Deno.test("terminal route requires auth", async () => {
   const res = await handleRequest(
     new Request("http://127.0.0.1/api/projects/demo/terminal"),
@@ -762,4 +788,12 @@ Deno.test("buildAutoBuildPrompt includes key summary and description", () => {
   const bare = buildAutoBuildPrompt({ key: "L-1", summary: "Tiny" });
   equal(bare.includes("Tiny"), true);
   equal(bare.includes("Implementasikan"), true);
+});
+
+Deno.test("systemPrompt honors custom global prompts", () => {
+  const prompts = { systemPrompt: "CUSTOM BUILD PROMPT", planPrompt: "CUSTOM PLAN PROMPT" };
+  const build = systemPrompt("/tmp/ws", "build", [], undefined, null, prompts);
+  equal(build.startsWith("CUSTOM BUILD PROMPT"), true);
+  const plan = systemPrompt("/tmp/ws", "plan", [], undefined, null, prompts);
+  equal(plan.startsWith("CUSTOM PLAN PROMPT"), true);
 });

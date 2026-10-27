@@ -278,8 +278,10 @@ async function blocksToMarkdown(
   let out = "";
   for (const block of blocks) {
     out += blockToMarkdown(block, depth);
-    if (block.has_children && block.id && block.type !== "child_page" &&
-      block.type !== "child_database") {
+    if (
+      block.has_children && block.id && block.type !== "child_page" &&
+      block.type !== "child_database"
+    ) {
       out += await blocksToMarkdown(cfg, String(block.id), depth + 1);
     }
   }
@@ -289,7 +291,9 @@ async function blocksToMarkdown(
 export async function getDocument(cfg: NotionConfig, pageId: string): Promise<DocContent> {
   const token = requireToken(cfg);
   const pageRes = await notionRequest(`/v1/pages/${encodeURIComponent(pageId)}`, token);
-  if (!pageRes.ok) throw new Error(`${statusMessage(pageRes.status)} ${truncate(pageRes.text, 300)}`);
+  if (!pageRes.ok) {
+    throw new Error(`${statusMessage(pageRes.status)} ${truncate(pageRes.text, 300)}`);
+  }
   const page = JSON.parse(pageRes.text || "{}") as Record<string, unknown>;
   const title = pageTitle(page);
   const content = await blocksToMarkdown(cfg, pageId);

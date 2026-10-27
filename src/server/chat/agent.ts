@@ -6,11 +6,14 @@ import {
   getProject,
   listChatMessages,
 } from "../../db/db.ts";
-import {
-  collectCodeReviewContext,
-  defaultCodeReviewUserMessage,
-} from "../code-review.ts";
+import { collectCodeReviewContext, defaultCodeReviewUserMessage } from "../code-review.ts";
 import { loadEnabledSkills, projectSlug, readSkillBody, type SkillInfo } from "../skills.ts";
+import {
+  DEFAULT_PLAN_PROMPT,
+  DEFAULT_SYSTEM_PROMPT,
+  type PromptSettings,
+  readPromptSettings,
+} from "../prompts.ts";
 import { complete, VARIANT_TEMPERATURE } from "./llm.ts";
 import { approvalResponse, prepareWriteChange, setAdvance } from "./review.ts";
 import { scheduleSkillLearn } from "./skill-learn.ts";
@@ -21,21 +24,6 @@ import type { ChatResponse, Run, VisibleMessage } from "./types.ts";
 const CODE_REVIEW_SKILL = "code-review";
 
 const MAX_STEPS = 6;
-
-const SYSTEM_PROMPT =
-  "You are an assistant inside a developer workspace. You can inspect and edit files in the " +
-  "workspace using the provided tools. Use list_files/read_file to inspect before editing. " +
-  "Use write_file to create or overwrite a file with full content. Keep edits minimal and " +
-  "focused. Never touch files outside the workspace. Use create_ticket to record a ticket in " +
-  "the project's LOCAL backlog (it is not synced to Jira until the user syncs it manually; " +
-  "never claim it already exists in Jira). When the task is complete, reply with a short " +
-  "summary (no tool call).";
-
-const PLAN_PROMPT =
-  "You are in PLAN mode. Do NOT modify files and do NOT create tickets. You may call use_skill " +
-  "(read-only) to load relevant skill instructions. Reply with a concise, actionable plan: " +
-  "goal, ordered steps, files/areas likely involved, risks, and open questions. The user will " +
-  "switch to Build mode when they want implementation.";
 
 function skillPrompt(skills: SkillInfo[]): string {
   if (!skills.length) return "";
@@ -48,24 +36,32 @@ export function activeSkillPrompt(name: string, body: string): string {
   return `\n\n## Active skill: ${name}\nThe user invoked /${name}. Follow these instructions for this request:\n\n${body}\n`;
 }
 
+const DEFAULT_PROMPTS: PromptSettings = {
+  systemPrompt: DEFAULT_SYSTEM_PROMPT,
+  planPrompt: DEFAULT_PLAN_PROMPT,
+};
+
 export function systemPrompt(
   workspace: string | null,
   mode: "plan" | "build",
   skills: SkillInfo[],
   persona?: string,
   activeSkill?: { name: string; body: string } | null,
+  prompts: PromptSettings = DEFAULT_PROMPTS,
 ): string {
   const skillList = skillPrompt(skills);
   let prompt: string;
   if (mode === "plan") {
     prompt = workspace
-      ? `${PLAN_PROMPT}\nThe workspace root is: ${workspace}. Paths in your plan are relative to it.`
-      : PLAN_PROMPT;
+      ? `${prompts.planPrompt}\nThe workspace root is: ${workspace}. Paths in your plan are relative to it.`
+      : prompts.planPrompt;
   } else if (!workspace) {
-    prompt = `${SYSTEM_PROMPT} No workspace is configured for this project, so file tools are ` +
+    prompt =
+      `${prompts.systemPrompt} No workspace is configured for this project, so file tools are ` +
       `unavailable; you can still use create_ticket to record tickets locally.`;
   } else {
-    prompt = `${SYSTEM_PROMPT}\nThe workspace root is: ${workspace}. All tool paths are relative ` +
+    prompt =
+      `${prompts.systemPrompt}\nThe workspace root is: ${workspace}. All tool paths are relative ` +
       `to this root (for example "src/index.ts"). Do not use absolute paths or "..".`;
   }
   const withPersona = persona?.trim() ? `${persona.trim()}\n\n${prompt}` : prompt;
@@ -228,6 +224,7 @@ export async function startChat(
   const slug = projectSlug(project?.name ?? "", projectId);
   const skills = await loadEnabledSkills(workspace, slug);
   const skillMap = new Map(skills.map((skill) => [skill.name, skill]));
+  const prompts = await readPromptSettings();
 
   let activeSkill: { name: string; body: string } | null = null;
   const wantedSkill = skillName?.trim().toLowerCase() || "";
@@ -269,7 +266,14 @@ export async function startChat(
     turns: [
       {
         role: "system",
-        content: systemPrompt(workspace, effectiveMode, skills, rolePersona, activeSkill),
+        content: systemPrompt(
+          workspace,
+          effectiveMode,
+          skills,
+          rolePersona,
+          activeSkill,
+          prompts,
+        ),
       },
       ...resolved.map((message) => ({
         role: message.role,

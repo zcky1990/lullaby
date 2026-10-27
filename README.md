@@ -5,8 +5,8 @@ Desktop workspace untuk alur **Docmost PRD → draft tiket → Jira → coding l
 kredensial, integrasi, filesystem, dan I/O sistem terjadi di sana; UI di-render di webview lewat
 HTTP lokal.
 
-**Dokumentasi lengkap:** [`docs/`](docs/README.md) (overview, arsitektur, API, fitur).  
-Catatan desain historis: `feature/` (`overview.md`, `PLAN.md`, `CODE_EDITING_LOOP.md`, …).  
+**Dokumentasi lengkap:** [`docs/`](docs/README.md) (overview, arsitektur, API, fitur).\
+Catatan desain historis: `feature/` (`overview.md`, `PLAN.md`, `CODE_EDITING_LOOP.md`, …).\
 Konvensi kontributor: [`AGENTS.md`](AGENTS.md).
 
 ## Arsitektur
@@ -147,6 +147,7 @@ Document/**Project Settings**/**Ticket**/**Global Settings** memakai **panel kir
 | `GET /api/llm` · `POST /api/llm`                           | list / tambah provider LLM **global**                   |
 | `PUT /api/llm/:providerId` · `DELETE /api/llm/:providerId` | ubah / hapus provider LLM global                        |
 | `GET/POST /api/roles` · `PUT/DELETE /api/roles/:id`        | CRUD role (persona + provider LLM default)              |
+| `GET/PUT /api/settings/prompts`                            | override system prompt (Build) & prompt Plan global     |
 | `POST /api/projects/:id/chat`                              | chat LLM (agent + tools file workspace)                 |
 | `POST /api/chat/approve`                                   | setujui/tolak aksi tulis (once/always/deny)             |
 | `GET /api/projects/:id/chat/sessions`                      | daftar sesi chat                                        |

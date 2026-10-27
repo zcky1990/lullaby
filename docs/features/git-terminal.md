@@ -14,9 +14,14 @@ UI (SourceTree-like):
   - **History**: kiri = daftar commit; kanan = meta + `git show` patch
 
 Route: `/api/projects/:id/git/*` (`status`, `branches`, `log`, `diff`, `show`, `stage`,
-`unstage`, `commit`, `checkout`, `fetch`, `pull`, `push`, `branch`, `merge`, `stash`).
+`unstage`, `commit`, `checkout`, `clone`, `fetch`, `pull`, `push`, `branch`, `merge`, `stash`).
 Path di-guard (`--` / reject escape). Jika folder bukan repo git, API mengembalikan error
 yang jelas.
+
+**Clone** (Project Settings → Workspace): `POST …/git/clone` dengan
+`{ url, protocol?: "https"|"ssh" }`. Clone masuk ke `workspace_path` yang sudah diset
+(folder harus kosong). URL dinormalisasi ke HTTPS atau SSH; shorthand `org/repo`
+diasumsikan GitHub. Auth memakai credential git lokal.
 
 ## Terminal
 

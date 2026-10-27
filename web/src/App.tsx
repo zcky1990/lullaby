@@ -887,6 +887,18 @@ export default function App() {
     await loadLocalDocuments(currentId);
   };
 
+  const cloneRepository = async (input: {
+    url: string;
+    protocol: "https" | "ssh";
+  }) => {
+    if (!currentId) throw new Error("Belum ada project.");
+    const { project } = await api.gitClone(currentId, input);
+    setProjects((current) => current.map((p) => (p.id === project.id ? project : p)));
+    await loadDetail(currentId);
+    await loadLocalDocuments(currentId);
+    return project;
+  };
+
   const renderTab = (tab: EditorTab) => {
     switch (tab.kind) {
       case "workspace":
@@ -928,6 +940,7 @@ export default function App() {
             onSaveIntegration={saveIntegration}
             onTestIntegration={testIntegration}
             onUpdateWorkspace={updateWorkspace}
+            onCloneRepository={cloneRepository}
           />
         );
       case "global":
@@ -1591,6 +1604,7 @@ function SettingsTab({
   onSaveIntegration,
   onTestIntegration,
   onUpdateWorkspace,
+  onCloneRepository,
 }: {
   section: SettingsSection;
   detail: ProjectDetail | null;
@@ -1598,6 +1612,10 @@ function SettingsTab({
   onSaveIntegration: (payload: IntegrationPayload) => Promise<void>;
   onTestIntegration: (payload: IntegrationPayload) => Promise<TestResult>;
   onUpdateWorkspace: (path: string) => Promise<void>;
+  onCloneRepository: (input: {
+    url: string;
+    protocol: "https" | "ssh";
+  }) => Promise<Project>;
 }) {
   if (!detail) return <Empty text="Belum ada project." />;
   return (
@@ -1609,6 +1627,7 @@ function SettingsTab({
         onSaveIntegration={onSaveIntegration}
         onTestIntegration={onTestIntegration}
         onUpdateWorkspace={onUpdateWorkspace}
+        onCloneRepository={onCloneRepository}
       />
     </div>
   );

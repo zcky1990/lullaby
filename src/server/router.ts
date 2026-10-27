@@ -5,12 +5,13 @@ import {
   ChatInput,
   ConfluenceConfig,
   CreateDocumentInput,
+  DocmostConfig,
   DocumentSource,
   type DocumentSource as DocumentSourceType,
-  DocmostConfig,
   GenerateTicketsInput,
   GitBranchCreateInput,
   GitCheckoutInput,
+  GitCloneInput,
   GitCommitInput,
   GitMergeInput,
   GitPathsInput,
@@ -74,6 +75,7 @@ import {
   applyStash as gitApplyStash,
   checkGitRepository,
   checkoutBranch,
+  cloneRepository,
   commit as gitCommit,
   createBranch as gitCreateBranch,
   createStash as gitCreateStash,
@@ -139,10 +141,12 @@ import {
 import {
   getAutomationSettingsHandler,
   getMcpSettingsHandler,
+  getPromptsHandler,
   getTerminalSettingsHandler,
   listMcpToolsHandler,
   saveAutomationSettingsHandler,
   saveMcpSettingsHandler,
+  savePromptsHandler,
   saveSkillsSettingsHandler,
   saveTerminalSettingsHandler,
   skillsHandler,
@@ -806,6 +810,35 @@ async function gitStashCreateHandler(projectId: string, req: Request): Promise<R
   }
 }
 
+async function gitCloneHandler(projectId: string, req: Request): Promise<Response> {
+  const project = await getProject(projectId);
+  if (!project) return json({ error: "project_not_found" }, 404);
+  const workspace = project.workspace_path?.trim();
+  if (!workspace) {
+    return json({ error: "Workspace belum diatur. Set path workspace dulu." }, 400);
+  }
+  const parsed = GitCloneInput.safeParse(await readJson(req));
+  if (!parsed.success) {
+    return json({ error: "invalid_input", issues: parsed.error.issues }, 400);
+  }
+  try {
+    const cloned = await cloneRepository(
+      parsed.data.url,
+      workspace,
+      parsed.data.protocol,
+    );
+    await record("git.cloned", {
+      projectId,
+      path: cloned.path,
+      url: cloned.url,
+      protocol: parsed.data.protocol,
+    });
+    return json({ ok: true, path: cloned.path, output: cloned.output, project });
+  } catch (error) {
+    return json({ error: (error as Error).message }, 400);
+  }
+}
+
 async function terminalHandler(projectId: string, req: Request): Promise<Response> {
   const project = await getProject(projectId);
   if (!project) return json({ error: "project_not_found" }, 404);
@@ -1301,6 +1334,11 @@ export async function handleRequest(req: Request): Promise<Response> {
       if (method === "PUT" || method === "POST") return await saveTerminalSettingsHandler(req);
     }
 
+    if (pathname === "/api/settings/prompts") {
+      if (method === "GET") return await getPromptsHandler();
+      if (method === "PUT" || method === "POST") return await savePromptsHandler(req);
+    }
+
     if (pathname === "/api/settings/mcp/tools" && method === "POST") {
       return await listMcpToolsHandler(req);
     }
@@ -1377,6 +1415,9 @@ export async function handleRequest(req: Request): Promise<Response> {
     if (gitStashCreate && method === "POST") {
       return await gitStashCreateHandler(gitStashCreate[1], req);
     }
+
+    const gitClone = pathname.match(/^\/api\/projects\/([^/]+)\/git\/clone$/);
+    if (gitClone && method === "POST") return await gitCloneHandler(gitClone[1], req);
 
     const gitFetch = pathname.match(/^\/api\/projects\/([^/]+)\/git\/fetch$/);
     if (gitFetch && method === "POST") return await gitSimpleActionHandler(gitFetch[1], "fetch");

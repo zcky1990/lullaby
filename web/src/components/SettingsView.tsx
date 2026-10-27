@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { useState } from "react";
-import { ChevronRight, FolderOpen, Plus } from "lucide-react";
+import { ChevronRight, FolderOpen, GitBranchPlus, Plus } from "lucide-react";
 import { ActivityFeed, type ActivityEvent } from "@/components/ActivityFeed";
 import { IntegrationForm } from "@/components/IntegrationForm";
 import type { SettingsSection } from "@/components/SettingsPanel";
@@ -19,10 +19,11 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { canPickDirectory, chooseWorkspaceDirectory } from "@/lib/bindings";
 import { SINGLETONS } from "@/lib/integrations";
 import { cn } from "@/lib/utils";
-import type { IntegrationPayload, ProjectDetail, TestResult } from "@/lib/api";
+import type { IntegrationPayload, Project, ProjectDetail, TestResult } from "@/lib/api";
 
 interface Props {
   detail: ProjectDetail;
@@ -31,6 +32,10 @@ interface Props {
   onSaveIntegration: (payload: IntegrationPayload) => Promise<void>;
   onTestIntegration: (payload: IntegrationPayload) => Promise<TestResult>;
   onUpdateWorkspace: (path: string, documentPath?: string) => Promise<void>;
+  onCloneRepository: (input: {
+    url: string;
+    protocol: "https" | "ssh";
+  }) => Promise<Project>;
 }
 
 interface ProviderOption {
@@ -118,6 +123,7 @@ export function SettingsView({
   onSaveIntegration,
   onTestIntegration,
   onUpdateWorkspace,
+  onCloneRepository,
 }: Props) {
   const { project, integrations } = detail;
   const [draftKinds, setDraftKinds] = useState<string[]>([]);
@@ -137,16 +143,24 @@ export function SettingsView({
       </div>
 
       {section === "workspace" && (
-        <CollapsibleSection
-          key={project.id + (project.workspace_path ?? "none")}
-          title="Workspace"
-        >
-          <WorkspaceSection
-            path={project.workspace_path}
-            documentPath={project.document_path}
-            onSave={onUpdateWorkspace}
-          />
-        </CollapsibleSection>
+        <>
+          <CollapsibleSection
+            key={project.id + (project.workspace_path ?? "none")}
+            title="Workspace"
+          >
+            <WorkspaceSection
+              path={project.workspace_path}
+              documentPath={project.document_path}
+              onSave={onUpdateWorkspace}
+            />
+          </CollapsibleSection>
+          <CollapsibleSection title="Clone repository" defaultOpen={!!project.workspace_path}>
+            <CloneSection
+              workspacePath={project.workspace_path}
+              onClone={onCloneRepository}
+            />
+          </CollapsibleSection>
+        </>
       )}
 
       {section === "integrations" && (
@@ -331,6 +345,115 @@ function WorkspaceSection({
           Simpan
         </Button>
         {saved ? <Badge variant="success">Tersimpan</Badge> : null}
+        {error ? <Badge variant="destructive">{error}</Badge> : null}
+      </div>
+    </div>
+  );
+}
+
+function CloneSection({
+  workspacePath,
+  onClone,
+}: {
+  workspacePath: string | null;
+  onClone: (input: {
+    url: string;
+    protocol: "https" | "ssh";
+  }) => Promise<Project>;
+}) {
+  const [url, setUrl] = useState("");
+  const [protocol, setProtocol] = useState<"https" | "ssh">("https");
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<string | undefined>();
+  const [error, setError] = useState<string | undefined>();
+  const ready = Boolean(workspacePath?.trim());
+
+  const clone = async () => {
+    const trimmedUrl = url.trim();
+    if (!trimmedUrl || !ready || busy) return;
+    setBusy(true);
+    setError(undefined);
+    setMessage(undefined);
+    try {
+      await onClone({ url: trimmedUrl, protocol });
+      setMessage(`Clone selesai ke ${workspacePath}`);
+      setUrl("");
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-col gap-4">
+      <p className="text-sm text-muted-foreground">
+        Clone langsung ke path workspace di atas. Folder harus kosong. Auth memakai credential
+        git di mesin (HTTPS credential helper / SSH key).
+      </p>
+      {!ready ? (
+        <p className="text-sm text-muted-foreground">
+          Set dan simpan <span className="font-medium">Path workspace</span> dulu sebelum clone.
+        </p>
+      ) : (
+        <p className="text-sm">
+          Tujuan: <span className="font-mono text-xs">{workspacePath}</span>
+        </p>
+      )}
+      <div className="grid gap-1.5">
+        <Label>Protokol</Label>
+        <ToggleGroup
+          type="single"
+          variant="outline"
+          size="sm"
+          value={protocol}
+          onValueChange={(value) => {
+            if (value === "https" || value === "ssh") {
+              setProtocol(value);
+              setMessage(undefined);
+            }
+          }}
+          disabled={!ready || busy}
+        >
+          <ToggleGroupItem value="https" aria-label="Clone via HTTPS">
+            HTTPS
+          </ToggleGroupItem>
+          <ToggleGroupItem value="ssh" aria-label="Clone via SSH">
+            SSH
+          </ToggleGroupItem>
+        </ToggleGroup>
+      </div>
+      <div className="grid gap-1.5">
+        <Label htmlFor="clone-url">Repository</Label>
+        <Input
+          id="clone-url"
+          value={url}
+          placeholder={
+            protocol === "ssh"
+              ? "git@github.com:org/repo.git atau org/repo"
+              : "https://github.com/org/repo.git atau org/repo"
+          }
+          disabled={!ready || busy}
+          onChange={(e) => {
+            setUrl(e.target.value);
+            setMessage(undefined);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") clone();
+          }}
+        />
+      </div>
+      <div className="flex items-center gap-2">
+        <Button
+          size="sm"
+          onClick={clone}
+          disabled={busy || !ready || !url.trim()}
+          data-icon="inline-start"
+        >
+          <GitBranchPlus />
+          {busy ? "Cloning…" : "Clone"}
+        </Button>
+        {message ? <Badge variant="success">{message}</Badge> : null}
         {error ? <Badge variant="destructive">{error}</Badge> : null}
       </div>
     </div>

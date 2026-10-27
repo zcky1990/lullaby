@@ -1,4 +1,4 @@
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { resolveWithin } from "../fs/workspace.ts";
 
 const decoder = new TextDecoder();
@@ -307,9 +307,7 @@ export async function listRemoteBranches(cwd: string): Promise<GitRemoteBranch[]
       const shortName = slash > 0 ? name.slice(slash + 1) : name;
       return { name, remote, shortName };
     })
-    .sort((a, b) =>
-      a.remote.localeCompare(b.remote) || a.shortName.localeCompare(b.shortName)
-    );
+    .sort((a, b) => a.remote.localeCompare(b.remote) || a.shortName.localeCompare(b.shortName));
 }
 
 export async function listStashes(cwd: string): Promise<GitStash[]> {
@@ -567,4 +565,129 @@ export async function createStash(
     throw new Error(result.stderr.trim() || result.stdout.trim() || "git stash gagal");
   }
   return (result.stdout || result.stderr).trim() || "Stash dibuat.";
+}
+
+export type CloneProtocol = "https" | "ssh";
+
+export function isSafeGitUrl(url: string): boolean {
+  const value = url.trim();
+  if (!value || value.length > 2000) return false;
+  if (/[\0\s;$`|"'<>]/.test(value)) return false;
+  if (value.includes("\\")) return false;
+  if (/^(https?:\/\/|git@|ssh:\/\/|git:\/\/)/i.test(value)) return true;
+  return /^[A-Za-z0-9_.\-]+\/[A-Za-z0-9_.\-]+(\.git)?$/.test(value);
+}
+
+function parseGitRemote(url: string): { host: string; path: string } | null {
+  const value = url.trim().replace(/\.git$/i, "");
+  if (!value) return null;
+
+  if (/^git@/i.test(value)) {
+    const colon = value.indexOf(":");
+    if (colon <= 4) return null;
+    const host = value.slice(4, colon);
+    const path = value.slice(colon + 1).replace(/^\/+/, "");
+    if (!host || !path) return null;
+    return { host, path };
+  }
+
+  if (/^ssh:\/\//i.test(value)) {
+    const without = value.replace(/^ssh:\/\//i, "").replace(/^git@/i, "");
+    const slash = without.indexOf("/");
+    if (slash <= 0) return null;
+    return {
+      host: without.slice(0, slash),
+      path: without.slice(slash + 1).replace(/^\/+/, ""),
+    };
+  }
+
+  if (/^https?:\/\//i.test(value) || /^git:\/\//i.test(value)) {
+    try {
+      const parsed = new URL(value);
+      const path = parsed.pathname.replace(/^\/+/, "");
+      if (!parsed.hostname || !path) return null;
+      return { host: parsed.hostname, path };
+    } catch {
+      return null;
+    }
+  }
+
+  if (/^[A-Za-z0-9_.\-]+\/[A-Za-z0-9_.\-]+$/.test(value)) {
+    return { host: "github.com", path: value };
+  }
+
+  return null;
+}
+
+export function normalizeCloneUrl(url: string, protocol: CloneProtocol): string {
+  const remote = parseGitRemote(url);
+  if (!remote) throw new Error("URL git tidak valid.");
+  const path = remote.path.replace(/\.git$/i, "");
+  if (!path || /[\0\s;$`|"'<>\\]/.test(path) || path.includes("..")) {
+    throw new Error("URL git tidak valid.");
+  }
+  if (protocol === "ssh") return `git@${remote.host}:${path}.git`;
+  return `https://${remote.host}/${path}.git`;
+}
+
+async function assertCloneTargetEmpty(target: string): Promise<void> {
+  const existing = await Deno.stat(target).catch(() => null);
+  if (!existing) return;
+  if (!existing.isDirectory) {
+    throw new Error(`Path workspace bukan folder: ${target}`);
+  }
+  const entries = [];
+  for await (const entry of Deno.readDir(target)) {
+    if (entry.name === "." || entry.name === "..") continue;
+    if (entry.name === ".DS_Store") continue;
+    entries.push(entry.name);
+  }
+  if (entries.length > 0) {
+    throw new Error(
+      `Folder workspace tidak kosong (${
+        entries.slice(0, 5).join(", ")
+      }). Kosongkan dulu atau pilih path lain.`,
+    );
+  }
+}
+
+export async function cloneRepository(
+  url: string,
+  targetPath: string,
+  protocol: CloneProtocol = "https",
+): Promise<{ path: string; output: string; url: string }> {
+  const resolvedUrl = normalizeCloneUrl(url, protocol);
+  if (!isSafeGitUrl(resolvedUrl)) throw new Error("URL git tidak valid.");
+
+  const target = normalizeWorkspacePath(targetPath);
+  const parent = dirname(target);
+  const parentStat = await Deno.stat(parent).catch(() => null);
+  if (!parentStat?.isDirectory) {
+    throw new Error(`Folder parent workspace tidak ditemukan: ${parent}`);
+  }
+
+  await assertCloneTargetEmpty(target);
+
+  const targetStat = await Deno.stat(target).catch(() => null);
+  let result: { code: number; stdout: string; stderr: string };
+  if (targetStat?.isDirectory) {
+    result = await execGit(target, ["clone", "--", resolvedUrl, "."]);
+  } else {
+    result = await execGit(parent, ["clone", "--", resolvedUrl, target]);
+  }
+
+  if (result.code !== 0) {
+    throw new Error(result.stderr.trim() || result.stdout.trim() || "git clone gagal");
+  }
+
+  const check = await checkGitRepository(target);
+  if (!check.ok) {
+    throw new Error(check.error ?? `Clone selesai tapi bukan git repository: ${target}`);
+  }
+
+  return {
+    path: check.cwd,
+    url: resolvedUrl,
+    output: (result.stdout || result.stderr).trim() || `Cloned ke ${check.cwd}`,
+  };
 }

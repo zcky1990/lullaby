@@ -38,22 +38,22 @@ finishing a change.
   `App.tsx` (tab list, and file/doc selection). All activity-bar menus use the outer `<aside>`;
   Global Settings keeps its section nav in that panel instead of inside the tab.
 - **Documents**: `DocumentPanel` switches between **Local** (`.md` files under
-  `projects.document_path`), **Docmost**, **Notion**, and **Confluence Cloud**. Remote sources
-  use `GET /documents?source=` / `GET /documents/:pageId?source=` (`docmost` default). Notion
-  auth is Internal Integration Token (+ optional `parentPageId`); Confluence is baseUrl + email +
-  API token (+ optional `spaceKey`). Create/update remote pages and local→Notion/Confluence sync
-  are out of v1 (Create only for Local/Docmost; Notion/Confluence tabs are read-only). Local docs
-  are renamed/saved on disk; manual sync (`POST /local-documents/sync`) creates/updates the
-  Docmost page and stores `page_id` in `local_documents`. `Generate ticket` in the document tab
-  calls `POST /generate-tickets` (`generateTicketsFromDocument`) which uses the first LLM
-  provider and only the `create_ticket` tool.
+  `projects.document_path`), **Docmost**, **Notion**, and **Confluence Cloud**. Remote sources use
+  `GET /documents?source=` / `GET /documents/:pageId?source=` (`docmost` default). Notion auth is
+  Internal Integration Token (+ optional `parentPageId`); Confluence is baseUrl + email + API token
+  (+ optional `spaceKey`). Create/update remote pages and local→Notion/Confluence sync are out of v1
+  (Create only for Local/Docmost; Notion/Confluence tabs are read-only). Local docs are
+  renamed/saved on disk; manual sync (`POST /local-documents/sync`) creates/updates the Docmost page
+  and stores `page_id` in `local_documents`. `Generate ticket` in the document tab calls
+  `POST /generate-tickets` (`generateTicketsFromDocument`) which uses the first LLM provider and
+  only the `create_ticket` tool.
 - **Tickets**: `local_tickets` (SQLite) are created locally (UI `TicketCreateDialog` + AI tool
   `create_ticket`); `GET /tickets` merges unsynced local tickets with Jira. Local tickets are
   editable from `TicketDetailDialog` (`PATCH /local-tickets/:id`, rich text description) and can be
   deleted only while unsynced (`DELETE` rejects tickets with `jira_key`). Syncing is manual
-  (`POST /local-tickets/:id/sync` → Jira issue) and sets `jira_key`/`sync_status`. Global
-  Automation (`auto_build_on_in_progress`, default off) starts a new Build chat when a Kanban
-  card moves To Do → In Progress; see `docs/automation.md`.
+  (`POST /local-tickets/:id/sync` → Jira issue) and sets `jira_key`/`sync_status`. Global Automation
+  (`auto_build_on_in_progress`, default off) starts a new Build chat when a Kanban card moves To Do
+  → In Progress; see `docs/automation.md`.
 - **Skills**: `src/server/skills.ts` discovers `SKILL.md` folders (frontmatter `name`/`description`)
   from `<workspace>/.agents/skills` (highest), `appDataDir()/<project-slug>/skills` (auto from Build
   chats), `appDataDir()/skills` (global), and `src/skills/builtin` (bundled, lowest priority). Chat
@@ -67,11 +67,11 @@ finishing a change.
   (needs Node >= 22.6, network, `--allow-run`). Enabled state lives in `app_settings`
   (`skills_enabled`, `skills_disabled`); UI is Global Settings → Skills.
 - **Git**: `src/integrations/git.ts` runs the `git` CLI inside `projects.workspace_path` (status,
-  branches, remotes, stashes, log, diff, show, stage/unstage, commit, checkout, fetch, pull,
-  push, create branch, merge, stash with `--` path guards). UI is SourceTree-like: `GitPanel`
-  (workspace, local/remotes/stashes) in the aside and `GitTab` (toolbar + File Status / History
-  with file list | diff splitter + commit form) in the tab; routes under
-  `/api/projects/:id/git/*`. Expects a git repository; returns a clear error otherwise.
+  branches, remotes, stashes, log, diff, show, stage/unstage, commit, checkout, fetch, pull, push,
+  create branch, merge, stash with `--` path guards). UI is SourceTree-like: `GitPanel` (workspace,
+  local/remotes/stashes) in the aside and `GitTab` (toolbar + File Status / History with file list |
+  diff splitter + commit form) in the tab; routes under `/api/projects/:id/git/*`. Expects a git
+  repository; returns a clear error otherwise.
 - **Terminal**: `src/server/terminal.ts` upgrades `/api/projects/:id/terminal` to a WebSocket and
   runs an interactive shell (`zsh`/`bash`, query `shell=` or global `terminal_shell` in
   `app_settings`) in the project workspace via a real PTY (`@sigma/pty-ffi`) with resize support.
@@ -80,6 +80,10 @@ finishing a change.
   `TerminalSession` instances (xterm.js + fit addon); sessions stay mounted while the panel is
   hidden, and the panel height persists. Shell default: Global Settings → Terminal. WebSocket auth
   uses the same session cookie as the HTTP API.
+- **Prompts**: global overrides for the Build system prompt and Plan prompt live in `app_settings`
+  (`system_prompt`, `plan_prompt`) and are read per chat run (`src/server/prompts.ts`); empty values
+  fall back to the built-in defaults. CRUD via `GET/PUT /api/settings/prompts`; UI is Global
+  Settings → Prompts.
 - **Roles**: global `roles` table (`name`, `description`, `persona`, `provider_id`), CRUD via
   `/api/roles`. Chat sends `roleId`; `chatHandler` uses the role's provider (falling back to the
   request/first provider) and prepends the persona to the system prompt. UI: Global Settings → Roles
@@ -94,8 +98,8 @@ finishing a change.
   stdio or http) so each server's tools can be discovered and enabled/disabled. Tool execution from
   chat is not wired yet.
 - **Automation**: global `auto_build_on_in_progress` in `app_settings` (GET/PUT
-  `/api/settings/automation`). UI: Global Settings → Automation. When on, Kanban To Do → In
-  Progress opens Chat Build with a ticket prompt (`docs/automation.md`).
+  `/api/settings/automation`). UI: Global Settings → Automation. When on, Kanban To Do → In Progress
+  opens Chat Build with a ticket prompt (`docs/automation.md`).
 - **List/menus**: `ActivityBar` (left rail) opens tabs in the main area (`TabsBar`).
   Workspace/Explorer/Document/Project Settings/Ticket keep a **separate** side panel in `<aside>`
   (`WorkspacePanel`, `FileTreePanel`, `DocumentPanel`, `SettingsPanel`, `TicketPanel`);

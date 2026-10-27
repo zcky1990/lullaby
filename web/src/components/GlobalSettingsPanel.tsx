@@ -2,6 +2,7 @@ import {
   Cpu,
   Info,
   type LucideIcon,
+  MessageSquareText,
   Palette,
   Server,
   Sparkles,
@@ -16,6 +17,7 @@ export type GlobalSection =
   | "appearance"
   | "llm"
   | "roles"
+  | "prompts"
   | "mcp"
   | "skills"
   | "automation"
@@ -26,6 +28,7 @@ const SECTIONS: { id: GlobalSection; label: string; icon: LucideIcon }[] = [
   { id: "appearance", label: "Appearance & Editor", icon: Palette },
   { id: "llm", label: "LLM Providers", icon: Cpu },
   { id: "roles", label: "Roles", icon: Users },
+  { id: "prompts", label: "Prompts", icon: MessageSquareText },
   { id: "mcp", label: "MCP", icon: Server },
   { id: "skills", label: "Skills", icon: Sparkles },
   { id: "automation", label: "Automation", icon: Zap },

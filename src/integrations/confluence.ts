@@ -207,7 +207,9 @@ export async function listDocuments(
       cfg,
       `/rest/api/content/${encodeURIComponent(pageId)}?expand=space`,
     );
-    if (!pageRes.ok) throw new Error(`${statusMessage(pageRes.status)} ${truncate(pageRes.text, 300)}`);
+    if (!pageRes.ok) {
+      throw new Error(`${statusMessage(pageRes.status)} ${truncate(pageRes.text, 300)}`);
+    }
     const page = JSON.parse(pageRes.text || "{}") as Record<string, unknown>;
     const space = page.space as Record<string, unknown> | undefined;
     const key = String(space?.key ?? cfg.spaceKey ?? "");

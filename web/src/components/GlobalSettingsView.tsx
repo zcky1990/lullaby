@@ -25,6 +25,7 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { AutomationSettings } from "@/components/AutomationSettings";
 import { LlmProvidersSettings } from "@/components/LlmProvidersSettings";
 import { McpSettings } from "@/components/McpSettings";
+import { PromptsSettings } from "@/components/PromptsSettings";
 import { RolesSettings } from "@/components/RolesSettings";
 import { SkillsSettings } from "@/components/SkillsSettings";
 import { TerminalSettings } from "@/components/TerminalSettings";
@@ -153,6 +154,7 @@ export function GlobalSettingsView({
       />
     );
   }
+  if (section === "prompts") return <PromptsSettings />;
   if (section === "mcp") return <McpSettings />;
   if (section === "skills") return <SkillsSettings projectId={projectId} />;
   if (section === "automation") return <AutomationSettings />;

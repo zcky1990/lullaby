@@ -58,6 +58,7 @@ Prefix: `/api/projects/:id/git/`
 | `stage` / `unstage` | `POST` | `{ paths }` |
 | `commit` | `POST` | `{ message }` |
 | `checkout` | `POST` | `{ branch }` (lokal atau `remote/name`) |
+| `clone` | `POST` | `{ url, protocol? }` → clone ke `workspace_path` (`https`\|`ssh`) |
 | `fetch` / `pull` / `push` | `POST` | Sinkron remote |
 | `branch` | `POST` | `{ name, checkout? }` buat branch |
 | `merge` | `POST` | `{ branch }` merge ke HEAD |

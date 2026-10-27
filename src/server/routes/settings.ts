@@ -2,6 +2,7 @@ import {
   AutomationSettingsInput,
   McpServerInput,
   McpSettingsInput,
+  PromptsSettingsInput,
   SkillsSettingsInput,
   TerminalSettingsInput,
 } from "../../config/schema.ts";
@@ -19,6 +20,7 @@ import {
   workspaceSkillsDir,
 } from "../skills.ts";
 import { readTerminalShellSetting, TERMINAL_SHELL_KEY } from "../terminal.ts";
+import { DEFAULT_PLAN_PROMPT, DEFAULT_SYSTEM_PROMPT, readPromptSettings } from "../prompts.ts";
 
 const MCP_SETTINGS_KEY = "mcp_servers";
 const AUTO_BUILD_KEY = "auto_build_on_in_progress";
@@ -154,4 +156,31 @@ export async function saveTerminalSettingsHandler(req: Request): Promise<Respons
   await setAppSetting(TERMINAL_SHELL_KEY, parsed.data.shell);
   await record("settings.terminal_updated", { shell: parsed.data.shell });
   return json({ shell: parsed.data.shell });
+}
+
+export async function getPromptsHandler(): Promise<Response> {
+  const settings = await readPromptSettings();
+  const storedSystem = await getAppSetting("system_prompt");
+  const storedPlan = await getAppSetting("plan_prompt");
+  return json({
+    systemPrompt: settings.systemPrompt,
+    planPrompt: settings.planPrompt,
+    defaultSystemPrompt: DEFAULT_SYSTEM_PROMPT,
+    defaultPlanPrompt: DEFAULT_PLAN_PROMPT,
+    customized: {
+      systemPrompt: Boolean(storedSystem?.trim()),
+      planPrompt: Boolean(storedPlan?.trim()),
+    },
+  });
+}
+
+export async function savePromptsHandler(req: Request): Promise<Response> {
+  const parsed = PromptsSettingsInput.safeParse(await readJson(req));
+  if (!parsed.success) {
+    return json({ error: "invalid_input", issues: parsed.error.issues }, 400);
+  }
+  await setAppSetting("system_prompt", parsed.data.systemPrompt);
+  await setAppSetting("plan_prompt", parsed.data.planPrompt);
+  await record("settings.prompts_updated", {});
+  return json({ ok: true });
 }

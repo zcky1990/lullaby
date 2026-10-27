@@ -6,7 +6,7 @@ Aside + tab. Section collapsible di `SettingsView`:
 
 | Section | Isi |
 | --- | --- |
-| Workspace | `workspace_path`, `document_path` (+ native folder picker) |
+| Workspace | `workspace_path`, `document_path` (+ native folder picker); **Clone repository** ke path workspace (HTTPS/SSH) |
 | Integrations | Document (Docmost/Notion/Confluence), Ticket (Jira), Code (GitHub) |
 | Activity | Feed event project |
 
