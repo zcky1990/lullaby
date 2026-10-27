@@ -401,6 +401,14 @@ Deno.test("parseSkillFile reads frontmatter and normalizes name", () => {
   equal(parsed.body.includes("description:"), false);
 });
 
+Deno.test("parseSkillFile folds YAML block scalar descriptions", () => {
+  const parsed = parseSkillFile(
+    "---\nname: code-review\ndescription: >-\n  Review workspace code changes.\n  Use when invoked.\n---\n\nBody.",
+    "fallback",
+  );
+  equal(parsed.description, "Review workspace code changes. Use when invoked.");
+});
+
 Deno.test("parseSkillFile falls back to folder name and first paragraph", () => {
   const parsed = parseSkillFile("# Heading\n\nUse this for X.", "my-skill");
   equal(parsed.name, "my-skill");

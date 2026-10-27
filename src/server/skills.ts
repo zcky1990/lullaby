@@ -1,7 +1,7 @@
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { appDataDir } from "../core/paths.ts";
-import { getAppSetting } from "../db/db.ts";
+import { getAppSetting, setAppSetting } from "../db/db.ts";
 
 export type SkillSource = "global" | "workspace" | "project" | "builtin";
 
@@ -21,6 +21,13 @@ interface ParsedSkill {
 
 const MAX_SKILL_CHARS = 20_000;
 const MAX_DESCRIPTION = 240;
+
+const DEFAULT_INTEGRATION_SKILLS = [
+  "docmost-api",
+  "jira-api",
+  "confluence-api",
+  "clickup-api",
+];
 
 export function globalSkillsDir(): string {
   return join(appDataDir(), "skills");
@@ -48,6 +55,40 @@ export function projectSkillsDir(slug: string): string {
   return join(appDataDir(), slug, "skills");
 }
 
+export async function installDefaultSkills(): Promise<string[]> {
+  if ((await getAppSetting("skills_defaults_installed")) === "true") return [];
+
+  const sourceRoot = builtinSkillsDir();
+  const targetRoot = globalSkillsDir();
+  const installed: string[] = [];
+  let scanned = false;
+
+  try {
+    await Deno.mkdir(targetRoot, { recursive: true });
+    for await (const entry of Deno.readDir(sourceRoot)) {
+      scanned = true;
+      if (!entry.isDirectory || !DEFAULT_INTEGRATION_SKILLS.includes(entry.name)) continue;
+      const text = await Deno.readTextFile(join(sourceRoot, entry.name, "SKILL.md")).catch(
+        () => null,
+      );
+      if (!text) continue;
+      const targetDir = join(targetRoot, entry.name);
+      const target = join(targetDir, "SKILL.md");
+      const exists = await Deno.stat(target).then(() => true).catch(() => false);
+      if (exists) continue;
+      await Deno.mkdir(targetDir, { recursive: true });
+      await Deno.writeTextFile(target, text);
+      installed.push(entry.name);
+    }
+  } catch {
+    return [];
+  }
+
+  if (!scanned) return [];
+  await setAppSetting("skills_defaults_installed", "true");
+  return installed;
+}
+
 function parseFrontmatter(text: string): { meta: Record<string, string>; body: string } {
   if (!text.startsWith("---")) return { meta: {}, body: text };
   const end = text.indexOf("\n---", 3);
@@ -56,15 +97,29 @@ function parseFrontmatter(text: string): { meta: Record<string, string>; body: s
   const body = text.slice(end + 4).replace(/^\r?\n/, "");
   const meta: Record<string, string> = {};
   let currentKey = "";
+  let blockMode: "folded" | "literal" | null = null;
   for (const line of header.split(/\r?\n/)) {
+    const block = /^([A-Za-z0-9_-]+)\s*:\s*([>|][+-]?)\s*$/.exec(line);
+    if (block) {
+      currentKey = block[1].toLowerCase();
+      meta[currentKey] = "";
+      blockMode = block[2].startsWith(">") ? "folded" : "literal";
+      continue;
+    }
     const match = /^([A-Za-z0-9_-]+)\s*:\s*(.*)$/.exec(line);
     if (match) {
       currentKey = match[1].toLowerCase();
+      blockMode = null;
       meta[currentKey] = match[2].replace(/^["']|["']$/g, "").trim();
       continue;
     }
     if (currentKey && /^\s+/.test(line)) {
-      meta[currentKey] = `${meta[currentKey]} ${line.trim()}`.trim();
+      const value = line.trim();
+      if (blockMode === "literal") {
+        meta[currentKey] = meta[currentKey] ? `${meta[currentKey]}\n${value}` : value;
+      } else {
+        meta[currentKey] = `${meta[currentKey]} ${value}`.trim();
+      }
     }
   }
   return { meta, body };

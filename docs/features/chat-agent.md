@@ -34,6 +34,11 @@ Discovery: workspace `.agents/skills` > project skills (auto) > global skills > 
 Composer: `/skill-name` menyuntikkan body ke system prompt.  
 Setelah Build sukses yang memakai tools, `skill-learn.ts` dapat menulis skill project.
 
+Saat aplikasi pertama kali dibuka, `installDefaultSkills()` (`src/core/bootstrap.ts`) menyalin skill
+integrasi bawaan ke **global skills** (`{appDataDir}/skills`): `docmost-api`, `jira-api`,
+`confluence-api`, `clickup-api`. Seed hanya sekali (`app_settings.skills_defaults_installed`);
+skill bisa dilihat/diatur di Global Settings → Skills.
+
 ### `/code-review`
 
 Skill builtin (`src/skills/builtin/code-review/SKILL.md`). Saat `skillName=code-review`:

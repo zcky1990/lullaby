@@ -986,9 +986,16 @@ export function ChatSidebar({
                   }
                   if (event.key === "Enter" || event.key === "Tab") {
                     event.preventDefault();
-                    applySkillMention(
-                      filteredSkills[Math.min(skillActiveIndex, filteredSkills.length - 1)],
-                    );
+                    const option =
+                      filteredSkills[Math.min(skillActiveIndex, filteredSkills.length - 1)];
+                    if (
+                      event.key === "Enter" &&
+                      input.trim().toLowerCase() === `/${option.name}`.toLowerCase()
+                    ) {
+                      void send();
+                      return;
+                    }
+                    applySkillMention(option);
                     return;
                   }
                   if (event.key === "Escape") {
