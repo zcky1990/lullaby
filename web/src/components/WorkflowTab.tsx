@@ -16,6 +16,7 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import {
+  BookOpen,
   FileCode2,
   GitBranch,
   Network,
@@ -30,6 +31,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { useTheme } from "@/components/ThemeProvider";
+import { WikiTab } from "@/components/WikiTab";
 import {
   api,
   type WorkflowDefinition,
@@ -78,7 +80,7 @@ export function WorkflowTab({ projectId, slug, onSaved, onDeleted }: Props) {
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
   const [steps, setSteps] = useState<WorkflowRunStep[]>([]);
   const [selectedStep, setSelectedStep] = useState<string | null>(null);
-  const [view, setView] = useState<"editor" | "graph">("editor");
+  const [view, setView] = useState<"editor" | "graph" | "wiki">("editor");
   const [dirty, setDirty] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -393,10 +395,22 @@ export function WorkflowTab({ projectId, slug, onSaved, onDeleted }: Props) {
               <Network />
               Graph
             </Button>
+            <Button
+              size="sm"
+              variant={view === "wiki" ? "secondary" : "ghost"}
+              className="h-6 px-2 text-[11px]"
+              onClick={() => setView("wiki")}
+              data-icon="inline-start"
+            >
+              <BookOpen />
+              Wiki
+            </Button>
           </div>
 
           <div className="min-h-0 flex-1">
-            {view === "editor"
+            {view === "wiki"
+              ? <WikiTab />
+              : view === "editor"
               ? (
                 <Suspense
                   fallback={<Skeleton className="h-full w-full rounded-none" />}
@@ -432,37 +446,41 @@ export function WorkflowTab({ projectId, slug, onSaved, onDeleted }: Props) {
               )}
           </div>
 
-          <div className="h-[220px] shrink-0 overflow-auto border-t bg-background">
-            <div className="flex items-center justify-between gap-2 border-b px-3 py-1.5">
-              <span className="truncate font-mono text-[11px]">
-                {selectedStepData?.stepId ?? "Log"}
-              </span>
-              {selectedStepData
-                ? (
-                  <div className="flex items-center gap-2">
-                    <Badge variant={stepBadgeVariant(selectedStepData.status)}>
-                      {selectedStepData.status}
-                    </Badge>
-                    {selectedStepData.exitCode !== undefined
-                      ? (
-                        <span className="text-[10px] text-muted-foreground">
-                          exit {selectedStepData.exitCode}
-                        </span>
-                      )
-                      : null}
-                  </div>
-                )
-                : null}
-            </div>
-            <div className="px-3 py-2">
-              <p className="mb-1 font-mono text-[11px] text-muted-foreground">
-                $ {selectedStepData?.command ?? ""}
-              </p>
-              <pre className="font-mono text-[11px] whitespace-pre-wrap">
-                {selectedStepData?.log || "(belum ada log)"}
-              </pre>
-            </div>
-          </div>
+          {view !== "wiki"
+            ? (
+              <div className="h-[220px] shrink-0 overflow-auto border-t bg-background">
+                <div className="flex items-center justify-between gap-2 border-b px-3 py-1.5">
+                  <span className="truncate font-mono text-[11px]">
+                    {selectedStepData?.stepId ?? "Log"}
+                  </span>
+                  {selectedStepData
+                    ? (
+                      <div className="flex items-center gap-2">
+                        <Badge variant={stepBadgeVariant(selectedStepData.status)}>
+                          {selectedStepData.status}
+                        </Badge>
+                        {selectedStepData.exitCode !== undefined
+                          ? (
+                            <span className="text-[10px] text-muted-foreground">
+                              exit {selectedStepData.exitCode}
+                            </span>
+                          )
+                          : null}
+                      </div>
+                    )
+                    : null}
+                </div>
+                <div className="px-3 py-2">
+                  <p className="mb-1 font-mono text-[11px] text-muted-foreground">
+                    $ {selectedStepData?.command ?? ""}
+                  </p>
+                  <pre className="font-mono text-[11px] whitespace-pre-wrap">
+                    {selectedStepData?.log || "(belum ada log)"}
+                  </pre>
+                </div>
+              </div>
+            )
+            : null}
         </div>
 
         <aside className="flex w-72 shrink-0 flex-col overflow-y-auto border-l">

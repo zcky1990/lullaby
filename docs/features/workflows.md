@@ -140,7 +140,8 @@ steps:
 ## UI
 
 - Menu **Workflows** (activity bar) → `WorkflowPanel` di sidebar: daftar file, status run terakhir,
-  recent runs, tombol **Workflow baru**.
+  recent runs, tombol **Workflow baru**, dan **Dokumentasi** (ikon buku / link) yang membuka tab
+  **Workflow Docs** berisi panduan YAML lengkap di dalam aplikasi.
 - Tab `WorkflowTab`:
   - Editor YAML Monaco (dirty, Save)
   - Graph React Flow (node per step, edge dependency, warna status)

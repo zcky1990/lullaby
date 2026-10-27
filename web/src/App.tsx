@@ -49,6 +49,7 @@ import { TicketPanel } from "@/components/TicketPanel";
 import { TicketDetailDialog } from "@/components/TicketDetailDialog";
 import { TicketKanban } from "@/components/TicketKanban";
 import { useTheme } from "@/components/ThemeProvider";
+import { WorkflowDocsTab } from "@/components/WorkflowDocsTab";
 import { WorkflowPanel } from "@/components/WorkflowPanel";
 import { WorkspacePanel } from "@/components/WorkspacePanel";
 import { Badge } from "@/components/ui/badge";
@@ -350,6 +351,15 @@ export default function App() {
     },
     [currentId, focusTab],
   );
+
+  const openWorkflowDocs = useCallback(() => {
+    if (!currentId) return;
+    focusTab({
+      id: `workflow-docs:${currentId}`,
+      kind: "workflow-docs",
+      title: "Workflow Docs",
+    });
+  }, [currentId, focusTab]);
 
   const createWorkflow = useCallback(async () => {
     if (!currentId) return;
@@ -1048,6 +1058,8 @@ export default function App() {
             onOpenTickets={() => openSingleton("ticket", "Ticket Board")}
           />
         );
+      case "workflow-docs":
+        return <WorkflowDocsTab />;
       case "workflow":
         return (
           <Suspense fallback={<Skeleton className="h-full w-full rounded-none" />}>
@@ -1151,6 +1163,7 @@ export default function App() {
               error={workflowError}
               onRefresh={() => currentId && void loadWorkflows(currentId)}
               onCreate={() => void createWorkflow()}
+              onOpenDocs={openWorkflowDocs}
               onSelect={openWorkflow}
               onOpenRun={openWorkflow}
             />
@@ -1247,6 +1260,7 @@ export default function App() {
               activeTab?.kind === "review" ||
               activeTab?.kind === "git" ||
               activeTab?.kind === "workflow" ||
+              activeTab?.kind === "workflow-docs" ||
               activeTab?.kind === "document" ||
               activeTab?.kind === "settings" ||
               activeTab?.kind === "global"

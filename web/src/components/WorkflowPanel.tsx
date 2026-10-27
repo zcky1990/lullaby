@@ -1,4 +1,4 @@
-import { Play, Plus, RefreshCw } from "lucide-react";
+import { BookOpen, Play, Plus, RefreshCw } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { PanelHeader } from "@/components/PanelHeader";
@@ -16,6 +16,7 @@ interface Props {
   error?: string;
   onRefresh: () => void;
   onCreate: () => void;
+  onOpenDocs: () => void;
   onSelect: (slug: string, title: string) => void;
   onOpenRun: (slug: string, title: string) => void;
 }
@@ -29,6 +30,7 @@ export function WorkflowPanel({
   error,
   onRefresh,
   onCreate,
+  onOpenDocs,
   onSelect,
   onOpenRun,
 }: Props) {
@@ -45,6 +47,16 @@ export function WorkflowPanel({
           >
             <Plus />
             Workflow baru
+          </Button>
+          <Button
+            size="icon"
+            variant="ghost"
+            className="size-8 shrink-0"
+            onClick={onOpenDocs}
+            aria-label="Dokumentasi workflow"
+            title="Dokumentasi workflow"
+          >
+            <BookOpen />
           </Button>
           <Button
             size="icon"
