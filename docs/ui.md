@@ -11,6 +11,7 @@ status bar.
 | Explorer | `FileTreePanel` — butuh `workspace_path` |
 | Document | `DocumentPanel` — Local / Docmost / Notion / Confluence |
 | Ticket | `TicketPanel` — filter, create, refresh |
+| Workflows | `WorkflowPanel` — daftar YAML, recent runs, create/refresh |
 | Project Settings | `SettingsPanel` — section nav |
 | Terminal | Toggle **bottom panel** (bukan tab utama) |
 | Git | `GitPanel` — branches / refresh |
@@ -21,13 +22,18 @@ membuka **singleton tab**.
 
 ## Area utama (`TabsBar`)
 
-Jenis tab: `workspace` | `ticket` | `settings` | `global` | `document` | `file` | `review` | `git`.
+Jenis tab: `workspace` | `ticket` | `workflow` | `settings` | `global` | `document` | `file` |
+`review` | `git`.
 
 - **File**: Monaco (lazy), dirty flag, simpan tombol / `Cmd|Ctrl+S` → `PUT .../files/content`
 - **Document**: Markdown preview + Edit (lokal/Docmost); Notion/Confluence read-only
 - **Review**: accept/reject hunk dari chat `write_file`
 - **Ticket**: Kanban board
 - **Git**: Changes + History
+- **Workflow**: editor YAML + DAG (React Flow) + run history/step logs
+
+Menu Workflows membuka tab home; klik file workflow di panel membuka tab `workflow:<project>:<slug>`
+(dinamis).
 
 State tab: `web/src/hooks/useEditorTabs.ts`, dikelola dari `App.tsx`.
 

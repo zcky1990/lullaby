@@ -49,6 +49,7 @@ import { TicketPanel } from "@/components/TicketPanel";
 import { TicketDetailDialog } from "@/components/TicketDetailDialog";
 import { TicketKanban } from "@/components/TicketKanban";
 import { useTheme } from "@/components/ThemeProvider";
+import { WorkflowPanel } from "@/components/WorkflowPanel";
 import { WorkspacePanel } from "@/components/WorkspacePanel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -79,10 +80,15 @@ import {
   type ProjectDetail,
   type TestResult,
   type TicketSummary,
+  type WorkflowRunSummary,
+  type WorkflowSummary,
 } from "@/lib/api";
 
 const MonacoViewer = lazy(() => import("@/components/MonacoViewer"));
 const MarkdownView = lazy(() => import("@/components/MarkdownView"));
+const WorkflowTabComponent = lazy(() =>
+  import("@/components/WorkflowTab").then((module) => ({ default: module.WorkflowTab }))
+);
 
 const ACTIVE_PROJECT_KEY = "rnd.activeProjectId:v1";
 const PANEL_WIDTH_KEY = "rnd.panelWidth:v1";
@@ -121,6 +127,12 @@ export default function App() {
   const [llmProviders, setLlmProviders] = useState<LlmProvider[]>([]);
   const [roles, setRoles] = useState<Role[]>([]);
   const [addingRole, setAddingRole] = useState(false);
+  const [workflows, setWorkflows] = useState<WorkflowSummary[]>([]);
+  const [workflowRuns, setWorkflowRuns] = useState<WorkflowRunSummary[]>([]);
+  const [workflowRootPath, setWorkflowRootPath] = useState<string | undefined>();
+  const [workflowSource, setWorkflowSource] = useState<"workspace" | "app">("app");
+  const [workflowLoading, setWorkflowLoading] = useState(false);
+  const [workflowError, setWorkflowError] = useState<string | undefined>();
 
   const {
     tabs,
@@ -304,6 +316,55 @@ export default function App() {
       setGitLoading(false);
     }
   }, []);
+
+  const loadWorkflows = useCallback(async (id: string) => {
+    setWorkflowLoading(true);
+    setWorkflowError(undefined);
+    try {
+      const [list, runs] = await Promise.all([
+        api.listWorkflows(id),
+        api.listWorkflowRuns(id, { limit: 20 }),
+      ]);
+      setWorkflows(list.workflows);
+      setWorkflowRuns(runs.runs);
+      setWorkflowRootPath(list.root);
+      setWorkflowSource(list.source);
+    } catch (error) {
+      setWorkflowError((error as Error).message);
+      setWorkflows([]);
+      setWorkflowRuns([]);
+    } finally {
+      setWorkflowLoading(false);
+    }
+  }, []);
+
+  const openWorkflow = useCallback(
+    (slug: string, title: string) => {
+      if (!currentId) return;
+      focusTab({
+        id: `workflow:${currentId}:${slug}`,
+        kind: "workflow",
+        title,
+        ref: slug,
+      });
+    },
+    [currentId, focusTab],
+  );
+
+  const createWorkflow = useCallback(async () => {
+    if (!currentId) return;
+    const existing = new Set(workflows.map((workflow) => workflow.slug));
+    let slug = "new-workflow";
+    let index = 2;
+    while (existing.has(slug)) slug = `new-workflow-${index++}`;
+    try {
+      const result = await api.createWorkflow(currentId, { name: slug });
+      await loadWorkflows(currentId);
+      openWorkflow(result.workflow.slug, result.workflow.name);
+    } catch (error) {
+      setWorkflowError((error as Error).message);
+    }
+  }, [currentId, workflows, loadWorkflows, openWorkflow]);
 
   const stageGit = useCallback(
     async (paths: string[]) => {
@@ -697,7 +758,17 @@ export default function App() {
     }
     if (menu === "ticket") loadTickets(currentId).catch(console.error);
     if (menu === "git") loadGit(currentId).catch(console.error);
-  }, [menu, currentId, docSource, loadDocuments, loadLocalDocuments, loadTickets, loadGit]);
+    if (menu === "workflow") loadWorkflows(currentId).catch(console.error);
+  }, [
+    menu,
+    currentId,
+    docSource,
+    loadDocuments,
+    loadLocalDocuments,
+    loadTickets,
+    loadGit,
+    loadWorkflows,
+  ]);
 
   useEffect(() => {
     if (menu === "settings" && !currentId) setMenu("workspace");
@@ -709,6 +780,7 @@ export default function App() {
     source.onmessage = (message) => {
       try {
         const event = JSON.parse(message.data) as ActivityEvent;
+        if (event.type.startsWith("workflow.step.")) return;
         setActivity((current) => [event, ...current].slice(0, 50));
       } catch {
         // ignore malformed events
@@ -726,6 +798,7 @@ export default function App() {
       return;
     }
     else if (next === "git") openSingleton("git", "Git");
+    else if (next === "workflow") openSingleton("workflow", "Workflows");
     else if (next === "settings") openSingleton("settings", "Project Settings");
     else setMenu(next);
   };
@@ -975,6 +1048,20 @@ export default function App() {
             onOpenTickets={() => openSingleton("ticket", "Ticket Board")}
           />
         );
+      case "workflow":
+        return (
+          <Suspense fallback={<Skeleton className="h-full w-full rounded-none" />}>
+            <WorkflowTabComponent
+              projectId={currentId}
+              slug={tab.ref ?? null}
+              onSaved={() => currentId && loadWorkflows(currentId)}
+              onDeleted={() => {
+                closeTab(tab.id);
+                if (currentId) loadWorkflows(currentId).catch(console.error);
+              }}
+            />
+          </Suspense>
+        );
       case "git":
         return (
           <GitTab
@@ -1026,6 +1113,7 @@ export default function App() {
         menu === "settings" ||
         menu === "ticket" ||
         menu === "git" ||
+        menu === "workflow" ||
         menu === "global") && (
         <aside
           style={{ width: panelWidth }}
@@ -1052,6 +1140,20 @@ export default function App() {
           )}
           {menu === "global" && (
             <GlobalSettingsPanel section={globalSection} onSelect={setGlobalSection} />
+          )}
+          {menu === "workflow" && (
+            <WorkflowPanel
+              workflows={workflows}
+              runs={workflowRuns}
+              root={workflowRootPath}
+              source={workflowSource}
+              loading={workflowLoading}
+              error={workflowError}
+              onRefresh={() => currentId && void loadWorkflows(currentId)}
+              onCreate={() => void createWorkflow()}
+              onSelect={openWorkflow}
+              onOpenRun={openWorkflow}
+            />
           )}
           {menu === "git" && (
             <GitPanel
@@ -1144,6 +1246,7 @@ export default function App() {
             activeTab?.kind === "file" ||
               activeTab?.kind === "review" ||
               activeTab?.kind === "git" ||
+              activeTab?.kind === "workflow" ||
               activeTab?.kind === "document" ||
               activeTab?.kind === "settings" ||
               activeTab?.kind === "global"

@@ -63,6 +63,7 @@ async function completeOpenAi(
   turns: ChatTurn[],
   tools: ToolDef[],
   temperature?: number,
+  maxTokens?: number,
 ): Promise<{ text: string; toolCalls: ToolCall[] }> {
   const base = (provider.base_url ?? "").replace(/\/+$/, "");
   if (!base) throw new Error("baseUrl provider LLM belum diisi.");
@@ -71,6 +72,7 @@ async function completeOpenAi(
     messages: openAiMessages(turns),
   };
   if (temperature !== undefined) body.temperature = temperature;
+  if (maxTokens !== undefined) body.max_tokens = maxTokens;
   if (tools.length) {
     body.tools = tools.map((tool) => ({
       type: "function",
@@ -112,6 +114,7 @@ async function completeAnthropic(
   turns: ChatTurn[],
   tools: ToolDef[],
   temperature?: number,
+  maxTokens?: number,
 ): Promise<{ text: string; toolCalls: ToolCall[] }> {
   const base = (provider.base_url ?? "").replace(/\/+$/, "");
   if (!base) throw new Error("baseUrl provider LLM belum diisi.");
@@ -175,7 +178,7 @@ async function completeAnthropic(
 
   const body: Record<string, unknown> = {
     model: provider.model ?? "",
-    max_tokens: 2048,
+    max_tokens: maxTokens ?? 2048,
     system: system || undefined,
     messages,
   };
@@ -221,11 +224,12 @@ export function complete(
   turns: ChatTurn[],
   tools: ToolDef[],
   temperature?: number,
+  maxTokens?: number,
 ): Promise<{ text: string; toolCalls: ToolCall[] }> {
   const type = (provider.provider || "openai").toLowerCase();
   return type === "anthropic"
-    ? completeAnthropic(provider, turns, tools, temperature)
-    : completeOpenAi(provider, turns, tools, temperature);
+    ? completeAnthropic(provider, turns, tools, temperature, maxTokens)
+    : completeOpenAi(provider, turns, tools, temperature, maxTokens);
 }
 
 export const VARIANT_TEMPERATURE: Record<string, number | undefined> = {

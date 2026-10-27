@@ -134,6 +134,105 @@ export interface GitCommitDetail extends GitCommit {
   diff: string;
 }
 
+export type WorkflowRunStatus =
+  | "running"
+  | "success"
+  | "failed"
+  | "canceled"
+  | "interrupted";
+
+export type WorkflowStepStatus =
+  | "pending"
+  | "running"
+  | "success"
+  | "failed"
+  | "skipped"
+  | "canceled";
+
+export interface WorkflowRunSummary {
+  id: string;
+  workflowSlug: string;
+  workflowName: string;
+  status: WorkflowRunStatus;
+  trigger: string;
+  error?: string;
+  startedAt?: string;
+  finishedAt?: string;
+  createdAt: string;
+}
+
+export interface WorkflowRunStep {
+  id: string;
+  stepId: string;
+  status: WorkflowStepStatus;
+  command: string;
+  exitCode?: number;
+  log: string;
+  startedAt?: string;
+  finishedAt?: string;
+}
+
+export interface WorkflowSummary {
+  slug: string;
+  name: string;
+  description?: string;
+  path: string;
+  source: "workspace" | "app";
+  updatedAt?: string;
+  stepCount: number;
+  error?: string;
+  lastRun?: WorkflowRunSummary;
+}
+
+export interface WorkflowLlmMessage {
+  role: "system" | "user" | "assistant";
+  content: string;
+}
+
+export interface WorkflowLlmWith {
+  prompt?: string;
+  messages?: WorkflowLlmMessage[];
+  system?: string;
+  provider?: string;
+  role?: string;
+  session?: string;
+  model?: string;
+  temperature?: number;
+  maxTokens?: number;
+}
+
+export interface WorkflowDefinitionStep {
+  id: string;
+  kind: "shell" | "llm";
+  run?: string;
+  action?: string;
+  with?: WorkflowLlmWith;
+  output?: string;
+  depends: string[];
+  env: Record<string, string>;
+  workingDir?: string;
+  retry: { limit: number; intervalSec: number };
+  timeoutSec?: number;
+  continueOn?: string;
+}
+
+export interface WorkflowDefinition {
+  name: string;
+  description?: string;
+  env: Record<string, string>;
+  workingDir?: string;
+  llm?: {
+    provider?: string;
+    model?: string;
+    role?: string;
+    session?: string;
+    system?: string;
+    temperature?: number;
+  };
+  steps: WorkflowDefinitionStep[];
+  layers: string[][];
+}
+
 export interface PromptsSettings {
   systemPrompt: string;
   planPrompt: string;
@@ -603,6 +702,52 @@ export const api = {
     ),
   saveSkillsSettings: (payload: { enabled: boolean; disabled: string[] }) =>
     request<{ ok: boolean }>("/api/settings/skills", jsonInit("PUT", payload)),
+  listWorkflows: (projectId: string) =>
+    request<{ root: string; source: "workspace" | "app"; workflows: WorkflowSummary[] }>(
+      `/api/projects/${projectId}/workflows`,
+    ),
+  getWorkflow: (projectId: string, slug: string) =>
+    request<{ workflow: WorkflowSummary; yaml: string; definition: WorkflowDefinition }>(
+      `/api/projects/${projectId}/workflows/${encodeURIComponent(slug)}`,
+    ),
+  createWorkflow: (projectId: string, payload: { name: string; yaml?: string }) =>
+    request<{ workflow: WorkflowSummary }>(
+      `/api/projects/${projectId}/workflows`,
+      jsonInit("POST", payload),
+    ),
+  saveWorkflow: (projectId: string, slug: string, yaml: string) =>
+    request<{ workflow: WorkflowSummary }>(
+      `/api/projects/${projectId}/workflows/${encodeURIComponent(slug)}`,
+      jsonInit("PUT", { yaml }),
+    ),
+  deleteWorkflow: (projectId: string, slug: string) =>
+    request<{ ok: boolean }>(
+      `/api/projects/${projectId}/workflows/${encodeURIComponent(slug)}`,
+      { method: "DELETE" },
+    ),
+  runWorkflow: (projectId: string, slug: string) =>
+    request<{ runId: string }>(
+      `/api/projects/${projectId}/workflows/${encodeURIComponent(slug)}/run`,
+      { method: "POST" },
+    ),
+  listWorkflowRuns: (projectId: string, options?: { workflow?: string; limit?: number }) =>
+    request<{ runs: WorkflowRunSummary[] }>(
+      `/api/projects/${projectId}/workflow-runs?${
+        new URLSearchParams({
+          ...(options?.workflow ? { workflow: options.workflow } : {}),
+          limit: String(options?.limit ?? 50),
+        }).toString()
+      }`,
+    ),
+  getWorkflowRun: (projectId: string, runId: string) =>
+    request<{ run: WorkflowRunSummary; steps: WorkflowRunStep[] }>(
+      `/api/projects/${projectId}/workflow-runs/${encodeURIComponent(runId)}`,
+    ),
+  cancelWorkflowRun: (projectId: string, runId: string) =>
+    request<{ ok: boolean }>(
+      `/api/projects/${projectId}/workflow-runs/${encodeURIComponent(runId)}/cancel`,
+      { method: "POST" },
+    ),
   gitStatus: (projectId: string) =>
     request<{ status: GitStatus }>(`/api/projects/${projectId}/git/status`),
   gitBranches: (projectId: string) =>

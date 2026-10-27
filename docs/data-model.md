@@ -45,6 +45,21 @@ Backlog lokal: title, description (HTML disanitasi), status Kanban, priority, ty
 
 Meta sync file lokal → Docmost: `path`, `page_id`, `sync_status`, …
 
+### `workflow_runs`
+
+Snapshot YAML (`yaml`, `workflow_path`), `workflow_slug`, `workflow_name`, `status`
+(`running|success|failed|canceled|interrupted`), `trigger`, `error`, timestamp. Satu run aktif per
+workflow; run yang masih `running` saat startup ditandai `interrupted`.
+
+### `workflow_sessions` / `workflow_session_messages`
+
+Sesi AI per project untuk langkah workflow (`action: chat.completion`): `name` unik per project +
+riwayat `role`/`content`. Dipakai ulang oleh step/run berikutnya dengan nama sesi yang sama.
+
+### `workflow_run_steps`
+
+`run_id`, `step_id`, `status`, `command`, `exit_code`, `log` (stdout+stderr, capped), timestamp.
+
 ### `events`
 
 Log aktivitas untuk SSE / Activity feed.
@@ -62,6 +77,11 @@ Key-value global.
 | `skills_disabled` | JSON skill id[] |
 | `auto_build_on_in_progress` | `"true"` / `"false"` |
 | `terminal_shell` | `"zsh"` / `"bash"` |
+
+## Workflow di disk (bukan tabel)
+
+- `<workspace>/.workflows/<slug>.yaml`
+- Fallback: `{appDataDir}/<project-slug>/workflows/<slug>.yaml`
 
 ## Skills di disk (bukan tabel)
 

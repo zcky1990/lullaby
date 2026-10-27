@@ -7,6 +7,7 @@ import {
   SlidersHorizontal,
   SquareTerminal,
   Ticket,
+  Workflow,
   type LucideIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -19,6 +20,7 @@ export type Menu =
   | "git"
   | "document"
   | "ticket"
+  | "workflow"
   | "settings"
   | "global";
 
@@ -41,6 +43,14 @@ const ITEMS: {
   },
   { id: "document", label: "Document", icon: FileText, group: "main" },
   { id: "ticket", label: "Ticket", icon: Ticket, group: "main" },
+  {
+    id: "workflow",
+    label: "Workflows",
+    icon: Workflow,
+    requiresProject: true,
+    requiresWorkspace: true,
+    group: "main",
+  },
   {
     id: "settings",
     label: "Project Settings",

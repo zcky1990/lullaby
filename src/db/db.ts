@@ -120,6 +120,50 @@ CREATE TABLE IF NOT EXISTS chat_messages (
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+CREATE TABLE IF NOT EXISTS workflow_sessions (
+  id         TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  name       TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE (project_id, name)
+);
+
+CREATE TABLE IF NOT EXISTS workflow_session_messages (
+  id         TEXT PRIMARY KEY,
+  session_id TEXT NOT NULL REFERENCES workflow_sessions(id) ON DELETE CASCADE,
+  role       TEXT NOT NULL,
+  content    TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS workflow_runs (
+  id            TEXT PRIMARY KEY,
+  project_id    TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  workflow_slug TEXT NOT NULL,
+  workflow_name TEXT NOT NULL,
+  workflow_path TEXT NOT NULL,
+  yaml          TEXT NOT NULL,
+  status        TEXT NOT NULL DEFAULT 'running',
+  trigger       TEXT NOT NULL DEFAULT 'manual',
+  error         TEXT,
+  started_at    TEXT,
+  finished_at   TEXT,
+  created_at    TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS workflow_run_steps (
+  id          TEXT PRIMARY KEY,
+  run_id      TEXT NOT NULL REFERENCES workflow_runs(id) ON DELETE CASCADE,
+  step_id     TEXT NOT NULL,
+  status      TEXT NOT NULL DEFAULT 'pending',
+  command     TEXT NOT NULL,
+  exit_code   INTEGER,
+  log         TEXT NOT NULL DEFAULT '',
+  started_at  TEXT,
+  finished_at TEXT
+);
+
 CREATE TABLE IF NOT EXISTS app_settings (
   key        TEXT PRIMARY KEY,
   value      TEXT NOT NULL,
@@ -196,6 +240,11 @@ function migrate(db: DatabaseSync): void {
       CREATE INDEX IF NOT EXISTS idx_local_tickets_project ON local_tickets(project_id);
       CREATE INDEX IF NOT EXISTS idx_events_created_at ON events(created_at);
       CREATE INDEX IF NOT EXISTS idx_roles_provider ON roles(provider_id);
+      CREATE INDEX IF NOT EXISTS idx_workflow_runs_project ON workflow_runs(project_id, created_at);
+      CREATE INDEX IF NOT EXISTS idx_workflow_runs_workflow ON workflow_runs(project_id, workflow_slug, created_at);
+      CREATE INDEX IF NOT EXISTS idx_workflow_steps_run ON workflow_run_steps(run_id);
+      CREATE INDEX IF NOT EXISTS idx_workflow_sessions_project ON workflow_sessions(project_id);
+      CREATE INDEX IF NOT EXISTS idx_workflow_session_messages ON workflow_session_messages(session_id);
     `);
     db.prepare(
       "UPDATE roles SET provider_id = NULL WHERE provider_id IS NOT NULL " +
@@ -892,4 +941,272 @@ export async function updateRole(id: string, input: RoleInput): Promise<RoleRow 
 export async function deleteRole(id: string): Promise<void> {
   const db = await getDb();
   db.prepare("DELETE FROM roles WHERE id = ?").run(id);
+}
+
+export type WorkflowRunStatus =
+  | "running"
+  | "success"
+  | "failed"
+  | "canceled"
+  | "interrupted";
+
+export type WorkflowStepStatus =
+  | "pending"
+  | "running"
+  | "success"
+  | "failed"
+  | "skipped"
+  | "canceled";
+
+export interface WorkflowRunRow {
+  id: string;
+  project_id: string;
+  workflow_slug: string;
+  workflow_name: string;
+  workflow_path: string;
+  yaml: string;
+  status: WorkflowRunStatus;
+  trigger: string;
+  error: string | null;
+  started_at: string | null;
+  finished_at: string | null;
+  created_at: string;
+}
+
+export interface WorkflowRunStepRow {
+  id: string;
+  run_id: string;
+  step_id: string;
+  status: WorkflowStepStatus;
+  command: string;
+  exit_code: number | null;
+  log: string;
+  started_at: string | null;
+  finished_at: string | null;
+}
+
+export async function createWorkflowRun(input: {
+  projectId: string;
+  slug: string;
+  name: string;
+  path: string;
+  yaml: string;
+  trigger?: string;
+}): Promise<WorkflowRunRow> {
+  const db = await getDb();
+  const id = crypto.randomUUID();
+  db.prepare(
+    "INSERT INTO workflow_runs (id, project_id, workflow_slug, workflow_name, workflow_path, yaml, " +
+      "status, trigger, started_at) VALUES (?, ?, ?, ?, ?, ?, 'running', ?, datetime('now'))",
+  ).run(
+    id,
+    input.projectId,
+    input.slug,
+    input.name,
+    input.path,
+    input.yaml,
+    input.trigger ?? "manual",
+  );
+  return (await getWorkflowRun(id))!;
+}
+
+export async function getWorkflowRun(id: string): Promise<WorkflowRunRow | null> {
+  const db = await getDb();
+  const row = db.prepare("SELECT * FROM workflow_runs WHERE id = ?").get(id);
+  return (row as WorkflowRunRow | undefined) ?? null;
+}
+
+export async function updateWorkflowRun(
+  id: string,
+  status: WorkflowRunStatus,
+  error?: string,
+): Promise<void> {
+  const db = await getDb();
+  db.prepare(
+    "UPDATE workflow_runs SET status = ?, error = ?, " +
+      "finished_at = CASE WHEN ? = 'running' THEN finished_at ELSE datetime('now') END WHERE id = ?",
+  ).run(status, error ?? null, status, id);
+}
+
+export async function findActiveWorkflowRun(
+  projectId: string,
+  slug: string,
+): Promise<WorkflowRunRow | null> {
+  const db = await getDb();
+  const row = db
+    .prepare(
+      "SELECT * FROM workflow_runs WHERE project_id = ? AND workflow_slug = ? AND status = 'running' " +
+        "ORDER BY created_at DESC LIMIT 1",
+    )
+    .get(projectId, slug);
+  return (row as WorkflowRunRow | undefined) ?? null;
+}
+
+export async function listWorkflowRuns(
+  projectId: string,
+  slug?: string,
+  limit = 50,
+): Promise<WorkflowRunRow[]> {
+  const db = await getDb();
+  const capped = Math.min(Math.max(limit, 1), 200);
+  if (slug) {
+    return rows<WorkflowRunRow>(
+      db
+        .prepare(
+          "SELECT * FROM workflow_runs WHERE project_id = ? AND workflow_slug = ? " +
+            "ORDER BY created_at DESC LIMIT ?",
+        )
+        .all(projectId, slug, capped),
+    );
+  }
+  return rows<WorkflowRunRow>(
+    db
+      .prepare(
+        "SELECT * FROM workflow_runs WHERE project_id = ? ORDER BY created_at DESC LIMIT ?",
+      )
+      .all(projectId, capped),
+  );
+}
+
+export async function createWorkflowRunStep(
+  runId: string,
+  stepId: string,
+  command: string,
+): Promise<WorkflowRunStepRow> {
+  const db = await getDb();
+  const id = crypto.randomUUID();
+  db.prepare(
+    "INSERT INTO workflow_run_steps (id, run_id, step_id, command) VALUES (?, ?, ?, ?)",
+  ).run(id, runId, stepId, command);
+  return (await getWorkflowRunStep(id))!;
+}
+
+export async function getWorkflowRunStep(id: string): Promise<WorkflowRunStepRow | null> {
+  const db = await getDb();
+  const row = db.prepare("SELECT * FROM workflow_run_steps WHERE id = ?").get(id);
+  return (row as WorkflowRunStepRow | undefined) ?? null;
+}
+
+export async function listWorkflowRunSteps(runId: string): Promise<WorkflowRunStepRow[]> {
+  const db = await getDb();
+  return rows<WorkflowRunStepRow>(
+    db.prepare("SELECT * FROM workflow_run_steps WHERE run_id = ? ORDER BY rowid").all(runId),
+  );
+}
+
+export async function updateWorkflowRunStep(
+  id: string,
+  patch: {
+    status: WorkflowStepStatus;
+    exitCode?: number | null;
+    log?: string;
+    startedAt?: boolean;
+  },
+): Promise<void> {
+  const db = await getDb();
+  db.prepare(
+    "UPDATE workflow_run_steps SET status = ?, exit_code = ?, log = ?, " +
+      "started_at = CASE WHEN ? THEN datetime('now') ELSE started_at END, " +
+      "finished_at = CASE WHEN ? IN ('success','failed','skipped','canceled') THEN datetime('now') ELSE finished_at END " +
+      "WHERE id = ?",
+  ).run(
+    patch.status,
+    patch.exitCode ?? null,
+    patch.log ?? "",
+    patch.startedAt ? 1 : 0,
+    patch.status,
+    id,
+  );
+}
+
+export async function markInterruptedWorkflowRuns(): Promise<void> {
+  const db = await getDb();
+  db.prepare(
+    "UPDATE workflow_runs SET status = 'interrupted', " +
+      "error = COALESCE(error, 'Aplikasi berhenti saat run berjalan.'), finished_at = datetime('now') " +
+      "WHERE status = 'running'",
+  ).run();
+  db.prepare(
+    "UPDATE workflow_run_steps SET status = 'canceled', finished_at = datetime('now') " +
+      "WHERE status IN ('pending','running')",
+  ).run();
+}
+
+export interface WorkflowSessionRow {
+  id: string;
+  project_id: string;
+  name: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface WorkflowSessionMessageRow {
+  id: string;
+  session_id: string;
+  role: string;
+  content: string;
+  created_at: string;
+}
+
+export async function getOrCreateWorkflowSession(
+  projectId: string,
+  name: string,
+): Promise<WorkflowSessionRow> {
+  const db = await getDb();
+  const existing = db
+    .prepare("SELECT * FROM workflow_sessions WHERE project_id = ? AND name = ?")
+    .get(projectId, name) as WorkflowSessionRow | undefined;
+  if (existing) return existing;
+  const id = crypto.randomUUID();
+  try {
+    db.prepare("INSERT INTO workflow_sessions (id, project_id, name) VALUES (?, ?, ?)").run(
+      id,
+      projectId,
+      name,
+    );
+  } catch {
+    const raced = db
+      .prepare("SELECT * FROM workflow_sessions WHERE project_id = ? AND name = ?")
+      .get(projectId, name) as unknown as WorkflowSessionRow | undefined;
+    if (raced) return raced;
+    throw new Error(`Gagal membuat session "${name}".`);
+  }
+  const row = db.prepare("SELECT * FROM workflow_sessions WHERE id = ?").get(id);
+  return row as unknown as WorkflowSessionRow;
+}
+
+export async function listWorkflowSessionMessages(
+  sessionId: string,
+): Promise<WorkflowSessionMessageRow[]> {
+  const db = await getDb();
+  return rows<WorkflowSessionMessageRow>(
+    db
+      .prepare(
+        "SELECT * FROM workflow_session_messages WHERE session_id = ? ORDER BY created_at, rowid",
+      )
+      .all(sessionId),
+  );
+}
+
+export async function appendWorkflowSessionMessage(
+  sessionId: string,
+  role: string,
+  content: string,
+): Promise<void> {
+  const db = await getDb();
+  db.prepare(
+    "INSERT INTO workflow_session_messages (id, session_id, role, content) VALUES (?, ?, ?, ?)",
+  ).run(crypto.randomUUID(), sessionId, role, content);
+  db.prepare("UPDATE workflow_sessions SET updated_at = datetime('now') WHERE id = ?").run(
+    sessionId,
+  );
+}
+
+export async function listWorkflowSessions(projectId: string): Promise<WorkflowSessionRow[]> {
+  const db = await getDb();
+  return rows<WorkflowSessionRow>(
+    db.prepare("SELECT * FROM workflow_sessions WHERE project_id = ? ORDER BY updated_at DESC").all(
+      projectId,
+    ),
+  );
 }

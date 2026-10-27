@@ -121,6 +121,15 @@ export const ChatInput = z.object({
 });
 export type ChatInput = z.infer<typeof ChatInput>;
 
+export const WorkflowCreateInput = z.object({
+  name: z.string().trim().min(1).max(60),
+  yaml: z.string().max(200_000).optional(),
+});
+
+export const WorkflowSaveInput = z.object({
+  yaml: z.string().min(1).max(200_000),
+});
+
 export const GitPathsInput = z.object({
   paths: z.array(z.string().trim().min(1).max(1000)).min(1).max(200),
 });

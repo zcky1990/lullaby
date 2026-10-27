@@ -11,6 +11,7 @@ export const PANEL_FOR_KIND: Record<TabKind, Menu> = {
   review: "files",
   document: "document",
   file: "files",
+  workflow: "workflow",
 };
 
 export function useEditorTabs(setMenu: (menu: Menu) => void, currentId: string | null) {

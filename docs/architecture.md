@@ -17,6 +17,7 @@
 | FS | `src/fs/workspace.ts`, `documents.ts` | File workspace (guarded) + dokumen lokal `.md` |
 | Integrations | `src/integrations/` | Docmost, Notion, Confluence, Jira, GitHub, Git CLI, HTTP helper |
 | Server | `src/server/` | router, session, static, SSE, chat, terminal, skills, MCP, routes |
+| Workflow | `src/server/workflow/` | YAML parse/DAG, file store, runner (shell/DAG/retry/cancel) |
 | Tickets | `src/tickets/status.ts` | Normalisasi kolom Kanban / automation |
 | Desktop | `src/desktop/` | window, bindings, native dialogs |
 | UI assets | `src/ui/assets.generated.ts` | Bundle client (generated) |

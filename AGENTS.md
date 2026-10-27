@@ -92,6 +92,13 @@ finishing a change.
   migrated into the global table at startup). Project Settings no longer manages them; Global
   Settings → LLM Providers does, via `GET/POST /api/llm` and `PUT/DELETE /api/llm/:id`. Chat and
   `generateTicketsFromDocument` resolve providers from the global list.
+- **Workflows**: definitions are YAML files in `<workspace>/.workflows/<slug>.yaml` (fallback
+  `appDataDir()/<project-slug>/workflows`), parsed with `@std/yaml` + Zod
+  (`src/server/workflow/parse.ts`), stored/validated via `store.ts`, and executed by `runner.ts`
+  (topological layers, shell steps, parallel batches, retry/timeout/cancel, capped step logs). Runs
+  live in `workflow_runs` / `workflow_run_steps`; `src/server/routes/workflows.ts` exposes CRUD +
+  run/history/cancel. UI: `WorkflowPanel` (sidebar) + `WorkflowTab` (Monaco YAML + React Flow +
+  logs). Manual runs only (no scheduler in v1); AI must not auto-run workflows.
 - **MCP**: global server config (`McpSettings`) is stored in `app_settings` (`mcp_servers` JSON;
   stdio command/args/env or http url/headers) plus `mcp_enabled` and `mcp_disabled_tools`.
   `POST /api/settings/mcp/tools` connects with `initialize` + `tools/list` (`src/server/mcp.ts`,

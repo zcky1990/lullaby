@@ -10,6 +10,7 @@
     "jsr:@std/internal@^1.0.14": "1.0.14",
     "jsr:@std/path@1": "1.1.6",
     "jsr:@std/path@^1.1.5": "1.1.6",
+    "jsr:@std/yaml@^1.3.0": "1.3.0",
     "npm:sanitize-html@2.17.0": "2.17.0",
     "npm:zod@^3.24.1": "3.25.76"
   },
@@ -54,6 +55,9 @@
       "dependencies": [
         "jsr:@std/internal"
       ]
+    },
+    "@std/yaml@1.3.0": {
+      "integrity": "b250103854378b8b36cbff0fe95aec017d3d9ce86b489c67605180c602fb4922"
     }
   },
   "npm": {
@@ -142,6 +146,7 @@
   "workspace": {
     "dependencies": [
       "jsr:@sigma/pty-ffi@0.42.0",
+      "jsr:@std/yaml@^1.3.0",
       "npm:sanitize-html@2.17.0",
       "npm:zod@^3.24.1"
     ]

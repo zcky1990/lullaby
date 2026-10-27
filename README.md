@@ -64,8 +64,9 @@ membuka **panel bawah** ala VS Code (xterm.js, cwd = workspace project).
 | **Terminal**         | ada project             | terminal interaktif (**xterm.js**) dengan shell di folder workspace; tampilan mengikuti gaya **termcn** (header + status koneksi)                                              |
 | **Document**         | selalu                  | tree halaman Docmost (collapsible, lazy children, **+** tambah) + render **markdown** + **Edit** (judul/isi via Monaco)                                                        |
 | **Ticket**           | selalu                  | **Kanban** tiket lokal + Jira; **sidebar** berisi **Tiket baru** (lokal), **filter assignee**, dan **Refresh**; klik card → detail (edit/hapus/sync); drag = update/transition |
+| **Workflows**        | project + workspace     | daftar `.workflows/*.yaml`, recent runs, **Workflow baru**; tab editor YAML + graph (React Flow) + run/cancel + log per step                                                   |
 | **Project Settings** | ada project             | Workspace, Integrations (Document/Ticket/Code, `+` pilih tipe), Activity — form **collapsible**                                                                                |
-| **Global Settings**  | selalu                  | satu halaman: **Appearance & Editor** · **LLM Providers** (global) · MCP · Skills · About                                                                                      |
+| **Global Settings**  | selalu                  | satu halaman: **Appearance & Editor** · **LLM Providers** · **Roles** · **Prompts** · MCP · Skills · Terminal · Automation · About                                             |
 
 **Chat LLM:** tombol **Chat** di header membuka sidebar kanan. Chat bisa memakai **tools** untuk
 membaca (`list_files`, `read_file`) dan **menulis** (`write_file`) file di folder workspace project
@@ -148,6 +149,12 @@ Document/**Project Settings**/**Ticket**/**Global Settings** memakai **panel kir
 | `PUT /api/llm/:providerId` · `DELETE /api/llm/:providerId` | ubah / hapus provider LLM global                        |
 | `GET/POST /api/roles` · `PUT/DELETE /api/roles/:id`        | CRUD role (persona + provider LLM default)              |
 | `GET/PUT /api/settings/prompts`                            | override system prompt (Build) & prompt Plan global     |
+| `GET`/`POST` `/api/projects/:id/workflows`                 | daftar / buat workflow YAML                             |
+| `GET`/`PUT`/`DELETE` `/api/projects/:id/workflows/:slug`   | detail+YAML / simpan / hapus                            |
+| `POST /api/projects/:id/workflows/:slug/run`               | mulai run workflow (`{ runId }`)                        |
+| `GET /api/projects/:id/workflow-runs`                      | riwayat run (filter workflow/status/limit)              |
+| `GET /api/projects/:id/workflow-runs/:runId`               | detail run + step + log                                 |
+| `POST /api/projects/:id/workflow-runs/:runId/cancel`       | batalkan run aktif                                      |
 | `POST /api/projects/:id/chat`                              | chat LLM (agent + tools file workspace)                 |
 | `POST /api/chat/approve`                                   | setujui/tolak aksi tulis (once/always/deny)             |
 | `GET /api/projects/:id/chat/sessions`                      | daftar sesi chat                                        |
@@ -197,8 +204,11 @@ otomatis ke editor). Saat fokus berada di terminal, shortcut yang sama membuka f
 
 ## Permissions & keamanan
 
-Task menjalankan Deno dengan `--allow-read --allow-write --allow-net --allow-env --allow-run`.
-`--allow-run` dipakai untuk folder picker native (`osascript`/`zenity`/PowerShell).
+Task menjalankan Deno dengan
+`--allow-read --allow-write --allow-net --allow-env --allow-run
+--allow-ffi`. `--allow-run` dipakai
+untuk folder picker native (`osascript`/`zenity`/PowerShell), git, dan workflow shell; `--allow-ffi`
+untuk PTY terminal (`@sigma/pty-ffi`).
 
 API lokal dilindungi **token sesi per-proses** (`src/server/session.ts`): saat shell HTML disajikan,
 server menyetel cookie `app_token`; semua `/api/*` wajib menyertakannya (atau header `x-app-token`),
@@ -212,6 +222,12 @@ Fondasi (F0) — yang sudah jalan:
 - **Explorer**: file tree folder workspace + editor kode **Monaco** yang **bisa diedit** (indikator
   dirty di tab/header, tombol **Simpan** atau `Cmd/Ctrl+S`; file ditulis lewat
   `PUT /api/projects/:id/files/content` dengan guard path workspace).
+- **Workflow (DAG)**: menu **Workflows** dengan definisi YAML di `<workspace>/.workflows/*.yaml`
+  (subset Dagu), dependency graph, eksekusi shell paralel, retry/timeout, log per step, riwayat run,
+  dan UI editor YAML + graph (React Flow). Step **AI** (`action: chat.completion`) memanggil
+  provider LLM/role global, dengan output `${NAMA}` / `${steps.<id>.output}` untuk step berikutnya.
+  Satu run aktif per workflow; manual run saja (belum ada cron/scheduler). Detail:
+  `docs/features/workflows.md`.
 - **Git**: menu ala **SourceTree** dengan panel kiri berisi branch (checkout) + status; tab utama
   punya **Changes** (staged/unstaged/untracked, stage/unstage, klik file untuk diff, commit
   message + Commit) dan **History** (log commit dengan hash/subject/author/refs). Backend
@@ -249,8 +265,8 @@ Fondasi (F0) — yang sudah jalan:
   via SSE.
 
 **Belum termasuk:** eksekusi tool MCP di chat (discovery & toggle sudah ada), generate tiket AI dari
-PRD, bulk-sync/update Jira, workflow engine, sandbox coding loop, MCP transport (mode `mcp`
-tersimpan di config tetapi belum dieksekusi), WebSocket (masih SSE), agent roles
+PRD, bulk-sync/update Jira, **cron/scheduler workflow**, sub-DAG/human task/webhook, sandbox coding
+loop, MCP transport (mode `mcp` tersimpan di config tetapi belum dieksekusi), agent roles
 (Planner/Coder/Verifier).
 
 ## Kredit / dependensi UI

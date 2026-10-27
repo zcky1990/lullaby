@@ -139,6 +139,17 @@ import {
   updateRoleHandler,
 } from "./routes/roles.ts";
 import {
+  cancelWorkflowRunHandler,
+  createWorkflowHandler,
+  deleteWorkflowHandler,
+  getWorkflowHandler,
+  getWorkflowRunHandler,
+  listWorkflowRunsHandler,
+  listWorkflowsHandler,
+  runWorkflowHandler,
+  saveWorkflowHandler,
+} from "./routes/workflows.ts";
+import {
   getAutomationSettingsHandler,
   getMcpSettingsHandler,
   getPromptsHandler,
@@ -1363,6 +1374,50 @@ export async function handleRequest(req: Request): Promise<Response> {
     if (detail && method === "GET") return await getProjectDetail(detail[1]);
     if (detail && method === "PUT") return await updateProjectHandler(detail[1], req);
     if (detail && method === "DELETE") return await deleteProjectHandler(detail[1]);
+
+    const workflows = pathname.match(/^\/api\/projects\/([^/]+)\/workflows$/);
+    if (workflows) {
+      if (method === "GET") return await listWorkflowsHandler(workflows[1]);
+      if (method === "POST") return await createWorkflowHandler(workflows[1], req);
+    }
+
+    const workflowRun = pathname.match(
+      /^\/api\/projects\/([^/]+)\/workflows\/([^/]+)\/run$/,
+    );
+    if (workflowRun && method === "POST") {
+      return await runWorkflowHandler(workflowRun[1], decodeURIComponent(workflowRun[2]));
+    }
+
+    const workflowItem = pathname.match(/^\/api\/projects\/([^/]+)\/workflows\/([^/]+)$/);
+    if (workflowItem) {
+      const slug = decodeURIComponent(workflowItem[2]);
+      if (method === "GET") return await getWorkflowHandler(workflowItem[1], slug);
+      if (method === "PUT") return await saveWorkflowHandler(workflowItem[1], slug, req);
+      if (method === "DELETE") return await deleteWorkflowHandler(workflowItem[1], slug);
+    }
+
+    const workflowRuns = pathname.match(/^\/api\/projects\/([^/]+)\/workflow-runs$/);
+    if (workflowRuns && method === "GET") {
+      return await listWorkflowRunsHandler(
+        workflowRuns[1],
+        url.searchParams.get("workflow"),
+        Number(url.searchParams.get("limit") ?? 50),
+      );
+    }
+
+    const workflowRunCancel = pathname.match(
+      /^\/api\/projects\/([^/]+)\/workflow-runs\/([^/]+)\/cancel$/,
+    );
+    if (workflowRunCancel && method === "POST") {
+      return await cancelWorkflowRunHandler(workflowRunCancel[1], workflowRunCancel[2]);
+    }
+
+    const workflowRunItem = pathname.match(
+      /^\/api\/projects\/([^/]+)\/workflow-runs\/([^/]+)$/,
+    );
+    if (workflowRunItem && method === "GET") {
+      return await getWorkflowRunHandler(workflowRunItem[1], workflowRunItem[2]);
+    }
 
     const gitStatus = pathname.match(/^\/api\/projects\/([^/]+)\/git\/status$/);
     if (gitStatus && method === "GET") return await gitStatusHandler(gitStatus[1]);

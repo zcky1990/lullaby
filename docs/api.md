@@ -100,6 +100,17 @@ Prefix: `/api/projects/:id/git/`
 | `POST` | `/api/projects/:id/local-tickets/:id/sync` | Push ke Jira |
 | `POST` | `/api/projects/:id/generate-tickets` | AI dari dokumen |
 
+## Workflows
+
+| Method | Path | Keterangan |
+| --- | --- | --- |
+| `GET`/`POST` | `/api/projects/:id/workflows` | Daftar (file + last run) / buat workflow |
+| `GET`/`PUT`/`DELETE` | `/api/projects/:id/workflows/:slug` | Detail + YAML / simpan / hapus |
+| `POST` | `/api/projects/:id/workflows/:slug/run` | Mulai run (`202 { runId }`) |
+| `GET` | `/api/projects/:id/workflow-runs?workflow=&limit=` | Riwayat run |
+| `GET` | `/api/projects/:id/workflow-runs/:runId` | Detail run + step/log |
+| `POST` | `/api/projects/:id/workflow-runs/:runId/cancel` | Cancel run aktif |
+
 ## Chat
 
 | Method | Path | Keterangan |

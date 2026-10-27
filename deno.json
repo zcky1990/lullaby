@@ -16,6 +16,7 @@
     "fmt": "deno fmt"
   },
   "imports": {
+    "@std/yaml": "jsr:@std/yaml@^1.3.0",
     "zod": "npm:zod@^3.24.1",
     "sanitize-html": "npm:sanitize-html@2.17.0",
     "@sigma/pty-ffi": "jsr:@sigma/pty-ffi@0.42.0"

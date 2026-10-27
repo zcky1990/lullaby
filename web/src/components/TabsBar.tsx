@@ -7,6 +7,7 @@ import {
   Settings,
   SlidersHorizontal,
   Ticket,
+  Workflow,
   X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -19,7 +20,8 @@ export type TabKind =
   | "document"
   | "file"
   | "review"
-  | "git";
+  | "git"
+  | "workflow";
 
 export interface EditorTab {
   id: string;
@@ -47,6 +49,7 @@ const ICONS: Record<TabKind, typeof FileIcon> = {
   file: FileIcon,
   review: GitCompare,
   git: GitBranch,
+  workflow: Workflow,
 };
 
 interface Props {
