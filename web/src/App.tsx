@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, lazy, Suspense } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, lazy, Suspense } from "react";
 import {
   Code2,
   Eye,
@@ -59,8 +59,10 @@ import { Input } from "@/components/ui/input";
 import { triggerFind } from "@/lib/find";
 import { languageForPath } from "@/lib/languages";
 import { normalizeWorkspacePath, type LspStatusEvent } from "@/lib/lsp";
+import { LSP_SETTINGS_CHANGED_EVENT } from "@/lib/lsp-events";
 import { dispatchAutoBuild } from "@/lib/auto-build-events";
 import { CHANGES_APPLIED_EVENT, REVIEW_EVENT, type ReviewDetail } from "@/lib/review-events";
+import type { MonacoLspConfig } from "@/components/MonacoViewer";
 import { isTodoToInProgress } from "@/lib/ticket-columns";
 import { cn } from "@/lib/utils";
 import {
@@ -183,11 +185,15 @@ export default function App() {
     changes: PendingFileChange[];
   } | null>(null);
   const [panelWidth, setPanelWidth] = useState(readPanelWidth);
+  const [activeLspStatus, setActiveLspStatus] = useState<LspStatusEvent>({ status: "off" });
 
   const hasWorkspace = !!detail?.project.workspace_path;
   const workspaceBase =
     detail?.project.workspace_path?.split(/[\\/]/).filter(Boolean).pop() ?? null;
   const activeTab = tabs.find((tab) => tab.id === activeTabId) ?? null;
+  const activeFileLanguage = activeTab?.kind === "file"
+    ? languageForPath(activeTab.ref ?? activeTab.title)
+    : undefined;
 
   const assignees = useMemo(() => {
     const set = new Set<string>();
@@ -437,6 +443,10 @@ export default function App() {
       setTicketsLoading(false);
     }
   }, []);
+
+  useEffect(() => {
+    setActiveLspStatus({ status: "off" });
+  }, [activeTabId]);
 
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
@@ -1107,6 +1117,7 @@ export default function App() {
             onChange={(content) => patchTab(tab.id, { content, dirty: true })}
             onSave={() => saveFile(tab.ref ?? tab.title, tab.content ?? "")}
             onTogglePreview={() => patchTab(tab.id, { preview: !tab.preview })}
+            onLspStatus={setActiveLspStatus}
           />
         );
     }
@@ -1297,6 +1308,8 @@ export default function App() {
         workspacePath={detail?.project.workspace_path}
         activeTitle={activeTab?.title}
         branch={gitStatusData?.branch}
+        lspStatus={activeTab?.kind === "file" ? activeLspStatus : undefined}
+        lspLanguage={activeTab?.kind === "file" ? activeFileLanguage : undefined}
       />
 
       <TicketDetailDialog
@@ -1383,6 +1396,19 @@ function StatCard({ label, value }: { label: string; value: number }) {
   );
 }
 
+function lspBadgeLabel(status: LspStatusEvent["status"]): string {
+  switch (status) {
+    case "connecting":
+      return "Connecting…";
+    case "ready":
+      return "Ready";
+    case "error":
+      return "Error";
+    default:
+      return "Off";
+  }
+}
+
 function FileTab({
   tab,
   projectId,
@@ -1390,6 +1416,7 @@ function FileTab({
   onChange,
   onSave,
   onTogglePreview,
+  onLspStatus,
 }: {
   tab: EditorTab;
   projectId: string | null;
@@ -1397,39 +1424,69 @@ function FileTab({
   onChange: (content: string) => void;
   onSave: () => Promise<void>;
   onTogglePreview: () => void;
+  onLspStatus?: (event: LspStatusEvent) => void;
 }) {
   const { resolvedEditorTheme } = useTheme();
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | undefined>();
-  const [lspEnabled, setLspEnabled] = useState(false);
+  const [lspConfig, setLspConfig] = useState<MonacoLspConfig | undefined>();
   const [lspStatus, setLspStatus] = useState<LspStatusEvent>({ status: "off" });
   const path = tab.ref ?? tab.title;
   const isMarkdown = /\.(md|markdown|mdx)$/i.test(path);
+  const onLspStatusRef = useRef(onLspStatus);
+  onLspStatusRef.current = onLspStatus;
+
+  const reportLspStatus = useCallback((event: LspStatusEvent) => {
+    setLspStatus(event);
+    onLspStatusRef.current?.(event);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
-    setLspEnabled(false);
-    setLspStatus({ status: "off" });
-    if (!projectId || !workspacePath) return;
     const language = languageForPath(path);
-    api
-      .getLspSettings()
-      .then((res) => {
-        if (cancelled) return;
-        const match = res.settings.enabled &&
-          res.settings.servers.some((server) =>
-            server.enabled &&
-            server.languages.some((item) => item.toLowerCase() === language.toLowerCase())
-          );
-        setLspEnabled(match);
-      })
-      .catch(() => {
-        if (!cancelled) setLspEnabled(false);
-      });
+
+    const refresh = () => {
+      setLspConfig(undefined);
+      reportLspStatus({ status: "off" });
+      if (!projectId || !workspacePath) return;
+      api
+        .getLspSettings()
+        .then((res) => {
+          if (cancelled) return;
+          const server = res.settings.enabled
+            ? res.settings.servers.find((item) =>
+              item.enabled &&
+              item.languages.some((lang) => lang.toLowerCase() === language.toLowerCase())
+            )
+            : undefined;
+          if (!server) {
+            setLspConfig(undefined);
+            reportLspStatus({ status: "off" });
+            return;
+          }
+          setLspConfig({
+            projectId,
+            workspacePath,
+            absolutePath: normalizeWorkspacePath(workspacePath, path),
+            initializationOptions: server.initializationOptions,
+          });
+        })
+        .catch(() => {
+          if (!cancelled) {
+            setLspConfig(undefined);
+            reportLspStatus({ status: "off" });
+          }
+        });
+    };
+
+    refresh();
+    const onSettingsChanged = () => refresh();
+    window.addEventListener(LSP_SETTINGS_CHANGED_EVENT, onSettingsChanged);
     return () => {
       cancelled = true;
+      window.removeEventListener(LSP_SETTINGS_CHANGED_EVENT, onSettingsChanged);
     };
-  }, [projectId, workspacePath, path]);
+  }, [projectId, workspacePath, path, reportLspStatus]);
 
   if (tab.loading) return <Skeleton className="h-full w-full rounded-none" />;
   if (tab.error) return <p className="p-6 text-sm text-destructive">{tab.error}</p>;
@@ -1457,17 +1514,20 @@ function FileTab({
           {tab.dirty ? (
             <span className="size-1.5 shrink-0 rounded-full bg-primary" title="Belum disimpan" />
           ) : null}
-          {lspEnabled ? (
+          {lspConfig ? (
             <Badge
               variant={lspStatus.status === "ready"
                 ? "success"
                 : lspStatus.status === "error"
                 ? "destructive"
                 : "outline"}
-              className="h-5 px-1.5 text-[10px]"
+              className="h-5 max-w-56 truncate px-1.5 text-[10px]"
               title={lspStatus.message}
             >
-              LSP {lspStatus.status}
+              LSP {lspBadgeLabel(lspStatus.status)}
+              {lspStatus.status === "error" && lspStatus.message
+                ? `: ${lspStatus.message}`
+                : ""}
             </Badge>
           ) : null}
         </div>
@@ -1523,14 +1583,8 @@ function FileTab({
               theme={resolvedEditorTheme}
               readOnly={false}
               onChange={onChange}
-              lsp={lspEnabled && projectId && workspacePath
-                ? {
-                  projectId,
-                  workspacePath,
-                  absolutePath: normalizeWorkspacePath(workspacePath, path),
-                }
-                : undefined}
-              onLspStatus={setLspStatus}
+              lsp={lspConfig}
+              onLspStatus={reportLspStatus}
             />
           </Suspense>
         )}

@@ -110,3 +110,16 @@ Deno.test("LSP frame decoder ignores headers without content-length", () => {
   const messages = parser.push(input);
   deepEqual(messages, ["{}"]);
 });
+
+Deno.test("client LSP path helpers encode file URIs and language ids", async () => {
+  const { fileUri, lspLanguageId, normalizeWorkspacePath } = await import(
+    "../web/src/lib/lsp-paths.ts"
+  );
+  deepEqual(fileUri("/Users/me/proj/src/a.ts"), "file:///Users/me/proj/src/a.ts");
+  deepEqual(fileUri("C:/work/a.ts"), "file:///C:/work/a.ts");
+  deepEqual(normalizeWorkspacePath("/ws", "src/a.ts"), "/ws/src/a.ts");
+  deepEqual(normalizeWorkspacePath("/ws", "/abs/a.ts"), "/abs/a.ts");
+  deepEqual(lspLanguageId("foo.tsx", "typescript"), "typescriptreact");
+  deepEqual(lspLanguageId("foo.ts", "typescript"), "typescript");
+  deepEqual(lspLanguageId("foo.py", "python"), "python");
+});

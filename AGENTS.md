@@ -83,10 +83,12 @@ finishing a change.
   hidden, and the panel height persists. Shell default: Global Settings → Terminal. WebSocket auth
   uses the same session cookie as the HTTP API.
 - **LSP**: Global Settings → Language Servers stores `app_settings.lsp_settings` (master switch +
-  servers: Monaco `languages`, `command`, `args`, `env`, `mode` local/npx). `src/server/lsp.ts`
-  spawns the configured server in `projects.workspace_path` and bridges stdio LSP frames to
-  `/api/projects/:id/lsp?language=` WebSocket. Client `web/src/lib/lsp.ts` uses `monaco-lsp-bridge`
-  (dynamic import); workspace file tabs use `file:///` model URIs and show an LSP status badge.
+  servers: Monaco `languages`, `command`, `args`, `env`, `mode` local/npx, optional
+  `initializationOptions`). `src/server/lsp.ts` spawns the configured server in
+  `projects.workspace_path` and bridges stdio LSP frames to `/api/projects/:id/lsp?language=`
+  WebSocket. Client `web/src/lib/lsp.ts` uses `monaco-lsp-bridge` (dynamic import);
+  `MonacoViewer` reconnects when LSP config arrives/changes. File tabs show an LSP badge; StatusBar
+  shows Ready/Connecting/Error. Saving settings dispatches `rnd:lsp-settings-changed`.
   Servers are **not bundled** (install manually or use npx presets); no arbitrary command from query
   strings; max 3 connections/project. Tests: `test/lsp.test.ts`.
 - **Prompts**: global overrides for the Build system prompt and Plan prompt live in `app_settings`

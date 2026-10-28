@@ -15,6 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
+import { dispatchLspSettingsChanged } from "@/lib/lsp-events";
 import {
   api,
   type LspPreset,
@@ -40,6 +41,31 @@ function envText(env: Record<string, string>): string {
   return Object.entries(env).map(([key, value]) => `${key}=${value}`).join("\n");
 }
 
+function initOptionsText(value: Record<string, unknown> | undefined): string {
+  if (!value || Object.keys(value).length === 0) return "";
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return "";
+  }
+}
+
+function parseInitOptions(
+  text: string,
+): { ok: true; value?: Record<string, unknown> } | { ok: false; error: string } {
+  const trimmed = text.trim();
+  if (!trimmed) return { ok: true, value: undefined };
+  try {
+    const parsed = JSON.parse(trimmed) as unknown;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return { ok: false, error: "Initialization options harus objek JSON." };
+    }
+    return { ok: true, value: parsed as Record<string, unknown> };
+  } catch (error) {
+    return { ok: false, error: `JSON tidak valid: ${(error as Error).message}` };
+  }
+}
+
 function serverFromPreset(
   preset: LspPreset,
   variant: LspPresetVariant,
@@ -62,6 +88,8 @@ export function LspSettingsPanel() {
   const [busy, setBusy] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [error, setError] = useState<string | undefined>();
+  const [initErrors, setInitErrors] = useState<Record<number, string | undefined>>({});
+  const [initDrafts, setInitDrafts] = useState<Record<number, string>>({});
   const [probes, setProbes] = useState<Record<string, LspProbeResult | "loading">>({});
 
   useEffect(() => {
@@ -74,6 +102,12 @@ export function LspSettingsPanel() {
         if (cancelled) return;
         setSettings(res.settings);
         setPresets(res.presets);
+        const drafts: Record<number, string> = {};
+        res.settings.servers.forEach((server, index) => {
+          drafts[index] = initOptionsText(server.initializationOptions);
+        });
+        setInitDrafts(drafts);
+        setInitErrors({});
       })
       .catch((e) => {
         if (!cancelled) setError((e as Error).message);
@@ -99,7 +133,9 @@ export function LspSettingsPanel() {
   };
 
   const addServer = (preset: LspPreset, variant: LspPresetVariant) => {
+    const nextIndex = settings.servers.length;
     update({ ...settings, servers: [...settings.servers, serverFromPreset(preset, variant)] });
+    setInitDrafts((current) => ({ ...current, [nextIndex]: "" }));
   };
 
   const removeServer = (index: number) => {
@@ -107,15 +143,57 @@ export function LspSettingsPanel() {
       ...settings,
       servers: settings.servers.filter((_, i) => i !== index),
     });
+    setInitDrafts((current) => {
+      const next: Record<number, string> = {};
+      Object.entries(current).forEach(([key, value]) => {
+        const i = Number(key);
+        if (i < index) next[i] = value;
+        else if (i > index) next[i - 1] = value;
+      });
+      return next;
+    });
+    setInitErrors((current) => {
+      const next: Record<number, string | undefined> = {};
+      Object.entries(current).forEach(([key, value]) => {
+        const i = Number(key);
+        if (i < index) next[i] = value;
+        else if (i > index) next[i - 1] = value;
+      });
+      return next;
+    });
   };
 
   const save = async () => {
     setBusy(true);
     setError(undefined);
     try {
-      const res = await api.saveLspSettings(settings);
+      const nextServers: LspServer[] = [];
+      const nextErrors: Record<number, string | undefined> = {};
+      for (let index = 0; index < settings.servers.length; index++) {
+        const server = settings.servers[index]!;
+        const parsed = parseInitOptions(initDrafts[index] ?? "");
+        if (!parsed.ok) {
+          nextErrors[index] = parsed.error;
+          setInitErrors(nextErrors);
+          setError("Perbaiki initialization options sebelum menyimpan.");
+          return;
+        }
+        nextErrors[index] = undefined;
+        nextServers.push({
+          ...server,
+          initializationOptions: parsed.value,
+        });
+      }
+      setInitErrors(nextErrors);
+      const res = await api.saveLspSettings({ ...settings, servers: nextServers });
       setSettings(res.settings);
+      const drafts: Record<number, string> = {};
+      res.settings.servers.forEach((server, index) => {
+        drafts[index] = initOptionsText(server.initializationOptions);
+      });
+      setInitDrafts(drafts);
       setDirty(false);
+      dispatchLspSettingsChanged();
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -171,7 +249,7 @@ export function LspSettingsPanel() {
             <div className="flex min-w-0 flex-col gap-1">
               <span className="text-sm font-medium">Aktifkan LSP</span>
               <span className="text-xs text-muted-foreground">
-                {enabledCount} server aktif. Perubahan berlaku saat file dibuka ulang.
+                {enabledCount} server aktif. Setelah disimpan, tab file terbuka reconnect otomatis.
               </span>
             </div>
             <div className="flex items-center gap-2">
@@ -338,6 +416,35 @@ export function LspSettingsPanel() {
                       />
                     </details>
 
+                    <details className="text-xs text-muted-foreground" open={Boolean(initDrafts[index])}>
+                      <summary className="cursor-pointer select-none">
+                        Initialization options (JSON, opsional)
+                      </summary>
+                      <textarea
+                        value={initDrafts[index] ?? ""}
+                        onChange={(event) => {
+                          const text = event.target.value;
+                          setInitDrafts((current) => ({ ...current, [index]: text }));
+                          const parsed = parseInitOptions(text);
+                          setInitErrors((current) => ({
+                            ...current,
+                            [index]: parsed.ok ? undefined : parsed.error,
+                          }));
+                          setDirty(true);
+                        }}
+                        rows={4}
+                        className="border-input bg-transparent focus-visible:border-ring focus-visible:ring-ring/50 mt-2 w-full rounded-md border px-2 py-1.5 font-mono text-xs shadow-xs outline-none focus-visible:ring-[3px]"
+                        placeholder={'{\n  "typescript": { "tsserver": { "useSyntaxServer": "never" } }\n}'}
+                      />
+                      {initErrors[index] ? (
+                        <p className="mt-1 text-destructive">{initErrors[index]}</p>
+                      ) : (
+                        <p className="mt-1">
+                          Dikirim ke language server sebagai <span className="font-mono">initializationOptions</span>.
+                        </p>
+                      )}
+                    </details>
+
                     {probeResult ? (
                       <p className={probeResult === "loading"
                         ? "text-xs text-muted-foreground"
@@ -347,10 +454,18 @@ export function LspSettingsPanel() {
                         {probeResult === "loading"
                           ? "Mengecek command…"
                           : probeResult.found
-                          ? `Ditemukan: ${probeResult.path}`
+                          ? `Ditemukan: ${probeResult.path}${
+                            server.mode === "npx"
+                              ? " (probe hanya mengecek binary npx, bukan package args)"
+                              : ""
+                          }`
                           : `Tidak ditemukan: ${probeResult.command}${
                             probeResult.path ? ` (${probeResult.path})` : ""
                           }`}
+                      </p>
+                    ) : server.mode === "npx" ? (
+                      <p className="text-xs text-muted-foreground">
+                        Mode npx: tombol Cek hanya memverifikasi binary <span className="font-mono">npx</span>.
                       </p>
                     ) : null}
                   </div>

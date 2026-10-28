@@ -11,8 +11,10 @@ rename, code action, dan formatting.
 - Backend: `src/server/lsp.ts` menjalankan server dengan `Deno.Command` dan menjembatani
   **stdio LSP ↔ WebSocket** (frame `Content-Length`, byte UTF-8).
 - Model file workspace memakai URI `file:///absolute/path` agar cocok dengan LSP.
-- Satu proses server per file tab yang terbuka; proses dimatikan saat tab ditutup.
+- Satu proses server per file tab yang terbuka; proses dimatikan saat tab ditutup / LSP dimatikan.
 - LSP hanya aktif untuk file workspace, bukan Workflow YAML/MCP/Markdown.
+- `MonacoViewer` reconnect otomatis saat `lsp` config berubah (settings fetch selesai, path
+  berubah, atau event `rnd:lsp-settings-changed` setelah Simpan di Global Settings).
 
 ## Konfigurasi
 
@@ -27,11 +29,19 @@ Global Settings → **Language Servers**.
 | `args` | Argumen, satu per baris. |
 | `env` | Environment tambahan (`KEY=value` per baris). |
 | `mode` | `local` atau `npx` (metadata; command tetap yang dipakai). |
+| `initializationOptions` | Objek JSON opsional, dikirim saat `initialize`. |
 
 Disimpan di `app_settings` key `lsp_settings`.
 
 Preset tersedia: TypeScript/JS, Python (pyright), YAML, Bash, Go (gopls), Rust (rust-analyzer),
 C/C++ (clangd), Lua. Preset Node punya varian lokal dan `npx`.
+
+Setelah **Simpan**, tab file yang terbuka me-refetch settings dan reconnect tanpa menutup file.
+
+## Status UI
+
+- Badge di header tab file: `LSP Connecting…` / `Ready` / `Error` (+ pesan singkat saat error).
+- Status bar (kanan): `LSP · Ready · typescript` (atau Connecting/Error); hilang saat LSP off.
 
 ## Contoh
 
@@ -84,9 +94,11 @@ Python via npx:
 
 - **Command tidak ditemukan**: install server atau isi absolute path. Aplikasi desktop yang dibuka
   dari Finder bisa punya PATH minim; resolusi mencoba login shell dan common bin dirs.
-- **npx gagal**: butuh Node/npm dan koneksi internet saat pertama dipakai.
-- **Tidak ada diagnostics**: pastikan server aktif, bahasa cocok, dan file dibuka ulang setelah
-  mengubah settings.
+- **npx gagal**: butuh Node/npm dan koneksi internet saat pertama dipakai. Tombol **Cek** hanya
+  memverifikasi binary `npx`, bukan package di args.
+- **Tidak ada diagnostics**: pastikan master switch + server aktif, bahasa cocok, dan status badge
+  menunjukkan Ready. Simpan settings lalu tunggu reconnect.
 - **TypeScript menampilkan saran ganda**: Monaco sudah punya TS worker internal; matikan server TS
   eksternal jika tidak diperlukan.
-- **LSP error di header tab**: buka tooltip badge untuk pesan; cek command/args di Global Settings.
+- **LSP error di header tab / status bar**: buka tooltip badge untuk pesan; cek command/args di
+  Global Settings.
