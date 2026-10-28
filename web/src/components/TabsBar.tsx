@@ -5,7 +5,6 @@ import {
   GitBranch,
   GitCompare,
   LayoutGrid,
-  Search,
   Settings,
   SlidersHorizontal,
   Ticket,
@@ -21,7 +20,6 @@ export type TabKind =
   | "global"
   | "document"
   | "file"
-  | "find"
   | "review"
   | "git"
   | "workflow"
@@ -52,7 +50,6 @@ const ICONS: Record<TabKind, typeof FileIcon> = {
   global: SlidersHorizontal,
   document: FileText,
   file: FileIcon,
-  find: Search,
   review: GitCompare,
   git: GitBranch,
   workflow: Workflow,

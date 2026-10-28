@@ -11,7 +11,6 @@ export const PANEL_FOR_KIND: Record<TabKind, Menu> = {
   review: "files",
   document: "document",
   file: "files",
-  find: "find",
   workflow: "workflow",
   "workflow-docs": "workflow",
 };
@@ -23,14 +22,14 @@ export function useEditorTabs(setMenu: (menu: Menu) => void, currentId: string |
   tabsRef.current = tabs;
 
   const focusTab = useCallback(
-    (tab: EditorTab) => {
+    (tab: EditorTab, keepMenu = false) => {
       setTabs((current) =>
         current.some((item) => item.id === tab.id)
           ? current.map((item) => (item.id === tab.id ? { ...item, title: tab.title } : item))
           : [...current, tab],
       );
       setActiveTabId(tab.id);
-      setMenu(PANEL_FOR_KIND[tab.kind]);
+      if (!keepMenu) setMenu(PANEL_FOR_KIND[tab.kind]);
     },
     [setMenu],
   );

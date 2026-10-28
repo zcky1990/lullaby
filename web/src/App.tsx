@@ -523,9 +523,9 @@ export default function App() {
   );
 
   const openFile = useCallback(
-    async (path: string, reload = false, line?: number) => {
+    async (path: string, reload = false, line?: number, keepMenu = false) => {
       if (!currentId) return;
-      setMenu("files");
+      if (!keepMenu) setMenu("files");
       const id = `file:${currentId}:${path}`;
       const existing = tabs.find((tab) => tab.id === id);
       if (existing && !existing.error && !reload) {
@@ -537,7 +537,7 @@ export default function App() {
         patchTab(id, { loading: true, error: undefined, line });
         setActiveTabId(id);
       } else {
-        focusTab({ id, kind: "file", title: path, ref: path, loading: true, line });
+        focusTab({ id, kind: "file", title: path, ref: path, loading: true, line }, keepMenu);
       }
       try {
         const res = await api.readFile(currentId, path);
@@ -638,7 +638,7 @@ export default function App() {
       }
       if (key === "f" && event.shiftKey) {
         event.preventDefault();
-        openSingleton("find", "Find");
+        setMenu("find");
       }
     };
     window.addEventListener("keydown", handler, { capture: true });
@@ -848,7 +848,7 @@ export default function App() {
       return;
     }
     else if (next === "git") openSingleton("git", "Git");
-    else if (next === "find") openSingleton("find", "Find");
+    else if (next === "find") setMenu("find");
     else if (next === "workflow") openSingleton("workflow", "Workflows");
     else if (next === "settings") openSingleton("settings", "Project Settings");
     else setMenu(next);
@@ -1101,15 +1101,6 @@ export default function App() {
         );
       case "workflow-docs":
         return <WorkflowDocsTab />;
-      case "find":
-        return (
-          <FindTab
-            projectId={currentId}
-            onOpenFile={(path, line) => {
-              void openFile(path, false, line).then(() => setMenu("find"));
-            }}
-          />
-        );
       case "workflow":
         return (
           <Suspense fallback={<Skeleton className="h-full w-full rounded-none" />}>
@@ -1174,6 +1165,7 @@ export default function App() {
 
       {(menu === "workspace" ||
         menu === "files" ||
+        menu === "find" ||
         menu === "document" ||
         menu === "settings" ||
         menu === "ticket" ||
@@ -1198,6 +1190,14 @@ export default function App() {
               projectId={currentId}
               selectedPath={activeTab?.kind === "file" ? activeTab.ref ?? null : null}
               onOpenFile={openFile}
+            />
+          )}
+          {menu === "find" && (
+            <FindTab
+              projectId={currentId}
+              onOpenFile={(path, line) => {
+                void openFile(path, false, line, true);
+              }}
             />
           )}
           {menu === "settings" && (
@@ -1314,7 +1314,6 @@ export default function App() {
               activeTab?.kind === "git" ||
               activeTab?.kind === "workflow" ||
               activeTab?.kind === "workflow-docs" ||
-              activeTab?.kind === "find" ||
               activeTab?.kind === "document" ||
               activeTab?.kind === "settings" ||
               activeTab?.kind === "global"

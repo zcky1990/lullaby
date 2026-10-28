@@ -14,7 +14,7 @@ Dua cara mencari di workspace, mirip VS Code.
 
 ## Find — menu Find atau `Cmd/Ctrl+Shift+F`
 
-- Tab **Find** berisi pencarian teks di seluruh file workspace.
+- **Find** tampil sebagai sidebar kiri (bukan tab) berisi pencarian teks seluruh workspace.
 - Opsi **Match case** dan **Regex**.
 - Debounce 180 ms; hasil dikelompokkan per file dengan nomor baris dan preview.
 - Klik hasil → file dibuka pada baris tersebut (Monaco `revealLine`).
@@ -35,5 +35,6 @@ Dua cara mencari di workspace, mirip VS Code.
 - Backend: `src/fs/workspace.ts` (`listWorkspaceFiles`, `findInWorkspace`) + route di
   `src/server/router.ts`.
 - Frontend: `web/src/components/QuickOpen.tsx`, `web/src/components/FindTab.tsx`.
-- Shortcut didaftarkan di `web/src/App.tsx`; hasil Find membuka tab file dengan `line`.
+- Shortcut didaftarkan di `web/src/App.tsx`; hasil Find membuka tab file dengan `line` sementara
+  sidebar Find tetap terbuka (query tidak hilang).
 - Tests: `test/files.test.ts`.

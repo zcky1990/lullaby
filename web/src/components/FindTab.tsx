@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { CaseSensitive, File, Regex, Search } from "lucide-react";
+import { PanelHeader } from "@/components/PanelHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
@@ -72,7 +73,8 @@ export function FindTab({ projectId, onOpenFile }: Props) {
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="flex flex-col gap-2 border-b px-4 py-3">
+      <PanelHeader title="Find" count={result?.matches.length} />
+      <div className="flex flex-col gap-2 border-b px-3 py-2">
         <div className="flex items-center gap-2">
           <Search className="size-4 shrink-0 text-muted-foreground" />
           <Input
