@@ -93,7 +93,13 @@ import {
   stagePaths as gitStage,
   unstagePaths as gitUnstage,
 } from "../integrations/git.ts";
-import { listDirectory, readWorkspaceFile, writeWorkspaceFile } from "../fs/workspace.ts";
+import {
+  findInWorkspace,
+  listDirectory,
+  listWorkspaceFiles,
+  readWorkspaceFile,
+  writeWorkspaceFile,
+} from "../fs/workspace.ts";
 import {
   getDocument as getConfluenceDocument,
   listDocuments as listConfluenceDocuments,
@@ -232,6 +238,39 @@ async function fileContentHandler(projectId: string, rel: string): Promise<Respo
     return json({ path: rel, ...(await readWorkspaceFile(project.workspace_path, rel)) });
   } catch (error) {
     return json({ error: (error as Error).message }, 400);
+  }
+}
+
+async function fileIndexHandler(projectId: string): Promise<Response> {
+  const project = await getProject(projectId);
+  if (!project) return json({ error: "project_not_found" }, 404);
+  if (!project.workspace_path) return json({ error: "no_workspace" }, 400);
+  try {
+    return json(await listWorkspaceFiles(project.workspace_path));
+  } catch (error) {
+    return json({ files: [], truncated: false, error: (error as Error).message }, 400);
+  }
+}
+
+async function findFilesHandler(projectId: string, url: URL): Promise<Response> {
+  const project = await getProject(projectId);
+  if (!project) return json({ error: "project_not_found" }, 404);
+  if (!project.workspace_path) return json({ error: "no_workspace" }, 400);
+  const query = url.searchParams.get("q") ?? "";
+  const matchCase = url.searchParams.get("case") === "1";
+  const regex = url.searchParams.get("regex") === "1";
+  try {
+    return json(
+      await findInWorkspace(project.workspace_path, query, {
+        caseSensitive: matchCase,
+        regex,
+      }),
+    );
+  } catch (error) {
+    return json(
+      { matches: [], scanned: 0, truncated: false, error: (error as Error).message },
+      400,
+    );
   }
 }
 
@@ -1544,6 +1583,12 @@ export async function handleRequest(req: Request): Promise<Response> {
     if (files && method === "GET") {
       return await listFilesHandler(files[1], url.searchParams.get("path") ?? "");
     }
+
+    const fileIndex = pathname.match(/^\/api\/projects\/([^/]+)\/files\/index$/);
+    if (fileIndex && method === "GET") return await fileIndexHandler(fileIndex[1]);
+
+    const fileFind = pathname.match(/^\/api\/projects\/([^/]+)\/files\/find$/);
+    if (fileFind && method === "GET") return await findFilesHandler(fileFind[1], url);
 
     const fileContent = pathname.match(/^\/api\/projects\/([^/]+)\/files\/content$/);
     if (fileContent && method === "GET") {

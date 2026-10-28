@@ -502,6 +502,26 @@ export interface FileContentResponse {
   binary: boolean;
 }
 
+export interface WorkspaceFileIndexResponse {
+  files: string[];
+  truncated: boolean;
+  error?: string;
+}
+
+export interface WorkspaceFindMatch {
+  path: string;
+  line: number;
+  column: number;
+  preview: string;
+}
+
+export interface WorkspaceFindResponse {
+  matches: WorkspaceFindMatch[];
+  scanned: number;
+  truncated: boolean;
+  error?: string;
+}
+
 export interface IntegrationPayload {
   kind: string;
   mode: string;
@@ -575,6 +595,18 @@ export const api = {
     request<{ ok: boolean }>(`/api/projects/${id}`, { method: "DELETE" }),
   listFiles: (projectId: string, path: string) =>
     request<FilesResponse>(`/api/projects/${projectId}/files?path=${encodeURIComponent(path)}`),
+  listFileIndex: (projectId: string) =>
+    request<WorkspaceFileIndexResponse>(`/api/projects/${projectId}/files/index`),
+  findInFiles: (
+    projectId: string,
+    query: string,
+    options: { caseSensitive?: boolean; regex?: boolean } = {},
+  ) =>
+    request<WorkspaceFindResponse>(
+      `/api/projects/${projectId}/files/find?q=${encodeURIComponent(query)}&case=${
+        options.caseSensitive ? "1" : "0"
+      }&regex=${options.regex ? "1" : "0"}`,
+    ),
   readFile: (projectId: string, path: string) =>
     request<FileContentResponse>(
       `/api/projects/${projectId}/files/content?path=${encodeURIComponent(path)}`,

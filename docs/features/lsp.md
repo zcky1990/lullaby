@@ -102,3 +102,9 @@ Python via npx:
   eksternal jika tidak diperlukan.
 - **LSP error di header tab / status bar**: buka tooltip badge untuk pesan; cek command/args di
   Global Settings.
+- **`no views` / `no views in session`**: biasanya language server (mis. gopls) belum menerima
+  notifikasi `initialized` setelah `initialize`, atau workspace path invalid. App mengirim
+  `initialized` dengan `params: {}` otomatis; buka ulang file setelah update. Pastikan
+  `workspace_path` adalah folder project yang valid.
+- **`JSON RPC cancelled`**: request completion/hover yang dibatalkan saat mengetik — diabaikan
+  oleh status UI (bukan error fatal). Jika badge tetap Error, buka ulang file.

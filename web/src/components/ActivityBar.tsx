@@ -3,6 +3,7 @@ import {
   FolderTree,
   GitBranch,
   LayoutGrid,
+  Search,
   Settings,
   SlidersHorizontal,
   SquareTerminal,
@@ -16,6 +17,7 @@ import { cn } from "@/lib/utils";
 export type Menu =
   | "workspace"
   | "files"
+  | "find"
   | "terminal"
   | "git"
   | "document"
@@ -37,6 +39,14 @@ const ITEMS: {
     id: "files",
     label: "Explorer",
     icon: FolderTree,
+    requiresProject: true,
+    requiresWorkspace: true,
+    group: "main",
+  },
+  {
+    id: "find",
+    label: "Find",
+    icon: Search,
     requiresProject: true,
     requiresWorkspace: true,
     group: "main",

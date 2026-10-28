@@ -23,6 +23,8 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty";
 import { FileTreePanel } from "@/components/FileTreePanel";
+import { FindTab } from "@/components/FindTab";
+import { QuickOpen } from "@/components/QuickOpen";
 import { GitPanel } from "@/components/GitPanel";
 import { GitTab } from "@/components/GitTab";
 import { GlobalSettingsPanel, type GlobalSection } from "@/components/GlobalSettingsPanel";
@@ -185,6 +187,7 @@ export default function App() {
     changes: PendingFileChange[];
   } | null>(null);
   const [panelWidth, setPanelWidth] = useState(readPanelWidth);
+  const [quickOpenOpen, setQuickOpenOpen] = useState(false);
   const [activeLspStatus, setActiveLspStatus] = useState<LspStatusEvent>({ status: "off" });
 
   const hasWorkspace = !!detail?.project.workspace_path;
@@ -520,24 +523,31 @@ export default function App() {
   );
 
   const openFile = useCallback(
-    async (path: string, reload = false) => {
+    async (path: string, reload = false, line?: number) => {
       if (!currentId) return;
       setMenu("files");
       const id = `file:${currentId}:${path}`;
       const existing = tabs.find((tab) => tab.id === id);
       if (existing && !existing.error && !reload) {
+        if (line) patchTab(id, { line });
         setActiveTabId(id);
         return;
       }
       if (existing) {
-        patchTab(id, { loading: true, error: undefined });
+        patchTab(id, { loading: true, error: undefined, line });
         setActiveTabId(id);
       } else {
-        focusTab({ id, kind: "file", title: path, ref: path, loading: true });
+        focusTab({ id, kind: "file", title: path, ref: path, loading: true, line });
       }
       try {
         const res = await api.readFile(currentId, path);
-        patchTab(id, { content: res.content, binary: res.binary, size: res.size, loading: false });
+        patchTab(id, {
+          content: res.content,
+          binary: res.binary,
+          size: res.size,
+          loading: false,
+          line,
+        });
       } catch (error) {
         patchTab(id, { loading: false, error: (error as Error).message });
       }
@@ -616,6 +626,24 @@ export default function App() {
     window.addEventListener("keydown", handler, { capture: true });
     return () => window.removeEventListener("keydown", handler, { capture: true });
   }, []);
+
+  useEffect(() => {
+    const handler = (event: KeyboardEvent) => {
+      if (!(event.metaKey || event.ctrlKey) || event.altKey) return;
+      const key = event.key.toLowerCase();
+      if (key === "p" && !event.shiftKey) {
+        event.preventDefault();
+        setQuickOpenOpen(true);
+        return;
+      }
+      if (key === "f" && event.shiftKey) {
+        event.preventDefault();
+        openSingleton("find", "Find");
+      }
+    };
+    window.addEventListener("keydown", handler, { capture: true });
+    return () => window.removeEventListener("keydown", handler, { capture: true });
+  }, [openSingleton]);
 
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
@@ -820,6 +848,7 @@ export default function App() {
       return;
     }
     else if (next === "git") openSingleton("git", "Git");
+    else if (next === "find") openSingleton("find", "Find");
     else if (next === "workflow") openSingleton("workflow", "Workflows");
     else if (next === "settings") openSingleton("settings", "Project Settings");
     else setMenu(next);
@@ -1072,6 +1101,15 @@ export default function App() {
         );
       case "workflow-docs":
         return <WorkflowDocsTab />;
+      case "find":
+        return (
+          <FindTab
+            projectId={currentId}
+            onOpenFile={(path, line) => {
+              void openFile(path, false, line).then(() => setMenu("find"));
+            }}
+          />
+        );
       case "workflow":
         return (
           <Suspense fallback={<Skeleton className="h-full w-full rounded-none" />}>
@@ -1276,6 +1314,7 @@ export default function App() {
               activeTab?.kind === "git" ||
               activeTab?.kind === "workflow" ||
               activeTab?.kind === "workflow-docs" ||
+              activeTab?.kind === "find" ||
               activeTab?.kind === "document" ||
               activeTab?.kind === "settings" ||
               activeTab?.kind === "global"
@@ -1326,6 +1365,15 @@ export default function App() {
         open={createTicketOpen}
         onOpenChange={setCreateTicketOpen}
         onCreated={() => currentId && loadTickets(currentId)}
+      />
+
+      <QuickOpen
+        open={quickOpenOpen}
+        projectId={currentId}
+        onOpenChange={setQuickOpenOpen}
+        onOpenFile={(path) => {
+          void openFile(path);
+        }}
       />
     </div>
   );
@@ -1446,9 +1494,11 @@ function FileTab({
     const language = languageForPath(path);
 
     const refresh = () => {
-      setLspConfig(undefined);
-      reportLspStatus({ status: "off" });
-      if (!projectId || !workspacePath) return;
+      if (!projectId || !workspacePath) {
+        setLspConfig(undefined);
+        reportLspStatus({ status: "off" });
+        return;
+      }
       api
         .getLspSettings()
         .then((res) => {
@@ -1464,11 +1514,24 @@ function FileTab({
             reportLspStatus({ status: "off" });
             return;
           }
-          setLspConfig({
+          const next = {
             projectId,
             workspacePath,
             absolutePath: normalizeWorkspacePath(workspacePath, path),
             initializationOptions: server.initializationOptions,
+          };
+          setLspConfig((current) => {
+            if (
+              current &&
+              current.projectId === next.projectId &&
+              current.workspacePath === next.workspacePath &&
+              current.absolutePath === next.absolutePath &&
+              JSON.stringify(current.initializationOptions ?? null) ===
+                JSON.stringify(next.initializationOptions ?? null)
+            ) {
+              return current;
+            }
+            return next;
           });
         })
         .catch(() => {
@@ -1585,6 +1648,7 @@ function FileTab({
               onChange={onChange}
               lsp={lspConfig}
               onLspStatus={reportLspStatus}
+              line={tab.line}
             />
           </Suspense>
         )}

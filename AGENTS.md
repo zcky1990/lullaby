@@ -86,11 +86,11 @@ finishing a change.
   servers: Monaco `languages`, `command`, `args`, `env`, `mode` local/npx, optional
   `initializationOptions`). `src/server/lsp.ts` spawns the configured server in
   `projects.workspace_path` and bridges stdio LSP frames to `/api/projects/:id/lsp?language=`
-  WebSocket. Client `web/src/lib/lsp.ts` uses `monaco-lsp-bridge` (dynamic import);
-  `MonacoViewer` reconnects when LSP config arrives/changes. File tabs show an LSP badge; StatusBar
-  shows Ready/Connecting/Error. Saving settings dispatches `rnd:lsp-settings-changed`.
-  Servers are **not bundled** (install manually or use npx presets); no arbitrary command from query
-  strings; max 3 connections/project. Tests: `test/lsp.test.ts`.
+  WebSocket. Client `web/src/lib/lsp.ts` uses `monaco-lsp-bridge` (dynamic import); `MonacoViewer`
+  reconnects when LSP config arrives/changes. File tabs show an LSP badge; StatusBar shows
+  Ready/Connecting/Error. Saving settings dispatches `rnd:lsp-settings-changed`. Servers are **not
+  bundled** (install manually or use npx presets); no arbitrary command from query strings; max 3
+  connections/project. Tests: `test/lsp.test.ts`.
 - **Prompts**: global overrides for the Build system prompt and Plan prompt live in `app_settings`
   (`system_prompt`, `plan_prompt`) and are read per chat run (`src/server/prompts.ts`); empty values
   fall back to the built-in defaults. CRUD via `GET/PUT /api/settings/prompts`; UI is Global
@@ -124,6 +124,10 @@ finishing a change.
   files/documents open as their own tabs. Global Settings has no outer panel — its
   `GlobalSettingsPanel` lives inside the tab. In Project Settings each form/section is a
   **`Collapsible`** (`CollapsibleSection`).
+- **Search**: `Cmd/Ctrl+P` opens `QuickOpen` (fuzzy file-name palette) backed by
+  `GET /api/projects/:id/files/index`; the **Find** activity item / `Cmd/Ctrl+Shift+F` opens a
+  `FindTab` for workspace text search (`GET .../files/find?q=&case=&regex=`) and opens results at
+  the matching line. Backend helpers live in `src/fs/workspace.ts`; tests in `test/files.test.ts`.
 - UI build outputs are embedded (`scripts/build-assets.ts` -> `src/ui/assets.generated.ts`) so the
   desktop binary is self-contained; never read UI files from disk at runtime.
 - Integration credentials (API token/key) are entered as normal text and stored **in the integration

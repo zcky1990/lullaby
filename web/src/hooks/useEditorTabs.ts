@@ -11,6 +11,7 @@ export const PANEL_FOR_KIND: Record<TabKind, Menu> = {
   review: "files",
   document: "document",
   file: "files",
+  find: "find",
   workflow: "workflow",
   "workflow-docs": "workflow",
 };

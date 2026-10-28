@@ -175,13 +175,33 @@ export async function connectLsp(
 
   type MessageListener = (event: { data: unknown }) => void;
   const listeners = new Set<MessageListener>();
+  // monaco-lsp-bridge never sends the LSP `initialized` notification after
+  // initialize; servers like gopls then fail with "no views in session".
+  let pendingInitializeId: string | number | null = null;
+  let sentInitialized = false;
+
+  const sendJson = (message: unknown) => {
+    if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(message));
+  };
+
+  const sendInitializedNotification = () => {
+    if (sentInitialized) return;
+    sentInitialized = true;
+    sendJson({ jsonrpc: "2.0", method: "initialized", params: {} });
+  };
+
   const port = {
     postMessage(message: unknown) {
-      if (message && typeof message === "object" && "method" in message) {
+      if (message && typeof message === "object") {
         const frame = message as {
+          id?: string | number;
           method?: string;
           params?: Record<string, unknown>;
         };
+        if (frame.method === "initialize" && frame.id != null) {
+          pendingInitializeId = frame.id;
+          sentInitialized = false;
+        }
         if (frame.method === "textDocument/didOpen") {
           const params = frame.params as {
             textDocument?: { languageId?: string };
@@ -191,7 +211,7 @@ export async function connectLsp(
           }
         }
       }
-      if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(message));
+      sendJson(message);
     },
     addEventListener(type: "message", listener: MessageListener) {
       if (type === "message") listeners.add(listener);
@@ -206,7 +226,20 @@ export async function connectLsp(
       const data = typeof event.data === "string"
         ? event.data
         : new TextDecoder().decode(event.data as ArrayBuffer);
-      const payload = JSON.parse(data);
+      const payload = JSON.parse(data) as {
+        id?: string | number;
+        result?: unknown;
+        error?: { message?: string };
+        method?: string;
+      };
+      if (
+        pendingInitializeId != null &&
+        payload.id === pendingInitializeId &&
+        payload.result !== undefined
+      ) {
+        pendingInitializeId = null;
+        sendInitializedNotification();
+      }
       for (const listener of [...listeners]) listener({ data: payload });
     } catch {
       // ignore malformed frames
@@ -221,6 +254,7 @@ export async function connectLsp(
     initialParams: {
       processId: null,
       rootUri,
+      rootPath: workspacePath,
       workspaceFolders: [{ uri: rootUri, name: rootName(workspacePath) }],
       clientInfo: { name: "rnd-workflow", version: "0.1.0" },
       locale: navigator.language || "en-US",
@@ -235,25 +269,49 @@ export async function connectLsp(
     onStatus?.({ status: "error", message: "Language server tidak merespons initialize." });
   }, 10_000);
 
+  const formatLspError = (message: string): string => {
+    if (/no views/i.test(message)) {
+      return `${message} (handshake initialize/initialized gagal — coba buka ulang file)`;
+    }
+    return message;
+  };
+
+  // Completion/hover/etc. cancel often; monaco-lsp-bridge surfaces those as errors.
+  const isBenignLspError = (error: { code?: number; message?: string }): boolean => {
+    const code = error.code;
+    if (code === -32800 || code === -32801 || code === -32802) return true;
+    if (code === 1002) return true;
+    const message = error.message ?? "";
+    return /cancel|disposed before response/i.test(message);
+  };
+
+  let closed = false;
+
   const offEvent = client.onEvent((event) => {
+    if (closed) return;
     if (event.type === "initialized") {
+      sendInitializedNotification();
       ready = true;
       clearTimeout(readyTimer);
       onStatus?.({ status: "ready" });
     } else if (event.type === "error") {
+      if (isBenignLspError(event.error)) return;
       clearTimeout(readyTimer);
-      onStatus?.({ status: "error", message: event.error.message });
+      onStatus?.({ status: "error", message: formatLspError(event.error.message) });
     } else if (event.type === "shutdownError") {
+      if (closed) return;
       clearTimeout(readyTimer);
       onStatus?.({ status: "error", message: "Language server gagal shutdown." });
     }
   });
 
   const onSocketClose = (event: CloseEvent) => {
+    if (closed) return;
     clearTimeout(readyTimer);
     onStatus?.({ status: "error", message: event.reason || "Koneksi LSP terputus." });
   };
   const onSocketError = () => {
+    if (closed) return;
     clearTimeout(readyTimer);
     onStatus?.({ status: "error", message: "Koneksi LSP error." });
   };
@@ -263,6 +321,7 @@ export async function connectLsp(
   client.connect(monacoApi, editor);
 
   return async () => {
+    closed = true;
     clearTimeout(readyTimer);
     offEvent();
     socket.removeEventListener("message", onMessage);

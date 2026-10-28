@@ -25,6 +25,18 @@ interface Props {
   onChange?: (value: string) => void;
   lsp?: MonacoLspConfig;
   onLspStatus?: (event: LspStatusEvent) => void;
+  line?: number;
+}
+
+function lspSessionKey(lsp: MonacoLspConfig | undefined, languageId: string): string {
+  if (!lsp) return "";
+  let init = "";
+  try {
+    init = lsp.initializationOptions ? JSON.stringify(lsp.initializationOptions) : "";
+  } catch {
+    init = "";
+  }
+  return `${lsp.projectId}|${lsp.workspacePath}|${lsp.absolutePath}|${languageId}|${init}`;
 }
 
 export default function MonacoViewer({
@@ -37,6 +49,7 @@ export default function MonacoViewer({
   onChange,
   lsp,
   onLspStatus,
+  line,
 }: Props) {
   const { editorFont, editorFontSize } = useTheme();
   const editorRef = useRef<MonacoEditor.IStandaloneCodeEditor | null>(null);
@@ -44,19 +57,19 @@ export default function MonacoViewer({
   const disposeLspRef = useRef<(() => Promise<void>) | null>(null);
   const onLspStatusRef = useRef(onLspStatus);
   onLspStatusRef.current = onLspStatus;
+  const lspRef = useRef(lsp);
+  lspRef.current = lsp;
   const [editorReady, setEditorReady] = useState(0);
   const languageId = language ?? languageForPath(path);
   const modelPath = lsp ? fileUri(lsp.absolutePath) : path;
-  const lspKey = lsp
-    ? `${lsp.projectId}|${lsp.workspacePath}|${lsp.absolutePath}|${languageId}`
-    : "";
+  const sessionKey = lspSessionKey(lsp, languageId);
 
   useEffect(() => {
     if (!lsp) onLspStatusRef.current?.({ status: "off" });
   }, [lsp]);
 
   useEffect(() => {
-    let cancelled = false;
+    let disposed = false;
 
     const disposeCurrent = async () => {
       const dispose = disposeLspRef.current;
@@ -66,28 +79,32 @@ export default function MonacoViewer({
 
     void (async () => {
       await disposeCurrent();
-      if (cancelled) return;
+      if (disposed) return;
 
+      const current = lspRef.current;
       const editor = editorRef.current;
       const monacoApi = monacoRef.current;
-      if (!lsp || !editor || !monacoApi) {
-        if (!lsp) onLspStatusRef.current?.({ status: "off" });
+      if (!current || !sessionKey || !editor || !monacoApi) {
+        if (!current) onLspStatusRef.current?.({ status: "off" });
         return;
       }
 
       const { connectLsp } = await import("@/lib/lsp");
-      if (cancelled) return;
+      if (disposed) return;
 
       const dispose = await connectLsp(monacoApi, editor, {
-        projectId: lsp.projectId,
-        workspacePath: lsp.workspacePath,
-        absolutePath: lsp.absolutePath,
+        projectId: current.projectId,
+        workspacePath: current.workspacePath,
+        absolutePath: current.absolutePath,
         language: languageId,
-        initializationOptions: lsp.initializationOptions,
-        onStatus: (event) => onLspStatusRef.current?.(event),
+        initializationOptions: current.initializationOptions,
+        onStatus: (event) => {
+          if (disposed) return;
+          onLspStatusRef.current?.(event);
+        },
       });
 
-      if (cancelled) {
+      if (disposed) {
         await dispose();
         return;
       }
@@ -95,10 +112,10 @@ export default function MonacoViewer({
     })();
 
     return () => {
-      cancelled = true;
+      disposed = true;
       void disposeCurrent();
     };
-  }, [lsp, lspKey, languageId, editorReady]);
+  }, [sessionKey, languageId, editorReady]);
 
   return (
     <Editor
@@ -107,6 +124,7 @@ export default function MonacoViewer({
       language={languageId}
       value={content}
       theme={theme}
+      line={line}
       loading={<Skeleton className="h-full w-full rounded-none" />}
       onMount={(editor, monacoApi) => {
         editorRef.current = editor;
