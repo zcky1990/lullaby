@@ -32,6 +32,7 @@
     "lucide-react": "^0.469.0",
     "mermaid": "^12.2.0",
     "monaco-editor": "^0.57.0",
+    "monaco-lsp-bridge": "0.0.5",
     "radix-ui": "^1.8.1",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",

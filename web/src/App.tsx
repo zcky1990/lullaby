@@ -57,6 +57,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { triggerFind } from "@/lib/find";
+import { languageForPath } from "@/lib/languages";
+import { normalizeWorkspacePath, type LspStatusEvent } from "@/lib/lsp";
 import { dispatchAutoBuild } from "@/lib/auto-build-events";
 import { CHANGES_APPLIED_EVENT, REVIEW_EVENT, type ReviewDetail } from "@/lib/review-events";
 import { isTodoToInProgress } from "@/lib/ticket-columns";
@@ -1100,6 +1102,8 @@ export default function App() {
           <FileTab
             key={tab.id}
             tab={tab}
+            projectId={currentId}
+            workspacePath={detail?.project.workspace_path ?? null}
             onChange={(content) => patchTab(tab.id, { content, dirty: true })}
             onSave={() => saveFile(tab.ref ?? tab.title, tab.content ?? "")}
             onTogglePreview={() => patchTab(tab.id, { preview: !tab.preview })}
@@ -1381,11 +1385,15 @@ function StatCard({ label, value }: { label: string; value: number }) {
 
 function FileTab({
   tab,
+  projectId,
+  workspacePath,
   onChange,
   onSave,
   onTogglePreview,
 }: {
   tab: EditorTab;
+  projectId: string | null;
+  workspacePath: string | null;
   onChange: (content: string) => void;
   onSave: () => Promise<void>;
   onTogglePreview: () => void;
@@ -1393,8 +1401,35 @@ function FileTab({
   const { resolvedEditorTheme } = useTheme();
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | undefined>();
+  const [lspEnabled, setLspEnabled] = useState(false);
+  const [lspStatus, setLspStatus] = useState<LspStatusEvent>({ status: "off" });
   const path = tab.ref ?? tab.title;
   const isMarkdown = /\.(md|markdown|mdx)$/i.test(path);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLspEnabled(false);
+    setLspStatus({ status: "off" });
+    if (!projectId || !workspacePath) return;
+    const language = languageForPath(path);
+    api
+      .getLspSettings()
+      .then((res) => {
+        if (cancelled) return;
+        const match = res.settings.enabled &&
+          res.settings.servers.some((server) =>
+            server.enabled &&
+            server.languages.some((item) => item.toLowerCase() === language.toLowerCase())
+          );
+        setLspEnabled(match);
+      })
+      .catch(() => {
+        if (!cancelled) setLspEnabled(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId, workspacePath, path]);
 
   if (tab.loading) return <Skeleton className="h-full w-full rounded-none" />;
   if (tab.error) return <p className="p-6 text-sm text-destructive">{tab.error}</p>;
@@ -1421,6 +1456,19 @@ function FileTab({
           <span className="truncate font-mono text-xs text-muted-foreground">{path}</span>
           {tab.dirty ? (
             <span className="size-1.5 shrink-0 rounded-full bg-primary" title="Belum disimpan" />
+          ) : null}
+          {lspEnabled ? (
+            <Badge
+              variant={lspStatus.status === "ready"
+                ? "success"
+                : lspStatus.status === "error"
+                ? "destructive"
+                : "outline"}
+              className="h-5 px-1.5 text-[10px]"
+              title={lspStatus.message}
+            >
+              LSP {lspStatus.status}
+            </Badge>
           ) : null}
         </div>
         <div className="flex shrink-0 items-center gap-2">
@@ -1475,6 +1523,14 @@ function FileTab({
               theme={resolvedEditorTheme}
               readOnly={false}
               onChange={onChange}
+              lsp={lspEnabled && projectId && workspacePath
+                ? {
+                  projectId,
+                  workspacePath,
+                  absolutePath: normalizeWorkspacePath(workspacePath, path),
+                }
+                : undefined}
+              onLspStatus={setLspStatus}
             />
           </Suspense>
         )}

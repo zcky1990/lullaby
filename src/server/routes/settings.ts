@@ -1,5 +1,7 @@
 import {
   AutomationSettingsInput,
+  LspProbeInput,
+  LspSettingsInput,
   McpServerInput,
   McpSettingsInput,
   PromptsSettingsInput,
@@ -9,6 +11,7 @@ import {
 import { log } from "../../core/logger.ts";
 import { getAppSetting, getProject, setAppSetting } from "../../db/db.ts";
 import { json, readJson, record } from "../http.ts";
+import { lspPresets, probeLspCommand, readLspSettings, writeLspSettings } from "../lsp.ts";
 import { listMcpTools } from "../mcp.ts";
 import {
   builtinSkillsDir,
@@ -156,6 +159,32 @@ export async function saveTerminalSettingsHandler(req: Request): Promise<Respons
   await setAppSetting(TERMINAL_SHELL_KEY, parsed.data.shell);
   await record("settings.terminal_updated", { shell: parsed.data.shell });
   return json({ shell: parsed.data.shell });
+}
+
+export async function getLspSettingsHandler(): Promise<Response> {
+  const settings = await readLspSettings();
+  return json({ settings, presets: lspPresets() });
+}
+
+export async function saveLspSettingsHandler(req: Request): Promise<Response> {
+  const parsed = LspSettingsInput.safeParse(await readJson(req));
+  if (!parsed.success) {
+    return json({ error: "invalid_input", issues: parsed.error.issues }, 400);
+  }
+  const settings = await writeLspSettings(parsed.data);
+  await record("settings.lsp_updated", {
+    enabled: settings.enabled,
+    servers: settings.servers.length,
+  });
+  return json({ settings });
+}
+
+export async function probeLspHandler(req: Request): Promise<Response> {
+  const parsed = LspProbeInput.safeParse(await readJson(req));
+  if (!parsed.success) {
+    return json({ error: "invalid_input", issues: parsed.error.issues }, 400);
+  }
+  return json(await probeLspCommand(parsed.data.command));
 }
 
 export async function getPromptsHandler(): Promise<Response> {

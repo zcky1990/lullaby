@@ -59,8 +59,7 @@ finishing a change.
   chats), `appDataDir()/skills` (global), and `src/skills/builtin` (bundled, lowest priority). On
   first launch `installDefaultSkills()` copies `docmost-api`, `jira-api`, `confluence-api`, and
   `clickup-api` into the global skills dir (guarded by `app_settings.skills_defaults_installed`).
-  Chat
-  injects the skill list into the system prompt and exposes a read-only `use_skill` tool
+  Chat injects the skill list into the system prompt and exposes a read-only `use_skill` tool
   (progressive disclosure; allowed in Plan mode). After each successful Build run that used tools,
   `src/server/chat/skill-learn.ts` writes a deterministic project skill. Chat composer supports
   `/skill-name` (autocomplete + `skillName` on `POST .../chat`) which injects the skill body into
@@ -83,6 +82,13 @@ finishing a change.
   `TerminalSession` instances (xterm.js + fit addon); sessions stay mounted while the panel is
   hidden, and the panel height persists. Shell default: Global Settings → Terminal. WebSocket auth
   uses the same session cookie as the HTTP API.
+- **LSP**: Global Settings → Language Servers stores `app_settings.lsp_settings` (master switch +
+  servers: Monaco `languages`, `command`, `args`, `env`, `mode` local/npx). `src/server/lsp.ts`
+  spawns the configured server in `projects.workspace_path` and bridges stdio LSP frames to
+  `/api/projects/:id/lsp?language=` WebSocket. Client `web/src/lib/lsp.ts` uses `monaco-lsp-bridge`
+  (dynamic import); workspace file tabs use `file:///` model URIs and show an LSP status badge.
+  Servers are **not bundled** (install manually or use npx presets); no arbitrary command from query
+  strings; max 3 connections/project. Tests: `test/lsp.test.ts`.
 - **Prompts**: global overrides for the Build system prompt and Plan prompt live in `app_settings`
   (`system_prompt`, `plan_prompt`) and are read per chat run (`src/server/prompts.ts`); empty values
   fall back to the built-in defaults. CRUD via `GET/PUT /api/settings/prompts`; UI is Global

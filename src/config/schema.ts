@@ -264,6 +264,33 @@ export const TerminalSettingsInput = z.object({
 });
 export type TerminalSettingsInput = z.infer<typeof TerminalSettingsInput>;
 
+export const LspMode = z.enum(["local", "npx"]);
+export type LspMode = z.infer<typeof LspMode>;
+
+export const LspServerInput = z.object({
+  id: z.string().trim().min(1).max(80).optional(),
+  name: z.string().trim().min(1).max(80),
+  languages: z.array(z.string().trim().min(1).max(40)).min(1).max(20),
+  command: z.string().trim().min(1).max(400),
+  args: z.array(z.string().max(2000)).max(40).default([]),
+  env: z.record(z.string(), z.string().max(4000)).default({}),
+  enabled: z.boolean().default(true),
+  mode: LspMode.default("local"),
+  initializationOptions: z.record(z.string(), z.unknown()).optional(),
+});
+export type LspServerInput = z.infer<typeof LspServerInput>;
+
+export const LspSettingsInput = z.object({
+  enabled: z.boolean().default(false),
+  servers: z.array(LspServerInput).max(20).default([]),
+});
+export type LspSettingsInput = z.infer<typeof LspSettingsInput>;
+
+export const LspProbeInput = z.object({
+  command: z.string().trim().min(1).max(400),
+});
+export type LspProbeInput = z.infer<typeof LspProbeInput>;
+
 export const AutoskillsInput = z.object({
   dryRun: z.boolean().optional().default(false),
 });

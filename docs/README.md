@@ -22,6 +22,7 @@ peta fitur/API untuk pengguna maupun developer.
 | [features/autoskill.md](features/autoskill.md) | Slash `/autoskill` → npx autoskills di workspace |
 | [features/code-review.md](features/code-review.md) | Builtin `/code-review` (Plan + git context) |
 | [features/git-terminal.md](features/git-terminal.md) | Git CLI UI dan terminal PTY |
+| [features/lsp.md](features/lsp.md) | Language Server Protocol di editor workspace |
 | [features/workflows.md](features/workflows.md) | Workflow YAML (DAG), runner, history, UI graph |
 | [features/integrations.md](features/integrations.md) | Konfigurasi & test integrasi |
 | [features/settings.md](features/settings.md) | Project Settings vs Global Settings |

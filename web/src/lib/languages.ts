@@ -35,6 +35,7 @@ const LANGUAGE_BY_EXTENSION: Record<string, string> = {
   bash: "shell",
   zsh: "shell",
   sql: "sql",
+  lua: "lua",
   xml: "xml",
   toml: "ini",
   ini: "ini",

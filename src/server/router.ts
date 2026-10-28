@@ -151,11 +151,14 @@ import {
 } from "./routes/workflows.ts";
 import {
   getAutomationSettingsHandler,
+  getLspSettingsHandler,
   getMcpSettingsHandler,
   getPromptsHandler,
   getTerminalSettingsHandler,
   listMcpToolsHandler,
+  probeLspHandler,
   saveAutomationSettingsHandler,
+  saveLspSettingsHandler,
   saveMcpSettingsHandler,
   savePromptsHandler,
   saveSkillsSettingsHandler,
@@ -163,6 +166,7 @@ import {
   skillsHandler,
 } from "./routes/settings.ts";
 import { runAutoskills } from "./autoskills.ts";
+import { handleLsp, matchLspServer, readLspSettings, resolveExecutable } from "./lsp.ts";
 import { serializeIntegration } from "./serializers.ts";
 import { APP_TOKEN_COOKIE, appToken } from "./session.ts";
 import { sse } from "./sse.ts";
@@ -864,6 +868,37 @@ async function terminalHandler(projectId: string, req: Request): Promise<Respons
   }
 }
 
+async function lspHandler(projectId: string, req: Request): Promise<Response> {
+  const project = await getProject(projectId);
+  if (!project) return json({ error: "project_not_found" }, 404);
+  if (!project.workspace_path) {
+    return json({ error: "workspace_required" }, 400);
+  }
+  const url = new URL(req.url);
+  const language = url.searchParams.get("language")?.trim().toLowerCase() ?? "";
+  if (!language) return json({ error: "language_required" }, 400);
+
+  const settings = await readLspSettings();
+  if (!settings.enabled) return json({ error: "lsp_disabled" }, 400);
+  const server = matchLspServer(settings, language);
+  if (!server) return json({ error: "lsp_server_not_found", language }, 404);
+
+  const command = await resolveExecutable(server.command);
+  if (!command) {
+    return json({
+      error: "lsp_command_not_found",
+      message: `Command LSP tidak ditemukan: ${server.command}`,
+      command: server.command,
+    }, 400);
+  }
+
+  try {
+    return handleLsp(req, projectId, project.workspace_path, { ...server, command });
+  } catch (error) {
+    return json({ error: (error as Error).message }, 400);
+  }
+}
+
 async function generateTicketsHandler(projectId: string, req: Request): Promise<Response> {
   const project = await getProject(projectId);
   if (!project) return json({ error: "project_not_found" }, 404);
@@ -1345,6 +1380,14 @@ export async function handleRequest(req: Request): Promise<Response> {
       if (method === "PUT" || method === "POST") return await saveTerminalSettingsHandler(req);
     }
 
+    if (pathname === "/api/settings/lsp") {
+      if (method === "GET") return await getLspSettingsHandler();
+      if (method === "PUT" || method === "POST") return await saveLspSettingsHandler(req);
+    }
+    if (pathname === "/api/settings/lsp/probe" && method === "POST") {
+      return await probeLspHandler(req);
+    }
+
     if (pathname === "/api/settings/prompts") {
       if (method === "GET") return await getPromptsHandler();
       if (method === "PUT" || method === "POST") return await savePromptsHandler(req);
@@ -1493,6 +1536,9 @@ export async function handleRequest(req: Request): Promise<Response> {
 
     const terminal = pathname.match(/^\/api\/projects\/([^/]+)\/terminal$/);
     if (terminal && method === "GET") return await terminalHandler(terminal[1], req);
+
+    const lsp = pathname.match(/^\/api\/projects\/([^/]+)\/lsp$/);
+    if (lsp && method === "GET") return await lspHandler(lsp[1], req);
 
     const files = pathname.match(/^\/api\/projects\/([^/]+)\/files$/);
     if (files && method === "GET") {

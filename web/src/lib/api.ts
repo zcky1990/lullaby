@@ -338,6 +338,46 @@ export interface LocalTicketPayload {
 export type ChatMode = "plan" | "build";
 export type TerminalShell = "zsh" | "bash";
 
+export type LspMode = "local" | "npx";
+
+export interface LspServer {
+  id?: string;
+  name: string;
+  languages: string[];
+  command: string;
+  args: string[];
+  env: Record<string, string>;
+  enabled: boolean;
+  mode: LspMode;
+  initializationOptions?: Record<string, unknown>;
+}
+
+export interface LspSettings {
+  enabled: boolean;
+  servers: LspServer[];
+}
+
+export interface LspPresetVariant {
+  label: string;
+  mode: LspMode;
+  command: string;
+  args: string[];
+}
+
+export interface LspPreset {
+  id: string;
+  name: string;
+  languages: string[];
+  note?: string;
+  variants: LspPresetVariant[];
+}
+
+export interface LspProbeResult {
+  found: boolean;
+  path?: string;
+  command: string;
+}
+
 export interface ChatPending {
   id: string;
   tool: string;
@@ -855,6 +895,12 @@ export const api = {
     request<{ shell: TerminalShell }>("/api/settings/terminal"),
   saveTerminalSettings: (payload: { shell: TerminalShell }) =>
     request<{ shell: TerminalShell }>("/api/settings/terminal", jsonInit("PUT", payload)),
+  getLspSettings: () =>
+    request<{ settings: LspSettings; presets: LspPreset[] }>("/api/settings/lsp"),
+  saveLspSettings: (payload: LspSettings) =>
+    request<{ settings: LspSettings }>("/api/settings/lsp", jsonInit("PUT", payload)),
+  probeLspServer: (command: string) =>
+    request<LspProbeResult>("/api/settings/lsp/probe", jsonInit("POST", { command })),
   runAutoskills: (projectId: string, payload: { dryRun?: boolean } = {}) =>
     request<{
       ok: boolean;
