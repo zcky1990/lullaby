@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { CaseSensitive, File, Regex, Search } from "lucide-react";
+import { CaseSensitive, File, Regex } from "lucide-react";
 import { PanelHeader } from "@/components/PanelHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -75,36 +75,37 @@ export function FindTab({ projectId, onOpenFile }: Props) {
     <div className="flex h-full min-h-0 flex-col">
       <PanelHeader title="Find" count={result?.matches.length} />
       <div className="flex flex-col gap-2 border-b px-3 py-2">
-        <div className="flex items-center gap-2">
-          <Search className="size-4 shrink-0 text-muted-foreground" />
+        <div className="relative">
           <Input
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder="Cari di file workspace…"
-            className="h-8 flex-1"
+            className="h-8 pr-16"
             aria-label="Cari di file"
             autoFocus
           />
-          <Button
-            size="icon"
-            variant={caseSensitive ? "secondary" : "ghost"}
-            className="size-8"
-            onClick={() => setCaseSensitive((value) => !value)}
-            aria-label="Match case"
-            title="Match case"
-          >
-            <CaseSensitive />
-          </Button>
-          <Button
-            size="icon"
-            variant={regex ? "secondary" : "ghost"}
-            className="size-8"
-            onClick={() => setRegex((value) => !value)}
-            aria-label="Regex"
-            title="Regex"
-          >
-            <Regex />
-          </Button>
+          <div className="absolute inset-y-0 right-1 flex items-center gap-0.5">
+            <Button
+              size="icon"
+              variant={caseSensitive ? "secondary" : "ghost"}
+              className="size-6 rounded-sm"
+              onClick={() => setCaseSensitive((value) => !value)}
+              aria-label="Match case"
+              title="Match case"
+            >
+              <CaseSensitive className="size-3.5" />
+            </Button>
+            <Button
+              size="icon"
+              variant={regex ? "secondary" : "ghost"}
+              className="size-6 rounded-sm"
+              onClick={() => setRegex((value) => !value)}
+              aria-label="Regex"
+              title="Regex"
+            >
+              <Regex className="size-3.5" />
+            </Button>
+          </div>
         </div>
         <div className="flex items-center justify-between text-[11px] text-muted-foreground">
           <span>
