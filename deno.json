@@ -8,7 +8,7 @@
     "assets": "deno run -A scripts/build-assets.ts",
     "web:dev": "npm --prefix web run dev",
     "dev": "deno task build && deno desktop --hmr --allow-read --allow-write --allow-net --allow-env --allow-run --allow-ffi main.ts",
-    "desktop": "deno task build && deno desktop --allow-read --allow-write --allow-net --allow-env --allow-run --allow-ffi --output ./dist/RNDWorkflow.app main.ts",
+    "desktop": "deno task build && deno desktop --allow-read --allow-write --allow-net --allow-env --allow-run --allow-ffi --output ./dist/LullabyIDE.app main.ts",
     "start": "deno task build && deno run --allow-read --allow-write --allow-net --allow-env --allow-run --allow-ffi main.ts",
     "check": "deno check --desktop main.ts",
     "test": "deno test -A test/",
