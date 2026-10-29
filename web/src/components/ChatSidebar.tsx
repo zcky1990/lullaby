@@ -754,7 +754,7 @@ export function ChatSidebar({
         </Button>
       </div>
 
-      <div ref={scrollRef} className="flex-1 overflow-y-auto p-3">
+      <div ref={scrollRef} className="chat-surface flex-1 overflow-y-auto p-3">
         {entries.length === 0
           ? (
             <p className="text-sm text-muted-foreground">
@@ -1021,7 +1021,7 @@ export function ChatSidebar({
                 : "Tulis pesan… /skill-name · Enter kirim"}
               disabled={!!pending}
               rows={3}
-              className="w-full resize-none border-0 bg-transparent px-3 py-2 text-sm outline-none disabled:opacity-60"
+              className="chat-composer-input w-full resize-none border-0 bg-transparent px-3 py-2 outline-none disabled:opacity-60"
             />
           </div>
           <div className="flex items-center gap-1 px-2 pb-2">

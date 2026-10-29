@@ -259,6 +259,22 @@ html[data-icon-weight="bold"] svg.lucide {
   stroke-width: 2.5;
 }
 
+.chat-surface {
+  font-family: var(--chat-font, inherit);
+  font-size: var(--chat-font-size, inherit);
+}
+
+.chat-surface .prose {
+  font-family: var(--chat-font, inherit);
+  font-size: var(--chat-font-size, inherit);
+  line-height: 1.6;
+}
+
+.chat-composer-input {
+  font-family: var(--chat-font, inherit);
+  font-size: var(--chat-font-size, inherit);
+}
+
 .terminal-host .xterm {
   height: 100%;
   padding: 0;

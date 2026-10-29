@@ -15,6 +15,8 @@ const COLOR_THEME_KEY = "rnd.colorTheme:v1";
 const APP_FONT_KEY = "rnd.appFont:v1";
 const EDITOR_FONT_KEY = "rnd.editorFont:v1";
 const EDITOR_FONT_SIZE_KEY = "rnd.editorFontSize:v1";
+const CHAT_FONT_KEY = "rnd.chatFont:v1";
+const CHAT_FONT_SIZE_KEY = "rnd.chatFontSize:v1";
 const ICON_SIZE_KEY = "rnd.iconSize:v1";
 const ICON_WEIGHT_KEY = "rnd.iconWeight:v1";
 
@@ -47,6 +49,10 @@ interface ThemeContextValue {
   setEditorFont: (font: EditorFont) => void;
   editorFontSize: number;
   setEditorFontSize: (size: number) => void;
+  chatFont: AppFont;
+  setChatFont: (font: AppFont) => void;
+  chatFontSize: number;
+  setChatFontSize: (size: number) => void;
   colorTheme: ThemePreset;
   setColorTheme: (theme: ThemePreset) => void;
   iconSize: IconSize;
@@ -68,6 +74,10 @@ const ThemeContext = createContext<ThemeContextValue>({
   setEditorFont: () => {},
   editorFontSize: 13,
   setEditorFontSize: () => {},
+  chatFont: "system",
+  setChatFont: () => {},
+  chatFontSize: 16,
+  setChatFontSize: () => {},
   colorTheme: "shadcn",
   setColorTheme: () => {},
   iconSize: "md",
@@ -147,6 +157,12 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const [editorFontSize, setEditorFontSizeState] = useState<number>(() =>
     readNumber(EDITOR_FONT_SIZE_KEY, [12, 13, 14, 15, 16] as const, 13)
   );
+  const [chatFont, setChatFontState] = useState<AppFont>(() =>
+    readString(CHAT_FONT_KEY, ["system", "inter", "manrope", "jetbrains"] as const, "system")
+  );
+  const [chatFontSize, setChatFontSizeState] = useState<number>(() =>
+    readNumber(CHAT_FONT_SIZE_KEY, [12, 13, 14, 15, 16, 18, 20] as const, 16)
+  );
   const [iconSize, setIconSizeState] = useState<IconSize>(() =>
     readString(ICON_SIZE_KEY, ["sm", "md", "lg"] as const, "md")
   );
@@ -179,6 +195,14 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     document.documentElement.style.setProperty("--app-font", APP_FONT_STACKS[appFont]);
   }, [appFont]);
+
+  useEffect(() => {
+    document.documentElement.style.setProperty("--chat-font", APP_FONT_STACKS[chatFont]);
+  }, [chatFont]);
+
+  useEffect(() => {
+    document.documentElement.style.setProperty("--chat-font-size", `${chatFontSize}px`);
+  }, [chatFontSize]);
 
   useEffect(() => {
     document.documentElement.dataset.iconSize = iconSize;
@@ -242,6 +266,24 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const setChatFont = (next: AppFont) => {
+    setChatFontState(next);
+    try {
+      localStorage.setItem(CHAT_FONT_KEY, next);
+    } catch {
+      // ignore
+    }
+  };
+
+  const setChatFontSize = (next: number) => {
+    setChatFontSizeState(next);
+    try {
+      localStorage.setItem(CHAT_FONT_SIZE_KEY, String(next));
+    } catch {
+      // ignore
+    }
+  };
+
   const setIconSize = (next: IconSize) => {
     setIconSizeState(next);
     try {
@@ -278,6 +320,10 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
         setEditorFont,
         editorFontSize,
         setEditorFontSize,
+        chatFont,
+        setChatFont,
+        chatFontSize,
+        setChatFontSize,
         colorTheme,
         setColorTheme,
         iconSize,

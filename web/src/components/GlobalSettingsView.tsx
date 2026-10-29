@@ -68,6 +68,7 @@ const EDITOR_FONT_OPTIONS: { id: EditorFont; label: string }[] = [
 ];
 
 const EDITOR_SIZE_OPTIONS = [12, 13, 14, 15, 16];
+const CHAT_SIZE_OPTIONS = [12, 13, 14, 15, 16, 18, 20];
 
 const ICON_SIZE_OPTIONS: { id: IconSize; label: string }[] = [
   { id: "sm", label: "Compact" },
@@ -128,6 +129,7 @@ export function GlobalSettingsView({
       <div className="flex flex-col gap-8">
         <Appearance />
         <EditorSettings />
+        <ChatSettings />
         <IconSettings />
       </div>
     );
@@ -325,6 +327,57 @@ function EditorSettings() {
             </Select>
           </Field>
         </div>
+      </div>
+    </Section>
+  );
+}
+
+function ChatSettings() {
+  const { chatFont, setChatFont, chatFontSize, setChatFontSize } = useTheme();
+  return (
+    <Section title="Chat" description="Font dan ukuran teks untuk pesan dan input chat.">
+      <div className="flex flex-wrap gap-4">
+        <Field label="Font chat">
+          <Select value={chatFont} onValueChange={(value) => setChatFont(value as AppFont)}>
+            <SelectTrigger size="sm" className="w-56" aria-label="Font chat">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                {APP_FONT_OPTIONS.map((option) => (
+                  <SelectItem key={option.id} value={option.id}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+        </Field>
+        <Field label="Ukuran font chat">
+          <Select
+            value={String(chatFontSize)}
+            onValueChange={(value) => setChatFontSize(Number(value))}
+          >
+            <SelectTrigger size="sm" className="w-24" aria-label="Ukuran font chat">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                {CHAT_SIZE_OPTIONS.map((size) => (
+                  <SelectItem key={size} value={String(size)}>
+                    {size}px
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+        </Field>
+      </div>
+      <div className="chat-surface max-w-md rounded-md border bg-muted/30 p-3">
+        <p className="font-medium">Contoh pesan chat</p>
+        <p className="text-muted-foreground">
+          Pengaturan ini berlaku untuk pesan dan input chat.
+        </p>
       </div>
     </Section>
   );
