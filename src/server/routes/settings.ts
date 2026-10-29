@@ -8,6 +8,7 @@ import {
   PromptsSettingsInput,
   SkillsSettingsInput,
   TerminalSettingsInput,
+  UiPreferencesInput,
 } from "../../config/schema.ts";
 import { log } from "../../core/logger.ts";
 import { getAppSetting, getProject, setAppSetting } from "../../db/db.ts";
@@ -34,6 +35,7 @@ import { DEFAULT_PLAN_PROMPT, DEFAULT_SYSTEM_PROMPT, readPromptSettings } from "
 
 const MCP_SETTINGS_KEY = "mcp_servers";
 const AUTO_BUILD_KEY = "auto_build_on_in_progress";
+const UI_PREFERENCES_KEY = "ui_preferences";
 
 function parseStringArray(raw: string | null): string[] {
   if (!raw) return [];
@@ -200,6 +202,29 @@ export async function saveTerminalSettingsHandler(req: Request): Promise<Respons
   await setAppSetting(TERMINAL_SHELL_KEY, parsed.data.shell);
   await record("settings.terminal_updated", { shell: parsed.data.shell });
   return json({ shell: parsed.data.shell });
+}
+
+export async function getUiPreferencesHandler(): Promise<Response> {
+  const raw = await getAppSetting(UI_PREFERENCES_KEY);
+  let preferences: Record<string, unknown> = {};
+  if (raw) {
+    try {
+      const parsed = UiPreferencesInput.safeParse(JSON.parse(raw));
+      if (parsed.success) preferences = parsed.data;
+    } catch {
+      preferences = {};
+    }
+  }
+  return json({ preferences });
+}
+
+export async function saveUiPreferencesHandler(req: Request): Promise<Response> {
+  const parsed = UiPreferencesInput.safeParse(await readJson(req));
+  if (!parsed.success) {
+    return json({ error: "invalid_input", issues: parsed.error.issues }, 400);
+  }
+  await setAppSetting(UI_PREFERENCES_KEY, JSON.stringify(parsed.data));
+  return json({ preferences: parsed.data });
 }
 
 export async function getLspSettingsHandler(): Promise<Response> {

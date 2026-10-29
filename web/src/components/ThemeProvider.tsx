@@ -1,4 +1,5 @@
 import { createContext, type ReactNode, useContext, useEffect, useState } from "react";
+import { api } from "@/lib/api";
 
 export type Theme = "light" | "dark" | "system";
 export type ResolvedTheme = "light" | "dark";
@@ -169,6 +170,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const [iconWeight, setIconWeightState] = useState<IconWeight>(() =>
     readString(ICON_WEIGHT_KEY, ["light", "regular", "bold"] as const, "regular")
   );
+  const [hydrated, setHydrated] = useState(false);
   const [systemDark, setSystemDark] = useState<boolean>(() =>
     typeof window !== "undefined"
       ? window.matchMedia("(prefers-color-scheme: dark)").matches
@@ -301,6 +303,69 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       // ignore
     }
   };
+
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .getUiPreferences()
+      .then(({ preferences }) => {
+        if (cancelled) return;
+        if (preferences.theme) setTheme(preferences.theme);
+        if (preferences.colorTheme) setColorTheme(preferences.colorTheme);
+        if (preferences.appFont) setAppFont(preferences.appFont);
+        if (preferences.editorTheme) setEditorTheme(preferences.editorTheme);
+        if (preferences.editorFont) setEditorFont(preferences.editorFont);
+        if (preferences.editorFontSize) setEditorFontSize(preferences.editorFontSize);
+        if (preferences.chatFont) setChatFont(preferences.chatFont);
+        if (preferences.chatFontSize) setChatFontSize(preferences.chatFontSize);
+        if (preferences.iconSize) setIconSize(preferences.iconSize);
+        if (preferences.iconWeight) setIconWeight(preferences.iconWeight);
+      })
+      .catch(() => {
+        // backend unavailable; keep local preferences
+      })
+      .finally(() => {
+        if (!cancelled) setHydrated(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    const timer = setTimeout(() => {
+      void api
+        .saveUiPreferences({
+          theme,
+          colorTheme,
+          appFont,
+          editorTheme,
+          editorFont,
+          editorFontSize,
+          chatFont,
+          chatFontSize,
+          iconSize,
+          iconWeight,
+        })
+        .catch(() => {
+          // keep localStorage as fallback
+        });
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [
+    hydrated,
+    theme,
+    colorTheme,
+    appFont,
+    editorTheme,
+    editorFont,
+    editorFontSize,
+    chatFont,
+    chatFontSize,
+    iconSize,
+    iconWeight,
+  ]);
 
   const resolvedEditorTheme =
     editorTheme === "auto" ? (resolved === "dark" ? "vs-dark" : "vs") : editorTheme;

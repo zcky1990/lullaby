@@ -26,9 +26,14 @@ Section nav di aside (`GlobalSettingsPanel`):
 | Terminal            | Default shell (`zsh` / `bash`) untuk session baru                                |
 | About               | Info aplikasi                                                                    |
 
-## Preferensi UI lokal (bukan DB)
+## Preferensi UI
 
-Disimpan di `localStorage` browser/webview, misalnya:
+Preferensi tampilan (tema, font aplikasi/editor/chat, ukuran, ikon) disimpan ke backend di
+`app_settings.ui_preferences` melalui `GET/PUT /api/settings/ui`, dengan `localStorage` sebagai
+cache awal. Ini penting karena origin webview desktop memakai port loopback yang bisa berubah tiap
+launch.
+
+Preferensi lain masih disimpan di `localStorage` browser/webview, misalnya:
 
 - Project aktif
 - Lebar panel

@@ -251,6 +251,22 @@ export const SkillsSettingsInput = z.object({
 export type McpSettingsInput = z.infer<typeof McpSettingsInput>;
 export type SkillsSettingsInput = z.infer<typeof SkillsSettingsInput>;
 
+export const UiPreferencesInput = z
+  .object({
+    theme: z.enum(["light", "dark", "system"]).optional(),
+    colorTheme: z.enum(["vscode", "shadcn", "claude", "supabase"]).optional(),
+    appFont: z.enum(["system", "inter", "manrope", "jetbrains"]).optional(),
+    editorTheme: z.enum(["auto", "vs", "vs-dark", "hc-black", "hc-light"]).optional(),
+    editorFont: z.enum(["jetbrains", "fira", "menlo", "consolas", "monospace"]).optional(),
+    editorFontSize: z.number().int().min(10).max(32).optional(),
+    chatFont: z.enum(["system", "inter", "manrope", "jetbrains"]).optional(),
+    chatFontSize: z.number().int().min(10).max(32).optional(),
+    iconSize: z.enum(["sm", "md", "lg"]).optional(),
+    iconWeight: z.enum(["light", "regular", "bold"]).optional(),
+  })
+  .strict();
+export type UiPreferencesInput = z.infer<typeof UiPreferencesInput>;
+
 export const AutomationSettingsInput = z.object({
   autoBuildOnInProgress: z.boolean().default(false),
 });

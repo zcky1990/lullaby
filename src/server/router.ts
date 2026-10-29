@@ -162,6 +162,7 @@ import {
   getMcpSettingsHandler,
   getPromptsHandler,
   getTerminalSettingsHandler,
+  getUiPreferencesHandler,
   listMcpToolsHandler,
   probeLspHandler,
   saveAutomationSettingsHandler,
@@ -171,6 +172,7 @@ import {
   savePromptsHandler,
   saveSkillsSettingsHandler,
   saveTerminalSettingsHandler,
+  saveUiPreferencesHandler,
   skillsHandler,
 } from "./routes/settings.ts";
 import { runAutoskills } from "./autoskills.ts";
@@ -1424,6 +1426,11 @@ export async function handleRequest(req: Request): Promise<Response> {
     if (pathname === "/api/settings/terminal") {
       if (method === "GET") return await getTerminalSettingsHandler();
       if (method === "PUT" || method === "POST") return await saveTerminalSettingsHandler(req);
+    }
+
+    if (pathname === "/api/settings/ui") {
+      if (method === "GET") return await getUiPreferencesHandler();
+      if (method === "PUT" || method === "POST") return await saveUiPreferencesHandler(req);
     }
 
     if (pathname === "/api/settings/lsp") {

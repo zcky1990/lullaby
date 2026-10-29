@@ -388,6 +388,19 @@ export interface LspPreset {
   variants: LspPresetVariant[];
 }
 
+export interface UiPreferences {
+  theme?: "light" | "dark" | "system";
+  colorTheme?: "vscode" | "shadcn" | "claude" | "supabase";
+  appFont?: "system" | "inter" | "manrope" | "jetbrains";
+  editorTheme?: "auto" | "vs" | "vs-dark" | "hc-black" | "hc-light";
+  editorFont?: "jetbrains" | "fira" | "menlo" | "consolas" | "monospace";
+  editorFontSize?: number;
+  chatFont?: "system" | "inter" | "manrope" | "jetbrains";
+  chatFontSize?: number;
+  iconSize?: "sm" | "md" | "lg";
+  iconWeight?: "light" | "regular" | "bold";
+}
+
 export interface LspProbeResult {
   found: boolean;
   path?: string;
@@ -953,6 +966,10 @@ export const api = {
     request<{ shell: TerminalShell }>("/api/settings/terminal"),
   saveTerminalSettings: (payload: { shell: TerminalShell }) =>
     request<{ shell: TerminalShell }>("/api/settings/terminal", jsonInit("PUT", payload)),
+  getUiPreferences: () =>
+    request<{ preferences: UiPreferences }>("/api/settings/ui"),
+  saveUiPreferences: (preferences: UiPreferences) =>
+    request<{ preferences: UiPreferences }>("/api/settings/ui", jsonInit("PUT", preferences)),
   getLspSettings: () =>
     request<{ settings: LspSettings; presets: LspPreset[] }>("/api/settings/lsp"),
   saveLspSettings: (payload: LspSettings) =>
