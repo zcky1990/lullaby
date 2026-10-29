@@ -296,3 +296,18 @@ html[data-icon-weight="bold"] svg.lucide {
   background: color-mix(in oklab, var(--foreground) 28%, transparent);
   border-radius: 999px;
 }
+
+.window-toolbar {
+  -webkit-app-region: drag;
+  user-select: none;
+}
+
+.window-toolbar button,
+.window-toolbar a,
+.window-toolbar input {
+  -webkit-app-region: no-drag;
+}
+
+html[data-platform="macos"] .window-toolbar {
+  padding-left: 78px;
+}

@@ -8,13 +8,19 @@ export function isDesktopRuntime(): boolean {
 export function createMainWindow(options: { title: string }): Deno.BrowserWindow | null {
   if (!isDesktopRuntime()) return null;
 
-  const win = new Deno.BrowserWindow({ title: options.title, width: 1200, height: 800 });
+  const win = new Deno.BrowserWindow({
+    title: options.title,
+    width: 1200,
+    height: 800,
+    transparentTitlebar: Deno.build.os === "darwin",
+  });
 
   win.bind("appInfo", () =>
     Promise.resolve({
       name: "Lullaby IDE",
       version: "0.1.0",
       dataDir: appDataDir(),
+      platform: Deno.build.os,
     }));
 
   win.bind("chooseDirectory", () => pickDirectory());

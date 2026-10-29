@@ -3,7 +3,6 @@ import {
   Code2,
   Eye,
   Inbox,
-  MessageSquare,
   Pencil,
   Plus,
   RefreshCw,
@@ -53,12 +52,14 @@ import { TicketKanban } from "@/components/TicketKanban";
 import { useTheme } from "@/components/ThemeProvider";
 import { WorkflowDocsTab } from "@/components/WorkflowDocsTab";
 import { WorkflowPanel } from "@/components/WorkflowPanel";
+import { WindowToolbar } from "@/components/WindowToolbar";
 import { WorkspacePanel } from "@/components/WorkspacePanel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { triggerFind } from "@/lib/find";
+import { getAppPlatform } from "@/lib/bindings";
 import { languageForPath } from "@/lib/languages";
 import { normalizeWorkspacePath, type LspStatusEvent } from "@/lib/lsp";
 import { LSP_SETTINGS_CHANGED_EVENT } from "@/lib/lsp-events";
@@ -190,9 +191,13 @@ export default function App() {
   const [quickOpenOpen, setQuickOpenOpen] = useState(false);
   const [activeLspStatus, setActiveLspStatus] = useState<LspStatusEvent>({ status: "off" });
 
+  useEffect(() => {
+    void getAppPlatform().then((platform) => {
+      if (platform) document.documentElement.dataset.platform = platform;
+    });
+  }, []);
+
   const hasWorkspace = !!detail?.project.workspace_path;
-  const workspaceBase =
-    detail?.project.workspace_path?.split(/[\\/]/).filter(Boolean).pop() ?? null;
   const activeTab = tabs.find((tab) => tab.id === activeTabId) ?? null;
   const activeFileLanguage = activeTab?.kind === "file"
     ? languageForPath(activeTab.ref ?? activeTab.title)
@@ -1154,6 +1159,12 @@ export default function App() {
 
   return (
     <div className="flex h-full flex-col">
+      <WindowToolbar
+        projectName={detail?.project.name}
+        workspace={detail?.project.workspace_path}
+        chatOpen={chatOpen}
+        onToggleChat={() => setChatOpen((open) => !open)}
+      />
       <div className="flex min-h-0 flex-1">
         <ActivityBar
         active={menu}
@@ -1174,7 +1185,7 @@ export default function App() {
         menu === "global") && (
         <aside
           style={{ width: panelWidth }}
-          className="relative flex min-h-0 shrink-0 flex-col overflow-hidden border-r bg-[var(--sidebar)]"
+          className="relative flex min-h-0 shrink-0 flex-col overflow-hidden border-r border-border/50 bg-[var(--sidebar)]/70 backdrop-blur-xl"
         >
           {menu === "workspace" && (
             <WorkspacePanel
@@ -1285,25 +1296,6 @@ export default function App() {
       )}
 
       <main className="flex min-w-0 flex-1 flex-col">
-        <header className="flex h-[35px] items-center justify-between border-b px-3">
-          <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
-            <span className="truncate font-medium text-foreground">
-              {detail?.project.name ?? "Lullaby IDE"}
-            </span>
-            {workspaceBase ? <span className="truncate">{workspaceBase}</span> : null}
-          </div>
-          <Button
-            size="sm"
-            variant={chatOpen ? "secondary" : "ghost"}
-            onClick={() => setChatOpen((open) => !open)}
-            data-icon="inline-start"
-            className="h-7"
-          >
-            <MessageSquare />
-            Chat
-          </Button>
-        </header>
-
         <TabsBar tabs={tabs} activeId={activeTabId} onSelect={selectTab} onClose={closeTab} />
 
         <div

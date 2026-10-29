@@ -116,9 +116,8 @@ function MenuButton({
       aria-current={selected ? "page" : undefined}
       onClick={() => onChange(item.id)}
       className={cn(
-        "relative size-12 shrink-0 rounded-none text-muted-foreground hover:bg-accent/60 hover:text-foreground [&_svg]:size-6",
-        selected &&
-          "bg-[var(--sidebar)] text-foreground before:absolute before:inset-y-0 before:left-0 before:w-0.5 before:bg-primary",
+        "size-9 shrink-0 rounded-xl text-muted-foreground transition-colors hover:bg-accent/70 hover:text-foreground [&_svg]:size-5",
+        selected && "bg-accent text-foreground shadow-sm",
       )}
     >
       <Icon />
@@ -141,7 +140,7 @@ export function ActivityBar({
   const tools = visible.filter((item) => item.group === "tools");
 
   return (
-    <nav className="flex w-12 shrink-0 flex-col items-center border-r bg-[var(--activitybar)] py-2">
+    <nav className="flex w-12 shrink-0 flex-col items-center border-r border-border/50 bg-[var(--activitybar)]/70 py-2 backdrop-blur-xl">
       <div className="flex w-full flex-col items-center gap-0.5">
         {main.map((item) => (
           <MenuButton

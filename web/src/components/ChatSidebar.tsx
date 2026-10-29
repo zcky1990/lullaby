@@ -684,7 +684,7 @@ export function ChatSidebar({
   return (
     <aside
       className={cn(
-        "relative flex w-96 shrink-0 flex-col border-l bg-[var(--sidebar)]",
+        "relative flex w-96 shrink-0 flex-col border-l border-border/50 bg-[var(--sidebar)]/70 backdrop-blur-xl",
         hidden && "hidden",
       )}
       onDragOver={(event) => {

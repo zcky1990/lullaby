@@ -34,7 +34,7 @@ export function StatusBar({
   const lspText = lspStatus ? lspLabel(lspStatus.status) : null;
 
   return (
-    <footer className="flex h-6 shrink-0 items-center justify-between gap-4 bg-[var(--statusbar)] px-3 text-[11px] text-[var(--statusbar-foreground)]">
+    <footer className="flex h-7 shrink-0 items-center justify-between gap-4 border-t border-border/50 bg-[var(--activitybar)]/70 px-3 text-[11px] text-muted-foreground backdrop-blur-xl">
       <div className="flex min-w-0 items-center gap-3">
         <span className="flex items-center gap-1">
           <GitBranch className="size-3.5" />
