@@ -7,7 +7,22 @@ import {
   writeWorkspaceFile,
 } from "../../fs/workspace.ts";
 import { readSkillBody } from "../skills.ts";
+import {
+  createDocumentTool,
+  getDocumentTool,
+  listDocumentsTool,
+  syncDocumentTool,
+  updateDocumentTool,
+} from "./document-tools.ts";
 import { safeParse } from "./llm.ts";
+import {
+  deleteTicketTool,
+  getTicketTool,
+  listTicketsTool,
+  syncTicketTool,
+  transitionTicketTool,
+  updateTicketTool,
+} from "./ticket-tools.ts";
 import type { ChatAttachment, Run, ToolCall, ToolDef } from "./types.ts";
 
 export interface ChatToolCatalogEntry {
@@ -33,8 +48,63 @@ export const CHAT_TOOL_CATALOG: ChatToolCatalogEntry[] = [
     requiresApproval: true,
   },
   {
+    name: "list_documents",
+    description: "List documents from local, docmost, notion, or confluence.",
+    requiresApproval: false,
+  },
+  {
+    name: "get_document",
+    description: "Read one document (local path or remote pageId).",
+    requiresApproval: false,
+  },
+  {
+    name: "create_document",
+    description: "Create a local markdown doc or a Docmost page.",
+    requiresApproval: false,
+  },
+  {
+    name: "update_document",
+    description: "Update a local markdown doc or a Docmost page.",
+    requiresApproval: false,
+  },
+  {
+    name: "sync_document",
+    description: "Sync a local document to Docmost (create/update remote page).",
+    requiresApproval: false,
+  },
+  {
+    name: "list_tickets",
+    description: "List local backlog tickets merged with Jira issues when configured.",
+    requiresApproval: false,
+  },
+  {
+    name: "get_ticket",
+    description: "Get a local ticket by id or a Jira issue by key.",
+    requiresApproval: false,
+  },
+  {
     name: "create_ticket",
     description: "Create a ticket in the project's local backlog (not synced to Jira).",
+    requiresApproval: false,
+  },
+  {
+    name: "update_ticket",
+    description: "Update a local ticket by id.",
+    requiresApproval: false,
+  },
+  {
+    name: "delete_ticket",
+    description: "Delete an unsynced local ticket by id.",
+    requiresApproval: false,
+  },
+  {
+    name: "sync_ticket",
+    description: "Sync a local ticket to Jira (creates a remote issue).",
+    requiresApproval: false,
+  },
+  {
+    name: "transition_ticket",
+    description: "Transition a Jira issue to a named status.",
     requiresApproval: false,
   },
   {
@@ -76,11 +146,104 @@ const TOOL_DEFS: ToolDef[] = [
   },
 ];
 
+const DOC_READ_TOOLS: ToolDef[] = [
+  {
+    name: "list_documents",
+    description:
+      "List documents. source: local | docmost | notion | confluence. Optional pageId for remote tree.",
+    parameters: {
+      type: "object",
+      properties: {
+        source: {
+          type: "string",
+          enum: ["local", "docmost", "notion", "confluence"],
+          description: "Document source (default local).",
+        },
+        pageId: { type: "string", description: "Optional parent page id for remote sources." },
+      },
+    },
+  },
+  {
+    name: "get_document",
+    description: "Read one document. Local needs path; remote needs pageId (or path as pageId).",
+    parameters: {
+      type: "object",
+      properties: {
+        source: {
+          type: "string",
+          enum: ["local", "docmost", "notion", "confluence"],
+        },
+        path: { type: "string", description: "Local relative .md path." },
+        pageId: { type: "string", description: "Remote page id." },
+      },
+    },
+  },
+];
+
+const DOC_WRITE_TOOLS: ToolDef[] = [
+  {
+    name: "create_document",
+    description: "Create a local markdown document or a Docmost page (source local|docmost).",
+    parameters: {
+      type: "object",
+      properties: {
+        source: { type: "string", enum: ["local", "docmost"] },
+        title: { type: "string" },
+        parentId: { type: "string", description: "Docmost parent page id (optional)." },
+        content: { type: "string", description: "Optional Docmost content after create." },
+      },
+      required: ["title"],
+    },
+  },
+  {
+    name: "update_document",
+    description: "Update local (path) or Docmost (pageId) document title/content.",
+    parameters: {
+      type: "object",
+      properties: {
+        source: { type: "string", enum: ["local", "docmost"] },
+        path: { type: "string" },
+        pageId: { type: "string" },
+        title: { type: "string" },
+        content: { type: "string" },
+      },
+    },
+  },
+  {
+    name: "sync_document",
+    description: "Sync a local document path to Docmost (create/update remote page).",
+    parameters: {
+      type: "object",
+      properties: { path: { type: "string", description: "Local document path." } },
+      required: ["path"],
+    },
+  },
+];
+
+const TICKET_READ_TOOLS: ToolDef[] = [
+  {
+    name: "list_tickets",
+    description: "List local backlog tickets merged with Jira issues when configured.",
+    parameters: { type: "object", properties: {} },
+  },
+  {
+    name: "get_ticket",
+    description: "Get a local ticket by UUID/LOCAL- prefix or a Jira issue by key.",
+    parameters: {
+      type: "object",
+      properties: {
+        id: { type: "string", description: "Local ticket UUID or LOCAL-xxxxxx." },
+        key: { type: "string", description: "Jira issue key." },
+      },
+    },
+  },
+];
+
 export const TICKET_TOOL: ToolDef = {
   name: "create_ticket",
   description:
     "Create a ticket in the project's local backlog. It is stored locally and NOT synced to " +
-    "Jira; the user can sync it manually later.",
+    "Jira; use sync_ticket later or let the user sync manually.",
   parameters: {
     type: "object",
     properties: {
@@ -96,6 +259,60 @@ export const TICKET_TOOL: ToolDef = {
     required: ["title"],
   },
 };
+
+const TICKET_WRITE_TOOLS: ToolDef[] = [
+  TICKET_TOOL,
+  {
+    name: "update_ticket",
+    description: "Update fields on a local ticket by id.",
+    parameters: {
+      type: "object",
+      properties: {
+        id: { type: "string" },
+        title: { type: "string" },
+        description: { type: "string" },
+        status: {
+          type: "string",
+          enum: ["Backlog", "To Do", "In Progress", "Test", "Done"],
+        },
+        priority: { type: "string", enum: ["Low", "Medium", "High", "Urgent"] },
+        type: { type: "string", enum: ["Task", "Bug", "Story"] },
+        assignee: { type: "string" },
+      },
+      required: ["id"],
+    },
+  },
+  {
+    name: "delete_ticket",
+    description: "Delete an unsynced local ticket (fails if jira_key is set).",
+    parameters: {
+      type: "object",
+      properties: { id: { type: "string" } },
+      required: ["id"],
+    },
+  },
+  {
+    name: "sync_ticket",
+    description: "Push a local ticket to Jira and store jira_key.",
+    parameters: {
+      type: "object",
+      properties: { id: { type: "string" } },
+      required: ["id"],
+    },
+  },
+  {
+    name: "transition_ticket",
+    description: "Transition a Jira issue to a status name (e.g. In Progress).",
+    parameters: {
+      type: "object",
+      properties: {
+        key: { type: "string" },
+        status: { type: "string" },
+      },
+      required: ["key", "status"],
+    },
+  },
+];
 
 const USE_SKILL_TOOL: ToolDef = {
   name: "use_skill",
@@ -134,11 +351,13 @@ export function toolsFor(
   hasSkills: boolean,
   disabledTools: ReadonlySet<string> = new Set(),
 ): ToolDef[] {
-  const tools: ToolDef[] = hasSkills ? [USE_SKILL_TOOL] : [];
+  const tools: ToolDef[] = [];
+  if (hasSkills) tools.push(USE_SKILL_TOOL);
+  tools.push(...DOC_READ_TOOLS, ...TICKET_READ_TOOLS);
   if (mode === "plan") {
     return tools.filter((tool) => !disabledTools.has(tool.name));
   }
-  tools.push(TICKET_TOOL);
+  tools.push(...DOC_WRITE_TOOLS, ...TICKET_WRITE_TOOLS);
   if (workspace) tools.push(...TOOL_DEFS);
   return tools.filter((tool) => !disabledTools.has(tool.name));
 }
@@ -168,6 +387,20 @@ export async function executeTool(run: Run, call: ToolCall): Promise<string> {
       return `Gagal memuat skill "${skill.name}": ${(error as Error).message}`;
     }
   }
+
+  if (call.name === "list_documents") return await listDocumentsTool(run.projectId, args);
+  if (call.name === "get_document") return await getDocumentTool(run.projectId, args);
+  if (call.name === "create_document") return await createDocumentTool(run.projectId, args);
+  if (call.name === "update_document") return await updateDocumentTool(run.projectId, args);
+  if (call.name === "sync_document") return await syncDocumentTool(run.projectId, args);
+
+  if (call.name === "list_tickets") return await listTicketsTool(run.projectId);
+  if (call.name === "get_ticket") return await getTicketTool(run.projectId, args);
+  if (call.name === "update_ticket") return await updateTicketTool(run.projectId, args);
+  if (call.name === "delete_ticket") return await deleteTicketTool(run.projectId, args);
+  if (call.name === "sync_ticket") return await syncTicketTool(run.projectId, args);
+  if (call.name === "transition_ticket") return await transitionTicketTool(run.projectId, args);
+
   if (call.name === "create_ticket") {
     const parsed = LocalTicketInput.safeParse({
       title: args.title,

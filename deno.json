@@ -28,7 +28,7 @@
     },
     "backend": "webview",
     "output": {
-      "macos": "./dist/LullabyIDE.app",
+      "macos": "./dist/LullabyIDE",
       "windows": "./dist/LullabyIDE",
       "linux": "./dist/LullabyIDE"
     }

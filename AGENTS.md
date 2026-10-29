@@ -146,11 +146,14 @@ finishing a change.
   Writes (chat `write_file`) create **pending hunk changes** in `src/server/chat.ts`; a **Review
   tab** (`ReviewTab`) in the main area accepts/rejects each hunk (`POST /api/chat/change`) or all
   (`/api/chat/change-all`) before `writeWorkspaceFile` runs — unless Global Settings → Tools
-  `auto_approve_writes` is on (then writes apply immediately). Chat tools can be disabled via
-  `chat_disabled_tools` (same Tools section). Chat only shows a notice and dispatches events
-  (`web/src/lib/review-events.ts`). Direct editor saves use `PUT /api/projects/:id/files/content`
-  (also `writeWorkspaceFile`, no approval; user is editing). The Explorer Monaco editor is
-  editable; tabs track a `dirty` flag and save via button or `Cmd/Ctrl+S`.
+  `auto_approve_writes` is on (then writes apply immediately). Chat/workflow agent also has
+  document tools (`src/server/chat/document-tools.ts`: local + Docmost/Notion/Confluence) and
+  ticket tools (`ticket-tools.ts`: local + Jira list/get/update/sync/transition); those mutations
+  apply immediately (no Review). Chat tools can be disabled via `chat_disabled_tools` (same Tools
+  section). Chat only shows a notice and dispatches events (`web/src/lib/review-events.ts`). Direct
+  editor saves use `PUT /api/projects/:id/files/content` (also `writeWorkspaceFile`, no approval;
+  user is editing). The Explorer Monaco editor is editable; tabs track a `dirty` flag and save via
+  button or `Cmd/Ctrl+S`.
 - Persistence uses `node:sqlite` (`src/db/db.ts`); keep queries parameterized and add columns via
   `ensureColumn` migrations.
 

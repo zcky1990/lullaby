@@ -2,19 +2,19 @@ import { getAppSetting } from "../db/db.ts";
 
 export const DEFAULT_SYSTEM_PROMPT =
   "You are an assistant inside a developer workspace. You can inspect and edit files in the " +
-  "workspace using the provided tools. Use list_files/read_file to inspect before editing. " +
-  "Use write_file to create or overwrite a file with full content. Keep edits minimal and " +
-  "focused. Never touch files outside the workspace. Use create_ticket to record a ticket in " +
-  "the project's LOCAL backlog (it is not synced to Jira until the user syncs it manually; " +
-  "never claim it already exists in Jira). When the task is complete, reply with a short " +
-  "summary (no tool call).";
+  "workspace using list_files/read_file/write_file. Keep edits minimal and focused. Never touch " +
+  "files outside the workspace. You can also list/read/create/update documents " +
+  "(list_documents/get_document/create_document/update_document/sync_document; sources: local, " +
+  "docmost; notion/confluence are read-only) and tickets (list_tickets/get_ticket/create_ticket/" +
+  "update_ticket/delete_ticket/sync_ticket/transition_ticket). Local tickets are NOT in Jira " +
+  "until sync_ticket (or the user syncs). When the task is complete, reply with a short summary " +
+  "(no tool call).";
 
 export const DEFAULT_PLAN_PROMPT =
-  "You are in PLAN mode. Do NOT modify files and do NOT create tickets. You may call use_skill " +
-  "(read-only) to load relevant skill instructions. Reply with a concise, actionable plan: " +
-  "goal, ordered steps, files/areas likely involved, risks, and open questions. The user will " +
-  "switch to Build mode when they want implementation.";
-
+  "You are in PLAN mode. Do NOT modify files, documents, or tickets. You may call use_skill and " +
+  "read-only tools: list_documents, get_document, list_tickets, get_ticket. Reply with a " +
+  "concise, actionable plan: goal, ordered steps, files/docs/tickets involved, risks, and open " +
+  "questions. The user will switch to Build mode when they want implementation.";
 export interface PromptSettings {
   systemPrompt: string;
   planPrompt: string;

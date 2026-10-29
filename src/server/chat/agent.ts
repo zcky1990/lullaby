@@ -87,8 +87,7 @@ export async function advance(run: Run): Promise<ChatResponse> {
     for (let step = 0; step < MAX_STEPS; step++) {
       const response = await complete(run.provider, run.turns, tools, run.temperature);
       if (run.mode === "plan") {
-        const skillCalls = response.toolCalls.filter((call) => call.name === "use_skill");
-        if (skillCalls.length === 0) {
+        if (response.toolCalls.length === 0) {
           const message = response.text ||
             "(Mode plan: tidak ada tool yang dijalankan. Aktifkan mode Build untuk implementasi.)";
           run.turns.push({ role: "assistant", content: message });
@@ -107,18 +106,25 @@ export async function advance(run: Run): Promise<ChatResponse> {
           content: response.text,
           toolCalls: response.toolCalls,
         });
+        const planAllowed = new Set([
+          "use_skill",
+          "list_documents",
+          "get_document",
+          "list_tickets",
+          "get_ticket",
+        ]);
         for (const call of response.toolCalls) {
           let result: string;
           if (disabledTools.has(call.name)) {
             result = `Tool "${call.name}" dinonaktifkan di Global Settings → Tools.`;
-          } else if (call.name === "use_skill") {
+          } else if (!planAllowed.has(call.name)) {
+            result = "Tool tidak tersedia di mode Plan.";
+          } else {
             try {
               result = await executeTool(run, call);
             } catch (error) {
               result = `Error: ${(error as Error).message}`;
             }
-          } else {
-            result = "Tool tidak tersedia di mode Plan.";
           }
           run.turns.push({ role: "tool", toolCallId: call.id, content: result });
         }

@@ -787,10 +787,12 @@ Deno.test("ChatToolsSettingsInput defaults and accepts disabled tools", () => {
   deepEqual(parsed.disabledTools, ["write_file", "create_ticket"]);
 });
 
-Deno.test("toolsFor filters disabled tools", () => {
+Deno.test("toolsFor filters disabled tools and plan/build membership", () => {
   const all = toolsFor("/tmp/ws", "build", true);
   equal(all.some((tool) => tool.name === "write_file"), true);
   equal(all.some((tool) => tool.name === "use_skill"), true);
+  equal(all.some((tool) => tool.name === "list_documents"), true);
+  equal(all.some((tool) => tool.name === "sync_ticket"), true);
   const filtered = toolsFor(
     "/tmp/ws",
     "build",
@@ -801,7 +803,11 @@ Deno.test("toolsFor filters disabled tools", () => {
   equal(filtered.some((tool) => tool.name === "create_ticket"), false);
   equal(filtered.some((tool) => tool.name === "read_file"), true);
   const plan = toolsFor("/tmp/ws", "plan", true, new Set(["use_skill"]));
-  equal(plan.length, 0);
+  equal(plan.some((tool) => tool.name === "use_skill"), false);
+  equal(plan.some((tool) => tool.name === "list_documents"), true);
+  equal(plan.some((tool) => tool.name === "list_tickets"), true);
+  equal(plan.some((tool) => tool.name === "create_ticket"), false);
+  equal(plan.some((tool) => tool.name === "write_file"), false);
 });
 
 Deno.test("ticket status helpers detect To Do to In Progress", () => {

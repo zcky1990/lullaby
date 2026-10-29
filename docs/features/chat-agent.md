@@ -7,17 +7,23 @@ Chat sidebar kanan (`ChatSidebar`) memanggil `POST /api/projects/:id/chat`. Engi
 
 | Mode | Tools | Tujuan |
 | --- | --- | --- |
-| **Plan** | `use_skill` (jika ada) | Rencana tanpa ubah file/tiket |
-| **Build** | `use_skill`, `list_files`, `read_file`, `write_file`, `create_ticket` | Kerja di workspace |
+| **Plan** | `use_skill`, `list_documents`, `get_document`, `list_tickets`, `get_ticket` | Rencana + baca konteks (tanpa mutate) |
+| **Build** | Plan tools + file tools + doc/ticket write/sync | Kerja di workspace + docs/tickets |
 
 Mode disimpan di localStorage (`rnd.chatMode:v1`).
 
 ## Tools
 
 - Path file relatif ke `workspace_path`; path di luar ditolak
+- **Documents**: `list_documents` / `get_document` (`source`: local \| docmost \| notion \|
+  confluence); `create_document` / `update_document` (local \| docmost); `sync_document` (local →
+  Docmost). Notion/Confluence read-only seperti UI.
+- **Tickets**: `list_tickets` / `get_ticket`; `create_ticket` / `update_ticket` / `delete_ticket`
+  (local); `sync_ticket` (local → Jira); `transition_ticket` (Jira status).
 - `create_ticket` selalu menulis ke SQLite lokal (bukan langsung Jira)
+- Mutasi doc/ticket langsung diterapkan (tidak lewat Review tab; Review hanya `write_file`)
 - `use_skill` memuat body `SKILL.md` (progressive disclosure)
-- Loop tool dibatasi langkah (`MAX_STEPS` di agent)
+- Loop tool dibatasi langkah (`MAX_STEPS` di agent); sama untuk workflow `action: agent`
 
 ## Dua jalur write
 

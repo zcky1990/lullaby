@@ -78,8 +78,9 @@ steps:
 
 ## Agent step (`action: agent`)
 
-Loop tool-calling penuh (seperti chat Build/Plan): skills, `read_file` / `write_file` /
-`list_files` / `create_ticket`. Write di workflow **langsung diterapkan** (tanpa Review tab).
+Loop tool-calling penuh (seperti chat Build/Plan): skills, file tools, document tools
+(local/Docmost/Notion/Confluence), dan ticket tools (local + Jira). Write file/doc/ticket di
+workflow **langsung diterapkan** (tanpa Review tab).
 
 ```yaml
 name: implement-ticket
