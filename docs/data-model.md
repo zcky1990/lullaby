@@ -53,7 +53,7 @@ workflow; run yang masih `running` saat startup ditandai `interrupted`.
 
 ### `workflow_sessions` / `workflow_session_messages`
 
-Sesi AI per project untuk langkah workflow (`action: chat.completion`): `name` unik per project +
+Sesi AI per project untuk langkah workflow (`action: chat.completion` / `agent`): `name` unik per project +
 riwayat `role`/`content`. Dipakai ulang oleh step/run berikutnya dengan nama sesi yang sama.
 
 ### `workflow_run_steps`
@@ -75,6 +75,8 @@ Key-value global.
 | `mcp_disabled_tools` | JSON string[] |
 | `skills_enabled` | `"true"` / `"false"` |
 | `skills_disabled` | JSON skill id[] |
+| `auto_approve_writes` | `"true"` / `"false"` (chat Build skip Review) |
+| `chat_disabled_tools` | JSON tool name[] (deny-list chat tools) |
 | `auto_build_on_in_progress` | `"true"` / `"false"` |
 | `terminal_shell` | `"zsh"` / `"bash"` |
 

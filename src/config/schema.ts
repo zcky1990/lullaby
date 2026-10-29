@@ -256,6 +256,12 @@ export const AutomationSettingsInput = z.object({
 });
 export type AutomationSettingsInput = z.infer<typeof AutomationSettingsInput>;
 
+export const ChatToolsSettingsInput = z.object({
+  autoApproveWrites: z.boolean().default(false),
+  disabledTools: z.array(z.string().trim().min(1).max(80)).max(50).default([]),
+});
+export type ChatToolsSettingsInput = z.infer<typeof ChatToolsSettingsInput>;
+
 export const TerminalShell = z.enum(["zsh", "bash"]);
 export type TerminalShell = z.infer<typeof TerminalShell>;
 

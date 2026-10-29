@@ -157,6 +157,7 @@ import {
 } from "./routes/workflows.ts";
 import {
   getAutomationSettingsHandler,
+  getChatToolsSettingsHandler,
   getLspSettingsHandler,
   getMcpSettingsHandler,
   getPromptsHandler,
@@ -164,6 +165,7 @@ import {
   listMcpToolsHandler,
   probeLspHandler,
   saveAutomationSettingsHandler,
+  saveChatToolsSettingsHandler,
   saveLspSettingsHandler,
   saveMcpSettingsHandler,
   savePromptsHandler,
@@ -1408,6 +1410,11 @@ export async function handleRequest(req: Request): Promise<Response> {
 
     if (pathname === "/api/settings/skills" && (method === "PUT" || method === "POST")) {
       return await saveSkillsSettingsHandler(req);
+    }
+
+    if (pathname === "/api/settings/chat-tools") {
+      if (method === "GET") return await getChatToolsSettingsHandler();
+      if (method === "PUT" || method === "POST") return await saveChatToolsSettingsHandler(req);
     }
 
     if (pathname === "/api/settings/automation") {

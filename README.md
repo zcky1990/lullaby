@@ -224,8 +224,9 @@ Fondasi (F0) — yang sudah jalan:
   `PUT /api/projects/:id/files/content` dengan guard path workspace).
 - **Workflow (DAG)**: menu **Workflows** dengan definisi YAML di `<workspace>/.workflows/*.yaml`
   (subset Dagu), dependency graph, eksekusi shell paralel, retry/timeout, log per step, riwayat run,
-  dan UI editor YAML + graph (React Flow). Step **AI** (`action: chat.completion`) memanggil
-  provider LLM/role global, dengan output `${NAMA}` / `${steps.<id>.output}` untuk step berikutnya.
+  dan UI editor YAML + graph (React Flow). Step **AI** (`action: chat.completion` atau `agent`)
+  memanggil provider LLM/role global (completion satu kali, atau agent loop dengan tools + write
+  auto-apply), dengan output `${NAMA}` / `${steps.<id>.output}` untuk step berikutnya.
   Satu run aktif per workflow; manual run saja (belum ada cron/scheduler). Detail:
   `docs/features/workflows.md`.
 - **Git**: menu ala **SourceTree** dengan panel kiri berisi branch (checkout) + status; tab utama

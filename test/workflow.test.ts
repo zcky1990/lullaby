@@ -113,6 +113,54 @@ steps:
   equal(definition.steps[1].kind, "shell");
 });
 
+Deno.test("parseWorkflow supports agent steps", () => {
+  const definition = parseWorkflow(
+    `
+name: agent-flow
+llm:
+  provider: Global LLM
+steps:
+  - id: implement
+    action: agent
+    with:
+      mode: build
+      skill: code-review
+      prompt: "Implement \${TICKET}"
+      max_steps: 8
+      variant: medium
+    output: RESULT
+  - id: done
+    depends: implement
+    run: echo "\${RESULT}"
+`,
+    "agent-flow",
+  );
+  const step = definition.steps[0];
+  equal(step.kind, "agent");
+  equal(step.action, "agent");
+  equal(step.with?.mode, "build");
+  equal(step.with?.skill, "code-review");
+  equal(step.with?.maxSteps, 8);
+  equal(step.with?.variant, "medium");
+  equal(step.output, "RESULT");
+  equal(definition.steps[1].kind, "shell");
+});
+
+Deno.test("parseWorkflow rejects bad agent mode and missing prompt", () => {
+  throws(() =>
+    parseWorkflow(
+      "steps:\n  - id: x\n    action: agent\n    with:\n      mode: ship\n      prompt: hi\n",
+      "bad",
+    )
+  );
+  throws(() =>
+    parseWorkflow(
+      "steps:\n  - id: x\n    action: agent\n",
+      "bad",
+    )
+  );
+});
+
 Deno.test("parseWorkflow rejects unsupported LLM actions", () => {
   throws(() =>
     parseWorkflow(

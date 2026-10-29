@@ -14,11 +14,19 @@ import {
   type PromptSettings,
   readPromptSettings,
 } from "../prompts.ts";
+import { diffLines } from "../diff.ts";
 import { complete, VARIANT_TEMPERATURE } from "./llm.ts";
 import { approvalResponse, prepareWriteChange, setAdvance } from "./review.ts";
+import { readChatToolsSettings } from "./settings.ts";
 import { scheduleSkillLearn } from "./skill-learn.ts";
 import { deleteRun, pruneRuns, setRun } from "./state.ts";
-import { executeTool, resolveAttachments, toolsFor, WRITE_TOOLS } from "./tools.ts";
+import {
+  applyWriteFile,
+  executeTool,
+  resolveAttachments,
+  toolsFor,
+  WRITE_TOOLS,
+} from "./tools.ts";
 import type { ChatResponse, Run, VisibleMessage } from "./types.ts";
 
 const CODE_REVIEW_SKILL = "code-review";
@@ -73,7 +81,9 @@ export function systemPrompt(
 
 export async function advance(run: Run): Promise<ChatResponse> {
   try {
-    const tools = toolsFor(run.workspace, run.mode, run.skills.size > 0);
+    const settings = await readChatToolsSettings();
+    const disabledTools = new Set(settings.disabledTools);
+    const tools = toolsFor(run.workspace, run.mode, run.skills.size > 0, disabledTools);
     for (let step = 0; step < MAX_STEPS; step++) {
       const response = await complete(run.provider, run.turns, tools, run.temperature);
       if (run.mode === "plan") {
@@ -99,7 +109,9 @@ export async function advance(run: Run): Promise<ChatResponse> {
         });
         for (const call of response.toolCalls) {
           let result: string;
-          if (call.name === "use_skill") {
+          if (disabledTools.has(call.name)) {
+            result = `Tool "${call.name}" dinonaktifkan di Global Settings → Tools.`;
+          } else if (call.name === "use_skill") {
             try {
               result = await executeTool(run, call);
             } catch (error) {
@@ -140,14 +152,36 @@ export async function advance(run: Run): Promise<ChatResponse> {
       for (const call of batch) {
         let result: string;
         try {
-          if (WRITE_TOOLS.has(call.name)) {
+          if (disabledTools.has(call.name)) {
+            result = `Tool "${call.name}" dinonaktifkan di Global Settings → Tools.`;
+          } else if (WRITE_TOOLS.has(call.name)) {
             const prepared = await prepareWriteChange(run, call);
             if (prepared.change) {
-              run.pendingChanges.set(call.id, prepared.change);
-              hasReviews = true;
-              continue;
+              if (settings.autoApproveWrites) {
+                if (!run.workspace) {
+                  result = "No workspace configured.";
+                } else {
+                  result = await applyWriteFile(run.workspace, call);
+                  const diff = diffLines(prepared.change.before, prepared.change.after);
+                  const applied = {
+                    path: prepared.change.path,
+                    action: prepared.change.action,
+                    diff: diff.diff,
+                    added: diff.added,
+                    removed: diff.removed,
+                  };
+                  const index = run.changes.findIndex((item) => item.path === applied.path);
+                  if (index >= 0) run.changes[index] = applied;
+                  else run.changes.push(applied);
+                }
+              } else {
+                run.pendingChanges.set(call.id, prepared.change);
+                hasReviews = true;
+                continue;
+              }
+            } else {
+              result = prepared.result;
             }
-            result = prepared.result;
           } else if (!run.workspace && call.name !== "create_ticket" && call.name !== "use_skill") {
             result = "No workspace configured.";
           } else {

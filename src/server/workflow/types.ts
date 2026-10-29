@@ -27,11 +27,15 @@ export interface WorkflowLlmWith {
   model?: string;
   temperature?: number;
   maxTokens?: number;
+  mode?: "plan" | "build";
+  skill?: string;
+  variant?: "short" | "medium" | "long";
+  maxSteps?: number;
 }
 
 export interface WorkflowStep {
   id: string;
-  kind: "shell" | "llm";
+  kind: "shell" | "llm" | "agent";
   run?: string;
   action?: string;
   with?: WorkflowLlmWith;

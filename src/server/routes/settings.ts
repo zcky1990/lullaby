@@ -1,5 +1,6 @@
 import {
   AutomationSettingsInput,
+  ChatToolsSettingsInput,
   LspProbeInput,
   LspSettingsInput,
   McpServerInput,
@@ -10,6 +11,12 @@ import {
 } from "../../config/schema.ts";
 import { log } from "../../core/logger.ts";
 import { getAppSetting, getProject, setAppSetting } from "../../db/db.ts";
+import {
+  AUTO_APPROVE_WRITES_KEY,
+  CHAT_DISABLED_TOOLS_KEY,
+  readChatToolsSettings,
+} from "../chat/settings.ts";
+import { CHAT_TOOL_CATALOG } from "../chat/tools.ts";
 import { json, readJson, record } from "../http.ts";
 import { lspPresets, probeLspCommand, readLspSettings, writeLspSettings } from "../lsp.ts";
 import { listMcpTools } from "../mcp.ts";
@@ -124,6 +131,40 @@ export async function saveSkillsSettingsHandler(req: Request): Promise<Response>
     disabled: parsed.data.disabled.length,
   });
   return json({ ok: true });
+}
+
+export async function getChatToolsSettingsHandler(): Promise<Response> {
+  const settings = await readChatToolsSettings();
+  return json({
+    autoApproveWrites: settings.autoApproveWrites,
+    disabledTools: settings.disabledTools,
+    tools: CHAT_TOOL_CATALOG,
+  });
+}
+
+export async function saveChatToolsSettingsHandler(req: Request): Promise<Response> {
+  const parsed = ChatToolsSettingsInput.safeParse(await readJson(req));
+  if (!parsed.success) {
+    return json({ error: "invalid_input", issues: parsed.error.issues }, 400);
+  }
+  const allowed = new Set(CHAT_TOOL_CATALOG.map((tool) => tool.name));
+  const disabledTools = [
+    ...new Set(parsed.data.disabledTools.filter((name) => allowed.has(name))),
+  ];
+  await setAppSetting(
+    AUTO_APPROVE_WRITES_KEY,
+    parsed.data.autoApproveWrites ? "true" : "false",
+  );
+  await setAppSetting(CHAT_DISABLED_TOOLS_KEY, JSON.stringify(disabledTools));
+  await record("settings.chat_tools_updated", {
+    autoApproveWrites: parsed.data.autoApproveWrites,
+    disabled: disabledTools.length,
+  });
+  return json({
+    autoApproveWrites: parsed.data.autoApproveWrites,
+    disabledTools,
+    tools: CHAT_TOOL_CATALOG,
+  });
 }
 
 export async function getAutomationSettingsHandler(): Promise<Response> {

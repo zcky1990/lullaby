@@ -21,6 +21,7 @@ Section nav di aside (`GlobalSettingsPanel`):
 | Roles | Persona + optional provider |
 | MCP | Server stdio/http, enable, disable tools (list saja) |
 | Skills | Enable global + toggle per skill |
+| Tools | Auto-approve writes + enable/disable chat tools — [chat-agent.md](chat-agent.md) |
 | Automation | Auto-build To Do → In Progress — [automation.md](../automation.md) |
 | Terminal | Default shell (`zsh` / `bash`) untuk session baru |
 | About | Info aplikasi |

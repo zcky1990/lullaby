@@ -117,11 +117,29 @@ steps:
 | `model` | Override model. |
 | `temperature` | 0–2. |
 | `max_tokens` | Batas token jawaban. |
+| `mode` | `plan` \| `build` (hanya `action: agent`; default `build`). |
+| `skill` / `skill_name` | Skill aktif (hanya agent). |
+| `variant` | `short` \| `medium` \| `long` (preset temperature agent). |
+| `max_steps` | 1–12, default 6 (batas round agent). |
+
+```yaml
+steps:
+  - id: implement
+    action: agent
+    with:
+      mode: build
+      skill: code-review
+      prompt: "Implementasikan ${steps.ticket.output}"
+      max_steps: 8
+    output: RESULT
+```
 
 Catatan:
-- AI step hanya **satu completion** — belum ada tool-calling/agent loop.
+- `action: chat.completion` = **satu completion** (tanpa tools).
+- `action: agent` = loop tool-calling (skills + file tools + create_ticket); write **auto-apply**
+  (tanpa Review tab).
 - Provider/role berasal dari **Global Settings**.
-- Jika provider/role tidak ditemukan → step gagal dengan log jelas.
+- Jika provider/role/skill tidak ditemukan → step gagal dengan log jelas.
 - `output` menyimpan jawaban; stdout step shell juga tersedia sebagai `${steps.<id>.output}`.
 
 ## Sesi AI

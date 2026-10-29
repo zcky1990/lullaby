@@ -3,6 +3,7 @@ import { join, resolve } from "node:path";
 import {
   AutomationSettingsInput,
   ChatInput,
+  ChatToolsSettingsInput,
   GenerateTicketsInput,
   GitCloneInput,
   JiraConfig,
@@ -46,6 +47,7 @@ import { applyHunks, diffHunks, diffLines } from "../src/server/diff.ts";
 import { handleRequest } from "../src/server/router.ts";
 import { APP_TOKEN_HEADER, appToken } from "../src/server/session.ts";
 import { activeSkillPrompt, systemPrompt } from "../src/server/chat/agent.ts";
+import { toolsFor } from "../src/server/chat/tools.ts";
 import {
   buildSkillMarkdown,
   extractSkillEvidence,
@@ -771,6 +773,35 @@ Deno.test("listSkills prefers workspace over project over global", async () => {
 Deno.test("AutomationSettingsInput defaults autoBuildOnInProgress to false", () => {
   equal(AutomationSettingsInput.parse({}).autoBuildOnInProgress, false);
   equal(AutomationSettingsInput.parse({ autoBuildOnInProgress: true }).autoBuildOnInProgress, true);
+});
+
+Deno.test("ChatToolsSettingsInput defaults and accepts disabled tools", () => {
+  const empty = ChatToolsSettingsInput.parse({});
+  equal(empty.autoApproveWrites, false);
+  deepEqual(empty.disabledTools, []);
+  const parsed = ChatToolsSettingsInput.parse({
+    autoApproveWrites: true,
+    disabledTools: ["write_file", "create_ticket"],
+  });
+  equal(parsed.autoApproveWrites, true);
+  deepEqual(parsed.disabledTools, ["write_file", "create_ticket"]);
+});
+
+Deno.test("toolsFor filters disabled tools", () => {
+  const all = toolsFor("/tmp/ws", "build", true);
+  equal(all.some((tool) => tool.name === "write_file"), true);
+  equal(all.some((tool) => tool.name === "use_skill"), true);
+  const filtered = toolsFor(
+    "/tmp/ws",
+    "build",
+    true,
+    new Set(["write_file", "create_ticket"]),
+  );
+  equal(filtered.some((tool) => tool.name === "write_file"), false);
+  equal(filtered.some((tool) => tool.name === "create_ticket"), false);
+  equal(filtered.some((tool) => tool.name === "read_file"), true);
+  const plan = toolsFor("/tmp/ws", "plan", true, new Set(["use_skill"]));
+  equal(plan.length, 0);
 });
 
 Deno.test("ticket status helpers detect To Do to In Progress", () => {

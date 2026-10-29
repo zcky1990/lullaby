@@ -199,11 +199,15 @@ export interface WorkflowLlmWith {
   model?: string;
   temperature?: number;
   maxTokens?: number;
+  mode?: "plan" | "build";
+  skill?: string;
+  variant?: "short" | "medium" | "long";
+  maxSteps?: number;
 }
 
 export interface WorkflowDefinitionStep {
   id: string;
-  kind: "shell" | "llm";
+  kind: "shell" | "llm" | "agent";
   run?: string;
   action?: string;
   with?: WorkflowLlmWith;
@@ -251,6 +255,18 @@ export interface McpSettingsResponse {
   servers: McpServer[];
   enabled: boolean;
   disabledTools: string[];
+}
+
+export interface ChatToolCatalogEntry {
+  name: string;
+  description: string;
+  requiresApproval: boolean;
+}
+
+export interface ChatToolsSettingsResponse {
+  autoApproveWrites: boolean;
+  disabledTools: string[];
+  tools: ChatToolCatalogEntry[];
 }
 
 export interface SkillInfo {
@@ -916,6 +932,16 @@ export const api = {
     request<McpSettingsResponse>("/api/settings/mcp", jsonInit("PUT", payload)),
   listMcpTools: (server: McpServer) =>
     request<{ tools: McpTool[] }>("/api/settings/mcp/tools", jsonInit("POST", { server })),
+  getChatToolsSettings: () =>
+    request<ChatToolsSettingsResponse>("/api/settings/chat-tools"),
+  saveChatToolsSettings: (payload: {
+    autoApproveWrites: boolean;
+    disabledTools: string[];
+  }) =>
+    request<ChatToolsSettingsResponse>(
+      "/api/settings/chat-tools",
+      jsonInit("PUT", payload),
+    ),
   getAutomationSettings: () =>
     request<{ autoBuildOnInProgress: boolean }>("/api/settings/automation"),
   saveAutomationSettings: (payload: { autoBuildOnInProgress: boolean }) =>

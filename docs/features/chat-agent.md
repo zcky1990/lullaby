@@ -22,10 +22,21 @@ Mode disimpan di localStorage (`rnd.chatMode:v1`).
 ## Dua jalur write
 
 1. **Chat `write_file`** → pending hunk → tab **Review** →
-   `POST /api/chat/change` atau `/api/chat/change-all` → baru ditulis ke disk
+   `POST /api/chat/change` atau `/api/chat/change-all` → baru ditulis ke disk  
+   (kecuali Global Settings → Tools → **Auto-approve file writes** aktif: langsung ke disk)
 2. **Editor Monaco** → `PUT .../files/content` langsung (user mengedit sendiri)
 
 Event UI: `web/src/lib/review-events.ts`.
+
+## Global Tools settings
+
+`GET`/`PUT` `/api/settings/chat-tools` (`app_settings.auto_approve_writes`,
+`chat_disabled_tools`):
+
+- **Auto-approve writes** — skip Review untuk `write_file` di chat Build (default off).
+- **Disabled tools** — deny-list nama tool; dihilangkan dari tool list LLM dan ditolak jika
+  dipanggil. UI: Global Settings → Tools (+ **Enable all**).
+- Hanya chat interaktif; workflow `action: agent` tetap auto-write dan tidak memakai deny-list ini.
 
 ## Skills
 

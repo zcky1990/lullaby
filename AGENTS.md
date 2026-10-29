@@ -106,10 +106,12 @@ finishing a change.
 - **Workflows**: definitions are YAML files in `<workspace>/.workflows/<slug>.yaml` (fallback
   `appDataDir()/<project-slug>/workflows`), parsed with `@std/yaml` + Zod
   (`src/server/workflow/parse.ts`), stored/validated via `store.ts`, and executed by `runner.ts`
-  (topological layers, shell steps, parallel batches, retry/timeout/cancel, capped step logs). Runs
-  live in `workflow_runs` / `workflow_run_steps`; `src/server/routes/workflows.ts` exposes CRUD +
-  run/history/cancel. UI: `WorkflowPanel` (sidebar) + `WorkflowTab` (Monaco YAML + React Flow +
-  logs). Manual runs only (no scheduler in v1); AI must not auto-run workflows.
+  (topological layers, shell / `chat.completion` / `agent` steps, parallel batches,
+  retry/timeout/cancel, capped step logs). Agent steps use `src/server/chat/headless.ts` (tool loop,
+  writes auto-applied). Runs live in `workflow_runs` / `workflow_run_steps`;
+  `src/server/routes/workflows.ts` exposes CRUD + run/history/cancel. UI: `WorkflowPanel` (sidebar)
+  + `WorkflowTab` (Monaco YAML + React Flow + logs). Manual runs only (no scheduler in v1); AI must
+  not auto-run workflows.
 - **MCP**: global server config (`McpSettings`) is stored in `app_settings` (`mcp_servers` JSON;
   stdio command/args/env or http url/headers) plus `mcp_enabled` and `mcp_disabled_tools`.
   `POST /api/settings/mcp/tools` connects with `initialize` + `tools/list` (`src/server/mcp.ts`,
@@ -143,11 +145,12 @@ finishing a change.
 - **Filesystem reads must go through `src/fs/workspace.ts`** (path-traversal guarded, capped size).
   Writes (chat `write_file`) create **pending hunk changes** in `src/server/chat.ts`; a **Review
   tab** (`ReviewTab`) in the main area accepts/rejects each hunk (`POST /api/chat/change`) or all
-  (`/api/chat/change-all`) before `writeWorkspaceFile` runs. Chat only shows a notice and dispatches
-  events (`web/src/lib/review-events.ts`). Direct editor saves use
-  `PUT /api/projects/:id/files/content` (also `writeWorkspaceFile`, no approval; user is editing).
-  The Explorer Monaco editor is editable; tabs track a `dirty` flag and save via button or
-  `Cmd/Ctrl+S`.
+  (`/api/chat/change-all`) before `writeWorkspaceFile` runs — unless Global Settings → Tools
+  `auto_approve_writes` is on (then writes apply immediately). Chat tools can be disabled via
+  `chat_disabled_tools` (same Tools section). Chat only shows a notice and dispatches events
+  (`web/src/lib/review-events.ts`). Direct editor saves use `PUT /api/projects/:id/files/content`
+  (also `writeWorkspaceFile`, no approval; user is editing). The Explorer Monaco editor is
+  editable; tabs track a `dirty` flag and save via button or `Cmd/Ctrl+S`.
 - Persistence uses `node:sqlite` (`src/db/db.ts`); keep queries parameterized and add columns via
   `ensureColumn` migrations.
 

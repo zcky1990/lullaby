@@ -23,6 +23,7 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { AutomationSettings } from "@/components/AutomationSettings";
+import { ChatToolsSettings } from "@/components/ChatToolsSettings";
 import { LlmProvidersSettings } from "@/components/LlmProvidersSettings";
 import { LspSettingsPanel } from "@/components/LspSettings";
 import { McpSettings } from "@/components/McpSettings";
@@ -158,6 +159,7 @@ export function GlobalSettingsView({
   if (section === "prompts") return <PromptsSettings />;
   if (section === "mcp") return <McpSettings />;
   if (section === "skills") return <SkillsSettings projectId={projectId} />;
+  if (section === "tools") return <ChatToolsSettings />;
   if (section === "lsp") return <LspSettingsPanel />;
   if (section === "automation") return <AutomationSettings />;
   if (section === "terminal") return <TerminalSettings />;

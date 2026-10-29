@@ -89,8 +89,9 @@ steps:
     output: REVIEW
 ```
 
-`action: chat.completion` menjalankan **satu completion** (belum ada tool-calling/agent loop). Hasil
-disimpan ke field `output` atau `${steps.<id>.output}` untuk step berikutnya.
+`action: chat.completion` menjalankan **satu completion** (tanpa tools). `action: agent` menjalankan
+loop tool-calling penuh (plan/build, skills, file tools); write langsung diterapkan tanpa Review.
+Hasil disimpan ke field `output` atau `${steps.<id>.output}` untuk step berikutnya.
 
 ## Role
 
@@ -155,6 +156,10 @@ Field `with` mengatur parameter satu step AI. Nilai `llm` menjadi default untuk 
 | `session` | string | Nama sesi AI; menimpa `llm.session`. |
 | `temperature` | number | 0–2. Semakin rendah semakin deterministik. |
 | `max_tokens` | number | Batas panjang jawaban. |
+| `mode` | string | `plan` \| `build` (agent saja; default `build`). |
+| `skill` / `skill_name` | string | Skill aktif untuk agent. |
+| `variant` | string | `short` \| `medium` \| `long` (preset temperature agent). |
+| `max_steps` | number | 1–12, default 6 (batas round agent). |
 
 Catatan:
 
@@ -162,7 +167,7 @@ Catatan:
   `${NAMA}`, `${steps.<id>.output}`, dan `${env.KEY}`.
 - Provider/role harus sudah ada di Global Settings; jika tidak ditemukan, step gagal dengan log jelas.
 - Gunakan `temperature` rendah untuk review/analisis dan lebih tinggi untuk eksplorasi ide.
-
+- Agent write tidak menunggu Review tab; file ditulis langsung ke workspace.
 ## Tips
 
 - Gunakan `retry_policy` dan `timeout_sec` untuk perintah yang tidak stabil atau berjalan lama.

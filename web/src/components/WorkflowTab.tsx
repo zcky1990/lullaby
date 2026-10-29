@@ -51,8 +51,9 @@ const MonacoViewer = lazy(() => import("@/components/MonacoViewer"));
 
 function stepCommand(step: WorkflowDefinitionStep): string {
   if (step.run) return step.run;
-  const prompt = step.with?.prompt ?? step.with?.messages?.[0]?.content ?? "chat.completion";
-  return `[llm] ${prompt}`;
+  const prompt = step.with?.prompt ?? step.with?.messages?.[0]?.content ??
+    (step.kind === "agent" ? "agent" : "chat.completion");
+  return step.kind === "agent" ? `[agent] ${prompt}` : `[llm] ${prompt}`;
 }
 
 const STATUS_BORDER: Record<string, string> = {

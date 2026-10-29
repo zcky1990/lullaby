@@ -1,9 +1,48 @@
 import { LocalTicketInput } from "../../config/schema.ts";
 import { createLocalTicket } from "../../db/db.ts";
-import { listDirectory, readWorkspaceFile, readWorkspaceFileRaw } from "../../fs/workspace.ts";
+import {
+  listDirectory,
+  readWorkspaceFile,
+  readWorkspaceFileRaw,
+  writeWorkspaceFile,
+} from "../../fs/workspace.ts";
 import { readSkillBody } from "../skills.ts";
 import { safeParse } from "./llm.ts";
 import type { ChatAttachment, Run, ToolCall, ToolDef } from "./types.ts";
+
+export interface ChatToolCatalogEntry {
+  name: string;
+  description: string;
+  requiresApproval: boolean;
+}
+
+export const CHAT_TOOL_CATALOG: ChatToolCatalogEntry[] = [
+  {
+    name: "list_files",
+    description: "List files and directories at a path relative to the workspace root.",
+    requiresApproval: false,
+  },
+  {
+    name: "read_file",
+    description: "Read a text file from the workspace.",
+    requiresApproval: false,
+  },
+  {
+    name: "write_file",
+    description: "Create or overwrite a text file in the workspace with the given content.",
+    requiresApproval: true,
+  },
+  {
+    name: "create_ticket",
+    description: "Create a ticket in the project's local backlog (not synced to Jira).",
+    requiresApproval: false,
+  },
+  {
+    name: "use_skill",
+    description: "Load the full instructions of an available skill by name (read-only).",
+    requiresApproval: false,
+  },
+];
 
 const TOOL_DEFS: ToolDef[] = [
   {
@@ -93,12 +132,24 @@ export function toolsFor(
   workspace: string | null,
   mode: "plan" | "build",
   hasSkills: boolean,
+  disabledTools: ReadonlySet<string> = new Set(),
 ): ToolDef[] {
   const tools: ToolDef[] = hasSkills ? [USE_SKILL_TOOL] : [];
-  if (mode === "plan") return tools;
+  if (mode === "plan") {
+    return tools.filter((tool) => !disabledTools.has(tool.name));
+  }
   tools.push(TICKET_TOOL);
   if (workspace) tools.push(...TOOL_DEFS);
-  return tools;
+  return tools.filter((tool) => !disabledTools.has(tool.name));
+}
+
+export async function applyWriteFile(workspace: string, call: ToolCall): Promise<string> {
+  const args = safeParse(call.arguments);
+  const path = typeof args.path === "string" ? args.path : "";
+  const content = String(args.content ?? "");
+  if (!path) return "Error: path wajib diisi.";
+  await writeWorkspaceFile(workspace, path, content);
+  return `Wrote ${path} (${content.length} chars).`;
 }
 
 export async function executeTool(run: Run, call: ToolCall): Promise<string> {

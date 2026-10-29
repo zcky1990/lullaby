@@ -6,6 +6,7 @@ import {
   Palette,
   Server,
   ServerCog,
+  ShieldCheck,
   Sparkles,
   SquareTerminal,
   Users,
@@ -21,6 +22,7 @@ export type GlobalSection =
   | "prompts"
   | "mcp"
   | "skills"
+  | "tools"
   | "lsp"
   | "automation"
   | "terminal"
@@ -33,6 +35,7 @@ const SECTIONS: { id: GlobalSection; label: string; icon: LucideIcon }[] = [
   { id: "prompts", label: "Prompts", icon: MessageSquareText },
   { id: "mcp", label: "MCP", icon: Server },
   { id: "skills", label: "Skills", icon: Sparkles },
+  { id: "tools", label: "Tools", icon: ShieldCheck },
   { id: "lsp", label: "Language Servers", icon: ServerCog },
   { id: "automation", label: "Automation", icon: Zap },
   { id: "terminal", label: "Terminal", icon: SquareTerminal },

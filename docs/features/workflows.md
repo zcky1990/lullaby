@@ -51,7 +51,8 @@ Field lain ditolak.
 
 ## AI step (`action: chat.completion`)
 
-Pakai provider LLM **global** (Global Settings → LLM Providers) atau **role** (persona + provider).
+Satu completion tanpa tools. Pakai provider LLM **global** (Global Settings → LLM Providers) atau
+**role** (persona + provider).
 
 ```yaml
 name: ai-review
@@ -75,9 +76,42 @@ steps:
     run: echo "${REVIEW}"
 ```
 
+## Agent step (`action: agent`)
+
+Loop tool-calling penuh (seperti chat Build/Plan): skills, `read_file` / `write_file` /
+`list_files` / `create_ticket`. Write di workflow **langsung diterapkan** (tanpa Review tab).
+
+```yaml
+name: implement-ticket
+llm:
+  provider: My Provider
+  role: Backend
+steps:
+  - id: implement
+    action: agent
+    with:
+      mode: build            # default build; opsional plan (skills only)
+      skill: code-review     # opsional; alias skill_name
+      prompt: |
+        Implementasikan ticket berikut:
+        ${steps.ticket.output}
+      max_steps: 8           # 1–12, default 6
+      variant: medium        # short | medium | long (temperature preset)
+    output: RESULT
+  - id: done
+    depends: implement
+    run: echo "${RESULT}"
+```
+
+- `with`: sama seperti completion (`prompt`/`messages`, `system`, `provider`, `role`, `session`,
+  `model`, `temperature`, `max_tokens`) plus `mode`, `skill`/`skill_name`, `variant`, `max_steps`.
+- Output step = teks assistant akhir; tool calls masuk log step (`[tool] …`).
+- Cancel run menghentikan loop antar round (panggilan LLM yang sedang berjalan mungkin selesai dulu).
+
 ### Sesi AI
 
-AI step bisa memilih sesi percakapan lewat `session` (top-level `llm.session` atau `with.session`):
+AI/agent step bisa memilih sesi percakapan lewat `session` (top-level `llm.session` atau
+`with.session`):
 
 ```yaml
 llm:
@@ -101,13 +135,11 @@ steps:
 - `with.session` menimpa `llm.session`; tanpa `session` step bersifat stateless.
 - Riwayat yang dikirim dibatasi 50 pesan terakhir; persona/system tidak disimpan di sesi.
 
-- `with`: `prompt` **atau** `messages` (`role`/`content`), `system`, `provider`, `role`, `model`,
-  `temperature`, `max_tokens`.
 - `output` menyimpan jawaban ke variabel; dependents bisa memakai `${NAMA}` atau
   `${steps.<id>.output}`. Shell step juga menyimpan stdout sebagai `${steps.<id>.output}`.
 - Persona role dipakai sebagai system prompt default; provider role dipakai otomatis.
-- Tidak ada tool-calling di AI step; hanya satu completion. Timeout mengikuti `timeout_sec`.
-- Jika provider/role tidak ditemukan, step gagal dengan log yang jelas.
+- Timeout mengikuti `timeout_sec` (mencakup seluruh loop agent).
+- Jika provider/role/skill tidak ditemukan, step gagal dengan log yang jelas.
 
 ## Eksekusi (`src/server/workflow/runner.ts`)
 

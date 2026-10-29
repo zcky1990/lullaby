@@ -34,6 +34,11 @@ const llmWithSchema = z
     model: z.string().trim().max(200).optional(),
     temperature: z.number().min(0).max(2).optional(),
     max_tokens: z.number().int().positive().max(100_000).optional(),
+    mode: z.enum(["plan", "build"]).optional(),
+    skill: z.string().trim().min(1).max(80).optional(),
+    skill_name: z.string().trim().min(1).max(80).optional(),
+    variant: z.enum(["short", "medium", "long"]).optional(),
+    max_steps: z.number().int().min(1).max(12).optional(),
   })
   .strict()
   .optional();
@@ -81,23 +86,24 @@ const stepSchema = z
   })
   .strict()
   .superRefine((step, ctx) => {
-    if (!step.run && step.action !== "chat.completion") {
+    const isAi = step.action === "chat.completion" || step.action === "agent";
+    if (!step.run && !isAi) {
       ctx.addIssue({ code: "custom", message: "Step shell wajib punya `run`." });
     }
-    if (step.action && step.action !== "chat.completion") {
+    if (step.action && !isAi) {
       ctx.addIssue({
         code: "custom",
-        message: `Action "${step.action}" belum didukung (hanya chat.completion).`,
+        message: `Action "${step.action}" belum didukung (hanya chat.completion / agent).`,
       });
     }
-    if (step.action === "chat.completion") {
+    if (isAi) {
       if (step.run) {
-        ctx.addIssue({ code: "custom", message: "Step LLM tidak boleh memakai `run`." });
+        ctx.addIssue({ code: "custom", message: "Step AI tidak boleh memakai `run`." });
       }
       if (!step.with?.prompt && !step.with?.messages) {
         ctx.addIssue({
           code: "custom",
-          message: "Step LLM butuh `with.prompt` atau `with.messages`.",
+          message: "Step AI butuh `with.prompt` atau `with.messages`.",
         });
       }
     }
@@ -200,10 +206,14 @@ export function parseWorkflow(yaml: string, fallbackName: string): WorkflowDefin
     if (ids.has(id)) throw new WorkflowError(`Step id duplikat: ${id}`);
     ids.add(id);
     const retry = step.retry_policy ?? doc.defaults?.retry_policy;
-    const isLlm = step.action === "chat.completion";
+    const kind = step.action === "agent"
+      ? "agent"
+      : step.action === "chat.completion"
+      ? "llm"
+      : "shell";
     return {
       id,
-      kind: isLlm ? "llm" : "shell",
+      kind,
       run: step.run,
       action: step.action,
       with: step.with
@@ -217,6 +227,10 @@ export function parseWorkflow(yaml: string, fallbackName: string): WorkflowDefin
           model: step.with.model,
           temperature: step.with.temperature,
           maxTokens: step.with.max_tokens,
+          mode: step.with.mode,
+          skill: step.with.skill ?? step.with.skill_name,
+          variant: step.with.variant,
+          maxSteps: step.with.max_steps,
         }
         : undefined,
       output: step.output,

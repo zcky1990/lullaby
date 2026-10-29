@@ -12,6 +12,7 @@ import {
   type WorkflowRunStepRow,
 } from "../../db/db.ts";
 import { publish } from "../bus.ts";
+import { runHeadlessAgent } from "../chat/headless.ts";
 import { complete } from "../chat/llm.ts";
 import type { ChatTurn } from "../chat/types.ts";
 import { record } from "../http.ts";
@@ -58,8 +59,9 @@ export async function startWorkflowRun(input: {
 
   const stepIds = new Map<string, string>();
   for (const step of input.definition.steps) {
+    const prompt = step.with?.prompt ?? step.with?.messages?.[0]?.content ?? step.action ?? "";
     const command = step.run ??
-      `[llm] ${step.with?.prompt ?? step.with?.messages?.[0]?.content ?? "chat.completion"}`;
+      (step.kind === "agent" ? `[agent] ${prompt}` : `[llm] ${prompt || "chat.completion"}`);
     const row = await createWorkflowRunStep(run.id, step.id, command);
     stepIds.set(step.id, row.id);
   }
@@ -322,6 +324,18 @@ async function runStep(
   if (step.kind === "llm") {
     return await runLlmStep(runId, project, definition, step, logPrefix, stepRowId, outputs);
   }
+  if (step.kind === "agent") {
+    return await runAgentStep(
+      runId,
+      active,
+      project,
+      definition,
+      step,
+      logPrefix,
+      stepRowId,
+      outputs,
+    );
+  }
   return await runShellStep(
     runId,
     active,
@@ -541,6 +555,144 @@ async function runLlmStep(
     return { code: 0, log: writer.get(), output: text };
   } catch (error) {
     writer.append(`[llm error] ${(error as Error).message}\n`);
+    await writer.flush();
+    return { code: -1, log: writer.get() };
+  }
+}
+
+async function runAgentStep(
+  runId: string,
+  active: ActiveRun,
+  project: WorkflowProject,
+  definition: WorkflowDefinition,
+  step: WorkflowStep,
+  logPrefix: string,
+  stepRowId: string | undefined,
+  outputs: Map<string, string>,
+): Promise<{ code: number; log: string; output?: string }> {
+  const writer = createLogWriter(runId, step.id, logPrefix, stepRowId);
+  const config = step.with ?? {};
+  try {
+    const sessionName = config.session ?? definition.llm?.session;
+    const session = sessionName ? await getOrCreateWorkflowSession(project.id, sessionName) : null;
+    const history = session ? (await listWorkflowSessionMessages(session.id)).slice(-50) : [];
+
+    const providers = await listLlmProviders();
+    const roles = await listRoles();
+    const roleKey = config.role ?? definition.llm?.role;
+    const role = roleKey
+      ? roles.find(
+        (item) => item.id === roleKey || item.name.toLowerCase() === roleKey.toLowerCase(),
+      )
+      : undefined;
+    if (roleKey && !role) throw new Error(`Role "${roleKey}" tidak ditemukan.`);
+
+    const providerKey = config.provider ?? definition.llm?.provider;
+    const matchProvider = (key: string) =>
+      providers.find(
+        (provider) => provider.id === key || provider.name.toLowerCase() === key.toLowerCase(),
+      );
+    let provider = providerKey ? matchProvider(providerKey) : undefined;
+    if (providerKey && !provider) {
+      throw new Error(`Provider LLM "${providerKey}" tidak ditemukan.`);
+    }
+    if (!provider && role?.provider_id) {
+      provider = providers.find((item) => item.id === role.provider_id);
+    }
+    provider ??= providers[0];
+    if (!provider) throw new Error("Belum ada provider LLM global.");
+
+    const model = config.model ?? definition.llm?.model;
+    const effective = model ? { ...provider, model } : provider;
+
+    const turns: ChatTurn[] = [];
+    for (const message of history) {
+      if (message.role === "user" || message.role === "assistant") {
+        turns.push({ role: message.role, content: message.content });
+      }
+    }
+    if (config.messages?.length) {
+      for (const message of config.messages) {
+        if (message.role === "system") continue;
+        turns.push({
+          role: message.role,
+          content: interpolate(message.content, outputs, definition.env),
+        });
+      }
+    } else {
+      turns.push({
+        role: "user",
+        content: interpolate(config.prompt ?? "", outputs, definition.env),
+      });
+    }
+
+    const userContent = config.prompt
+      ? interpolate(config.prompt, outputs, definition.env)
+      : (config.messages ?? [])
+        .filter((message) => message.role === "user")
+        .map((message) => interpolate(message.content, outputs, definition.env))
+        .join("\n\n");
+
+    const mode = config.mode ?? "build";
+    const systemRaw = config.system ?? definition.llm?.system;
+    const system = systemRaw ? interpolate(systemRaw, outputs, definition.env) : undefined;
+    const temperature = config.temperature ?? definition.llm?.temperature;
+
+    writer.append(
+      `[agent] ${effective.name} · ${effective.model ?? "-"} · mode=${mode}` +
+        `${sessionName ? ` · session=${sessionName}` : ""}` +
+        `${config.skill ? ` · skill=${config.skill}` : ""}\n`,
+    );
+
+    const result = await withTimeout(
+      runHeadlessAgent({
+        provider: effective,
+        projectId: project.id,
+        projectName: project.name,
+        workspace: project.workspace_path,
+        mode,
+        skillName: config.skill,
+        variant: config.variant,
+        temperature,
+        maxTokens: config.maxTokens,
+        maxSteps: config.maxSteps,
+        system,
+        persona: role?.persona?.trim() || undefined,
+        turns,
+        isCanceled: () => active.canceled,
+      }),
+      step.timeoutSec,
+    );
+
+    for (const entry of result.toolLog) {
+      writer.append(`[tool] ${entry.summary}\n`);
+    }
+    if (result.filesTouched.length) {
+      writer.append(`[files] ${result.filesTouched.join(", ")}\n`);
+    }
+    if (result.createdTickets.length) {
+      writer.append(
+        `[tickets] ${
+          result.createdTickets.map((ticket) => `${ticket.key}: ${ticket.title}`).join("; ")
+        }\n`,
+      );
+    }
+
+    const text = result.message ?? "";
+    writer.append(text.endsWith("\n") || text.length === 0 ? text : `${text}\n`);
+    if (result.canceled) {
+      writer.append("[agent dibatalkan]\n");
+      await writer.flush();
+      return { code: -1, log: writer.get(), output: text };
+    }
+    if (session) {
+      if (userContent) await appendWorkflowSessionMessage(session.id, "user", userContent);
+      if (text) await appendWorkflowSessionMessage(session.id, "assistant", text);
+    }
+    await writer.flush();
+    return { code: 0, log: writer.get(), output: text };
+  } catch (error) {
+    writer.append(`[agent error] ${(error as Error).message}\n`);
     await writer.flush();
     return { code: -1, log: writer.get() };
   }
