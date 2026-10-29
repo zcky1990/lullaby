@@ -1,5 +1,5 @@
 {
-  "name": "rnd-workflow",
+  "name": "lullaby-ide",
   "version": "0.1.0",
   "exports": "./main.ts",
   "tasks": {
@@ -23,14 +23,14 @@
   },
   "desktop": {
     "app": {
-      "name": "RND Workflow",
+      "name": "Lullaby IDE",
       "identifier": "com.klgroup.rndworkflow"
     },
     "backend": "webview",
     "output": {
-      "macos": "./dist/RNDWorkflow.app",
-      "windows": "./dist/RNDWorkflow",
-      "linux": "./dist/rnd-workflow"
+      "macos": "./dist/LullabyIDE.app",
+      "windows": "./dist/LullabyIDE",
+      "linux": "./dist/LullabyIDE"
     }
   },
   "fmt": {

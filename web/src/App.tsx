@@ -1288,7 +1288,7 @@ export default function App() {
         <header className="flex h-[35px] items-center justify-between border-b px-3">
           <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
             <span className="truncate font-medium text-foreground">
-              {detail?.project.name ?? "RND Workflow"}
+              {detail?.project.name ?? "Lullaby IDE"}
             </span>
             {workspaceBase ? <span className="truncate">{workspaceBase}</span> : null}
           </div>

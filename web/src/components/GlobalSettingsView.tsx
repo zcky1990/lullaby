@@ -389,7 +389,7 @@ function About() {
   return (
     <Section title="About">
       <div className="grid gap-2 text-sm">
-        <Row label="Name" value={health?.name ?? "RND Workflow"} />
+        <Row label="Name" value={health?.name ?? "Lullaby IDE"} />
         <Row label="Version" value={health?.version ?? "—"} />
         <Row label="Data dir" value={health?.dataDir ?? "—"} />
       </div>

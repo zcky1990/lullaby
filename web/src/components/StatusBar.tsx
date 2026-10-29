@@ -53,7 +53,7 @@ export function StatusBar({
         ) : null}
         <span>UTF-8</span>
         <span>LF</span>
-        <span>RND Workflow</span>
+        <span>Lullaby IDE</span>
       </div>
     </footer>
   );

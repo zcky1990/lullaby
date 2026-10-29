@@ -19,7 +19,7 @@
   - main [ref=e21]:
     - generic [ref=e22]:
       - generic [ref=e23]:
-        - text: RND Workflow
+        - text: Lullaby IDE
         - generic [ref=e24]: Deno Desktop · shadcn/ui
       - button "Chat" [ref=e25]
     - generic [ref=e28]:

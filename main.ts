@@ -17,8 +17,8 @@ function listenOptions(): Deno.ServeTcpOptions {
 }
 
 const opts = listenOptions();
-createMainWindow({ title: "RND Workflow" });
+createMainWindow({ title: "Lullaby" });
 
 Deno.serve(opts, handleRequest);
 
-console.log(`RND Workflow listening on 127.0.0.1:${opts.port ?? "(auto)"}`);
+console.log(`Lullaby IDE listening on 127.0.0.1:${opts.port ?? "(auto)"}`);
