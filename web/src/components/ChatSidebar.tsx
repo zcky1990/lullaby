@@ -40,6 +40,7 @@ import {
   parseSlashSkill,
 } from "@/lib/slash-skill";
 import { buildAutoBuildPrompt } from "@/lib/ticket-columns";
+import { APP_FONT_STACKS, useTheme } from "@/components/ThemeProvider";
 import { cn } from "@/lib/utils";
 
 const MarkdownView = lazy(() => import("@/components/MarkdownView"));
@@ -179,6 +180,8 @@ export function ChatSidebar({
   const [skillMenuOpen, setSkillMenuOpen] = useState(false);
   const [skillQuery, setSkillQuery] = useState("");
   const [skillActiveIndex, setSkillActiveIndex] = useState(0);
+  const { chatFont, chatFontSize } = useTheme();
+  const chatFontFamily = APP_FONT_STACKS[chatFont];
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -751,10 +754,14 @@ export function ChatSidebar({
         </div>
       </div>
 
-      <div ref={scrollRef} className="chat-surface flex-1 overflow-y-auto p-3">
+      <div
+        ref={scrollRef}
+        className="chat-surface flex-1 overflow-y-auto p-3"
+        style={{ fontFamily: chatFontFamily, fontSize: `${chatFontSize}px` }}
+      >
         {entries.length === 0
           ? (
-            <p className="text-sm text-muted-foreground">
+            <p className="text-muted-foreground">
               Mulai chat dengan LLM. Lampirkan gambar/file teks atau seret file ke sini. Aplikasi
               dapat membaca/menulis file di workspace — setiap edit akan meminta persetujuan Anda.
             </p>
@@ -813,7 +820,11 @@ export function ChatSidebar({
                       entry.content
                         ? (
                           <Suspense fallback={<Skeleton className="h-4 w-32" />}>
-                            <MarkdownView content={entry.content} />
+                            <MarkdownView
+                              content={entry.content}
+                              fontSize={chatFontSize}
+                              fontFamily={chatFontFamily}
+                            />
                           </Suspense>
                         )
                         : null
@@ -1019,6 +1030,7 @@ export function ChatSidebar({
               disabled={!!pending}
               rows={3}
               className="chat-composer-input w-full resize-none border-0 bg-transparent px-3 py-2 outline-none disabled:opacity-60"
+              style={{ fontFamily: chatFontFamily, fontSize: `${chatFontSize}px` }}
             />
           </div>
           <div className="flex items-center gap-1 px-2 pb-2">

@@ -6,6 +6,8 @@ import { cn } from "@/lib/utils";
 
 interface Props {
   content: string;
+  fontSize?: number;
+  fontFamily?: string;
 }
 
 function isMermaidBlock(node: unknown): boolean {
@@ -17,7 +19,7 @@ function isMermaidBlock(node: unknown): boolean {
   return typeof className === "string" && className.includes("language-mermaid");
 }
 
-export default function MarkdownView({ content }: Props) {
+export default function MarkdownView({ content, fontSize, fontFamily }: Props) {
   const { resolved } = useTheme();
 
   const components: Components = {
@@ -36,7 +38,13 @@ export default function MarkdownView({ content }: Props) {
   };
 
   return (
-    <div className={cn("prose max-w-none", resolved === "dark" && "prose-invert")}>
+    <div
+      className={cn("prose max-w-none", resolved === "dark" && "prose-invert")}
+      style={{
+        ...(fontSize ? { fontSize: `${fontSize}px` } : {}),
+        ...(fontFamily ? { fontFamily } : {}),
+      }}
+    >
       <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
         {content}
       </ReactMarkdown>
