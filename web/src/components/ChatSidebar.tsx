@@ -717,16 +717,16 @@ export function ChatSidebar({
         )
         : null}
 
-      <div className="flex items-center justify-between gap-3 border-b px-3 py-2 max-h-[40px] h-[40px]">
-        <div className="flex items-center gap-1 w-3/4">
+      <div className="flex items-center justify-between gap-3 border-b py-2 max-h-[35px] h-[35px]">
+        <div className="flex items-center justify-between gap-1 w-full">
           <Select value={sessionId ?? "new"} onValueChange={selectSession} disabled={!!pending}>
             <SelectTrigger size="sm" className="min-w-0 flex-1" aria-label="Sesi chat">
-              <SelectValue placeholder="Chat baru" />
+              <SelectValue placeholder="Chat baru" className="text-sm"/>
             </SelectTrigger>
             <SelectContent>
               <SelectGroup>
                 <SelectItem value="new">
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 text-sm">
                     <Plus />
                     Chat baru
                   </div>
@@ -749,9 +749,6 @@ export function ChatSidebar({
             <Trash2 />
           </Button>
         </div>
-        <Button size="icon" variant="ghost" onClick={onClose} aria-label="Tutup chat">
-          <X />
-        </Button>
       </div>
 
       <div ref={scrollRef} className="chat-surface flex-1 overflow-y-auto p-3">
