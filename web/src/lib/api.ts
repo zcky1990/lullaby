@@ -30,6 +30,7 @@ export interface LlmProvider {
   baseUrl: string | null;
   apiKey: string | null;
   hasApiKey?: boolean;
+  models?: CursorModel[];
   mode: string;
   updatedAt: string;
 }
@@ -773,6 +774,7 @@ export const api = {
     projectId: string,
     payload: {
       providerId?: string;
+      model?: string;
       sessionId?: string;
       roleId?: string;
       skillName?: string;

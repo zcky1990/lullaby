@@ -32,9 +32,19 @@ export function serializeLlm(row: {
   model: string | null;
   base_url: string | null;
   api_key: string | null;
+  config: string;
   mode: string;
   updated_at: string;
 }) {
+  let config: Record<string, unknown> = {};
+  try {
+    config = JSON.parse(row.config || "{}") as Record<string, unknown>;
+  } catch {
+    config = {};
+  }
+  const models = row.provider === "cursor" && Array.isArray(config.cursorModels)
+    ? config.cursorModels
+    : undefined;
   return {
     id: row.id,
     name: row.name,
@@ -43,6 +53,7 @@ export function serializeLlm(row: {
     baseUrl: row.base_url,
     apiKey: row.api_key ? SECRET_MASK : "",
     hasApiKey: Boolean(row.api_key),
+    models,
     mode: row.mode,
     updatedAt: row.updated_at,
   };

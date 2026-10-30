@@ -99,6 +99,7 @@ export type RoleInput = z.infer<typeof RoleInput>;
 
 export const ChatInput = z.object({
   providerId: z.string().trim().optional(),
+  model: z.string().trim().max(200).optional(),
   sessionId: z.string().trim().optional(),
   roleId: z.string().trim().optional(),
   skillName: z

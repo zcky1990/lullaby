@@ -550,6 +550,16 @@ export async function updateLlmProvider(
   return await getLlmProvider(id);
 }
 
+export async function updateLlmProviderConfig(
+  id: string,
+  config: Record<string, unknown>,
+): Promise<void> {
+  const db = await getDb();
+  db.prepare(
+    "UPDATE llm_providers SET config = ?, updated_at = datetime('now') WHERE id = ?",
+  ).run(JSON.stringify(config), id);
+}
+
 export async function deleteLlmProvider(id: string): Promise<void> {
   const db = await getDb();
   withTransaction(db, () => {

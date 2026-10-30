@@ -20,6 +20,7 @@ import {
   type ChatPending,
   type ChatResponse,
   type ChatSession,
+  type CursorModel,
   type FileChange,
   type LlmProvider,
   type PendingFileChange,
@@ -151,6 +152,8 @@ export function ChatSidebar({
   hidden,
 }: Props) {
   const [providerId, setProviderId] = useState(providers[0]?.id ?? "");
+  const [cursorModels, setCursorModels] = useState<CursorModel[]>([]);
+  const [cursorModelId, setCursorModelId] = useState("");
   const [variant, setVariant] = useState("medium");
   const [roleId, setRoleId] = useState<string | null>(() => {
     try {
@@ -211,6 +214,47 @@ export function ChatSidebar({
   useEffect(() => {
     if (!providerId && providers[0]) setProviderId(providers[0].id);
   }, [providers, providerId]);
+
+  const activeProvider = providers.find((provider) => provider.id === providerId) ?? null;
+
+  useEffect(() => {
+    let cancelled = false;
+    const provider = providers.find((item) => item.id === providerId);
+    if (!provider || provider.provider !== "cursor") {
+      setCursorModels([]);
+      setCursorModelId("");
+      return;
+    }
+    if (provider.models?.length) {
+      setCursorModels(provider.models);
+      return;
+    }
+    api
+      .listCursorModels({ providerId: provider.id })
+      .then((res) => {
+        if (!cancelled) setCursorModels(res.models);
+      })
+      .catch(() => {
+        if (!cancelled) setCursorModels([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [providerId, providers]);
+
+  useEffect(() => {
+    if (activeProvider?.provider !== "cursor") return;
+    setCursorModelId((current) => {
+      if (current && cursorModels.some((model) => model.id === current)) return current;
+      if (
+        activeProvider.model &&
+        cursorModels.some((model) => model.id === activeProvider.model)
+      ) {
+        return activeProvider.model;
+      }
+      return cursorModels[0]?.id ?? "";
+    });
+  }, [activeProvider, cursorModels]);
 
   const activeRole = roles.find((role) => role.id === roleId) ?? null;
   const roleProviderId =
@@ -622,6 +666,7 @@ export function ChatSidebar({
     try {
       const response = await api.chat(projectId, {
         providerId: providerId || undefined,
+        model: activeProvider?.provider === "cursor" ? cursorModelId || undefined : undefined,
         sessionId: sessionId ?? undefined,
         roleId: roleId ?? undefined,
         skillName,
@@ -1085,21 +1130,48 @@ export function ChatSidebar({
               <SelectTrigger
                 size="sm"
                 className="h-7 min-w-0 flex-1 border-0 bg-transparent px-1 text-xs shadow-none focus-visible:ring-0 data-[size=sm]:h-7"
-                aria-label="Pilih model"
+                aria-label="Pilih provider"
                 title={roleProviderId ? "Provider ditentukan oleh role" : undefined}
               >
-                <SelectValue placeholder="Model" />
+                <SelectValue placeholder="Provider" />
               </SelectTrigger>
               <SelectContent>
                 <SelectGroup>
                   {providers.map((provider) => (
                     <SelectItem key={provider.id} value={provider.id}>
-                      {provider.model ?? provider.name}
+                      {provider.name}
+                      {provider.provider !== "cursor" && provider.model
+                        ? ` · ${provider.model}`
+                        : ""}
                     </SelectItem>
                   ))}
                 </SelectGroup>
               </SelectContent>
             </Select>
+            {activeProvider?.provider === "cursor" ? (
+              <Select
+                value={cursorModelId}
+                onValueChange={setCursorModelId}
+                disabled={!!pending || cursorModels.length === 0}
+              >
+                <SelectTrigger
+                  size="sm"
+                  className="h-7 w-36 shrink-0 border-0 bg-transparent px-1 text-xs shadow-none focus-visible:ring-0 data-[size=sm]:h-7"
+                  aria-label="Pilih model Cursor"
+                >
+                  <SelectValue placeholder="Model Cursor" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    {cursorModels.map((model) => (
+                      <SelectItem key={model.id} value={model.id}>
+                        {model.name === model.id ? model.id : `${model.name} (${model.id})`}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+            ) : null}
             <Select value={variant} onValueChange={setVariant} disabled={!!pending}>
               <SelectTrigger
                 size="sm"

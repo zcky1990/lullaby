@@ -394,6 +394,9 @@ async function chatHandler(projectId: string, req: Request): Promise<Response> {
   }
   if (!provider) provider = (await listLlmProviders())[0] ?? null;
   if (!provider) return json({ error: "no_provider" }, 400);
+  if (parsed.data.model) {
+    provider = { ...provider, model: parsed.data.model };
+  }
 
   const messages: VisibleMessage[] = parsed.data.messages
     .filter((message) => message.role !== "system")

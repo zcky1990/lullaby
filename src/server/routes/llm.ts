@@ -5,9 +5,10 @@ import {
   getLlmProvider,
   listLlmProviders,
   updateLlmProvider,
+  updateLlmProviderConfig,
 } from "../../db/db.ts";
 import { isMaskedSecret, json, readJson, record } from "../http.ts";
-import { listCursorModels } from "../chat/cursor.ts";
+import { type CursorModelInfo, listCursorModels } from "../chat/cursor.ts";
 import { serializeLlm } from "../serializers.ts";
 
 export async function listLlmHandler(): Promise<Response> {
@@ -29,8 +30,11 @@ export async function createLlmHandler(req: Request): Promise<Response> {
     apiKey: parsed.data.apiKey,
     mode: parsed.data.mode,
   });
+  if (provider.provider === "cursor" && provider.api_key) {
+    await refreshCursorModels(provider.id, provider.api_key);
+  }
   await record("llm.created", { name: provider.name });
-  return json({ provider: serializeLlm(provider) }, 201);
+  return json({ provider: serializeLlm((await getLlmProvider(provider.id)) ?? provider) }, 201);
 }
 
 export async function updateLlmHandler(providerId: string, req: Request): Promise<Response> {
@@ -52,8 +56,11 @@ export async function updateLlmHandler(providerId: string, req: Request): Promis
       : parsed.data.apiKey,
     mode: parsed.data.mode,
   });
+  if (provider?.provider === "cursor" && provider.api_key) {
+    await refreshCursorModels(provider.id, provider.api_key);
+  }
   await record("llm.saved", { providerId });
-  return json({ provider: serializeLlm(provider!) });
+  return json({ provider: serializeLlm((await getLlmProvider(providerId)) ?? provider!) });
 }
 
 export async function deleteLlmHandler(providerId: string): Promise<Response> {
@@ -81,5 +88,35 @@ export async function listCursorModelsHandler(req: Request): Promise<Response> {
     return json({ models: await listCursorModels(apiKey) });
   } catch (error) {
     return json({ error: (error as Error).message }, 502);
+  }
+}
+
+function parseProviderConfig(raw: string): Record<string, unknown> {
+  try {
+    return JSON.parse(raw || "{}") as Record<string, unknown>;
+  } catch {
+    return {};
+  }
+}
+
+async function storeCursorModels(
+  providerId: string,
+  models: CursorModelInfo[],
+): Promise<void> {
+  const existing = await getLlmProvider(providerId);
+  if (!existing) return;
+  const config = parseProviderConfig(existing.config);
+  await updateLlmProviderConfig(providerId, {
+    ...config,
+    cursorModels: models,
+    cursorModelsUpdatedAt: new Date().toISOString(),
+  });
+}
+
+async function refreshCursorModels(providerId: string, apiKey: string): Promise<void> {
+  try {
+    await storeCursorModels(providerId, await listCursorModels(apiKey));
+  } catch {
+    // keep the provider saved even if the model catalog cannot be loaded
   }
 }
