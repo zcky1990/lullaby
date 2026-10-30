@@ -100,8 +100,12 @@ finishing a change.
   request/first provider) and prepends the persona to the system prompt. UI: Global Settings → Roles
   and a role selector in the chat composer (model select locks when the role has a provider).
 - **LLM providers are global**: `llm_providers` has no `project_id` (existing per-project rows are
-  migrated into the global table at startup). Project Settings no longer manages them; Global
-  Settings → LLM Providers does, via `GET/POST /api/llm` and `PUT/DELETE /api/llm/:id`. Chat and
+  migrated into the global table at startup). Provider type `cursor` uses `@cursor/sdk`
+  (`src/server/chat/cursor.ts`): the agent edits a temporary workspace copy with
+  read/grep/glob/ls/edit/task (shell/delete disabled), then changed files become synthetic
+  `write_file` calls so they still go through Review. API key lives in `llm_providers.api_key`;
+  model e.g. `composer-2`. Project Settings no longer manages them; Global Settings → LLM Providers
+  does, via `GET/POST /api/llm` and `PUT/DELETE /api/llm/:id`. Chat and
   `generateTicketsFromDocument` resolve providers from the global list.
 - **Workflows**: definitions are YAML files in `<workspace>/.workflows/<slug>.yaml` (fallback
   `appDataDir()/<project-slug>/workflows`), parsed with `@std/yaml` + Zod
@@ -110,8 +114,8 @@ finishing a change.
   retry/timeout/cancel, capped step logs). Agent steps use `src/server/chat/headless.ts` (tool loop,
   writes auto-applied). Runs live in `workflow_runs` / `workflow_run_steps`;
   `src/server/routes/workflows.ts` exposes CRUD + run/history/cancel. UI: `WorkflowPanel` (sidebar)
-  + `WorkflowTab` (Monaco YAML + React Flow + logs). Manual runs only (no scheduler in v1); AI must
-  not auto-run workflows.
+  - `WorkflowTab` (Monaco YAML + React Flow + logs). Manual runs only (no scheduler in v1); AI must
+    not auto-run workflows.
 - **MCP**: global server config (`McpSettings`) is stored in `app_settings` (`mcp_servers` JSON;
   stdio command/args/env or http url/headers) plus `mcp_enabled` and `mcp_disabled_tools`.
   `POST /api/settings/mcp/tools` connects with `initialize` + `tools/list` (`src/server/mcp.ts`,
@@ -146,10 +150,10 @@ finishing a change.
   Writes (chat `write_file`) create **pending hunk changes** in `src/server/chat.ts`; a **Review
   tab** (`ReviewTab`) in the main area accepts/rejects each hunk (`POST /api/chat/change`) or all
   (`/api/chat/change-all`) before `writeWorkspaceFile` runs — unless Global Settings → Tools
-  `auto_approve_writes` is on (then writes apply immediately). Chat/workflow agent also has
-  document tools (`src/server/chat/document-tools.ts`: local + Docmost/Notion/Confluence) and
-  ticket tools (`ticket-tools.ts`: local + Jira list/get/update/sync/transition); those mutations
-  apply immediately (no Review). Chat tools can be disabled via `chat_disabled_tools` (same Tools
+  `auto_approve_writes` is on (then writes apply immediately). Chat/workflow agent also has document
+  tools (`src/server/chat/document-tools.ts`: local + Docmost/Notion/Confluence) and ticket tools
+  (`ticket-tools.ts`: local + Jira list/get/update/sync/transition); those mutations apply
+  immediately (no Review). Chat tools can be disabled via `chat_disabled_tools` (same Tools
   section). Chat only shows a notice and dispatches events (`web/src/lib/review-events.ts`). Direct
   editor saves use `PUT /api/projects/:id/files/content` (also `writeWorkspaceFile`, no approval;
   user is editing). The Explorer Monaco editor is editable; tabs track a `dirty` flag and save via

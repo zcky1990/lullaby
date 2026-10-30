@@ -135,6 +135,7 @@ import {
 import {
   createLlmHandler,
   deleteLlmHandler,
+  listCursorModelsHandler,
   listLlmHandler,
   updateLlmHandler,
 } from "./routes/llm.ts";
@@ -1719,6 +1720,10 @@ export async function handleRequest(req: Request): Promise<Response> {
     if (pathname === "/api/llm") {
       if (method === "GET") return await listLlmHandler();
       if (method === "POST") return await createLlmHandler(req);
+    }
+
+    if (pathname === "/api/llm/cursor/models" && method === "POST") {
+      return await listCursorModelsHandler(req);
     }
 
     const llmItem = pathname.match(/^\/api\/llm\/([^/]+)$/);

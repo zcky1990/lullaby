@@ -43,7 +43,14 @@ export async function generateTicketsFromDocument(
   };
 
   for (let step = 0; step < 5; step++) {
-    const response = await complete(provider, run.turns, [TICKET_TOOL], run.temperature);
+    const response = await complete(
+      provider,
+      run.turns,
+      [TICKET_TOOL],
+      run.temperature,
+      undefined,
+      run.workspace,
+    );
     if (response.toolCalls.length === 0) {
       return { tickets: run.createdTickets, message: response.text };
     }

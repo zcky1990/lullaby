@@ -557,6 +557,12 @@ export interface IntegrationPayload {
   config: Record<string, string>;
 }
 
+export interface CursorModel {
+  id: string;
+  name: string;
+  description?: string;
+}
+
 export interface LlmProviderPayload {
   name: string;
   provider: string;
@@ -755,6 +761,8 @@ export const api = {
   ) => request<{ role: Role }>(`/api/roles/${id}`, jsonInit("PUT", payload)),
   deleteRole: (id: string) => request<{ ok: boolean }>(`/api/roles/${id}`, { method: "DELETE" }),
   listLlm: () => request<{ providers: LlmProvider[] }>("/api/llm"),
+  listCursorModels: (payload: { apiKey?: string; providerId?: string }) =>
+    request<{ models: CursorModel[] }>("/api/llm/cursor/models", jsonInit("POST", payload)),
   createLlm: (payload: LlmProviderPayload) =>
     request<{ provider: LlmProvider }>("/api/llm", jsonInit("POST", payload)),
   updateLlm: (id: string, payload: LlmProviderPayload) =>

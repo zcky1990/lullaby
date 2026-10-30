@@ -119,7 +119,7 @@ export const SINGLETONS: SingletonDef[] = [
 
 export const PROVIDER_FIELDS: FieldDef[] = [
   { key: "name", label: "Name", placeholder: "Anthropic Cloud" },
-  { key: "provider", label: "Provider", placeholder: "anthropic | openai | ollama" },
+  { key: "provider", label: "Provider", placeholder: "openai | anthropic | cursor | ollama" },
   { key: "model", label: "Model", placeholder: "claude-sonnet-4" },
   { key: "baseUrl", label: "Base URL", placeholder: "https://api.anthropic.com/v1" },
   {

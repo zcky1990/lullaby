@@ -1,4 +1,4 @@
-import { LlmProviderInput } from "../../config/schema.ts";
+import { CursorModelsInput, LlmProviderInput } from "../../config/schema.ts";
 import {
   createLlmProvider,
   deleteLlmProvider,
@@ -7,6 +7,7 @@ import {
   updateLlmProvider,
 } from "../../db/db.ts";
 import { isMaskedSecret, json, readJson, record } from "../http.ts";
+import { listCursorModels } from "../chat/cursor.ts";
 import { serializeLlm } from "../serializers.ts";
 
 export async function listLlmHandler(): Promise<Response> {
@@ -61,4 +62,24 @@ export async function deleteLlmHandler(providerId: string): Promise<Response> {
   await deleteLlmProvider(providerId);
   await record("llm.deleted", { providerId });
   return json({ ok: true });
+}
+
+export async function listCursorModelsHandler(req: Request): Promise<Response> {
+  const parsed = CursorModelsInput.safeParse(await readJson(req));
+  if (!parsed.success) {
+    return json({ error: "invalid_input", issues: parsed.error.issues }, 400);
+  }
+  let apiKey = parsed.data.apiKey;
+  if ((!apiKey || isMaskedSecret(apiKey)) && parsed.data.providerId) {
+    const existing = await getLlmProvider(parsed.data.providerId);
+    apiKey = existing?.api_key ?? undefined;
+  }
+  if (!apiKey) {
+    return json({ error: "api_key_required", message: "API key Cursor wajib diisi." }, 400);
+  }
+  try {
+    return json({ models: await listCursorModels(apiKey) });
+  } catch (error) {
+    return json({ error: (error as Error).message }, 502);
+  }
 }

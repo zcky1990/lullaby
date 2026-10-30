@@ -1,5 +1,6 @@
 import type { LlmProviderRow } from "../../db/db.ts";
 import { request } from "../../integrations/http.ts";
+import { completeCursor } from "./cursor.ts";
 import type { ChatAttachment, ChatTurn, ToolCall, ToolDef } from "./types.ts";
 
 export function safeParse(value: string): Record<string, unknown> {
@@ -225,8 +226,10 @@ export function complete(
   tools: ToolDef[],
   temperature?: number,
   maxTokens?: number,
+  workspace?: string | null,
 ): Promise<{ text: string; toolCalls: ToolCall[] }> {
   const type = (provider.provider || "openai").toLowerCase();
+  if (type === "cursor") return completeCursor(provider, turns, workspace);
   return type === "anthropic"
     ? completeAnthropic(provider, turns, tools, temperature, maxTokens)
     : completeOpenAi(provider, turns, tools, temperature, maxTokens);

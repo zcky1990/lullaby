@@ -251,6 +251,12 @@ export const SkillsSettingsInput = z.object({
 export type McpSettingsInput = z.infer<typeof McpSettingsInput>;
 export type SkillsSettingsInput = z.infer<typeof SkillsSettingsInput>;
 
+export const CursorModelsInput = z.object({
+  apiKey: z.string().max(400).optional(),
+  providerId: z.string().trim().max(80).optional(),
+});
+export type CursorModelsInput = z.infer<typeof CursorModelsInput>;
+
 export const UiPreferencesInput = z
   .object({
     theme: z.enum(["light", "dark", "system"]).optional(),

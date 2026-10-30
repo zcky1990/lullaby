@@ -13,13 +13,15 @@ import { testGithub } from "./github.ts";
 import { request, type TestResult, truncate } from "./http.ts";
 import { testJira } from "./jira.ts";
 import { testNotion } from "./notion.ts";
+import { testCursor } from "../server/chat/cursor.ts";
 
 const LlmConfig = z.object({
   baseUrl: z
     .string()
     .trim()
     .url()
-    .refine((v) => /^https?:\/\//i.test(v), { message: "URL harus http(s)" }),
+    .refine((v) => /^https?:\/\//i.test(v), { message: "URL harus http(s)" })
+    .optional(),
   provider: z.string().optional(),
   model: z.string().optional(),
   apiKey: z.string().optional(),
@@ -37,6 +39,25 @@ function invalid(error: z.ZodError): TestResult {
 async function testLlm(cfg: z.infer<typeof LlmConfig>): Promise<TestResult> {
   const started = performance.now();
   const elapsed = () => Math.round(performance.now() - started);
+  if ((cfg.provider ?? "openai").toLowerCase() === "cursor") {
+    try {
+      const result = await testCursor(cfg.apiKey ?? "");
+      return {
+        ok: result.ok,
+        message: result.message,
+        latencyMs: elapsed(),
+      };
+    } catch (error) {
+      return {
+        ok: false,
+        message: `Cursor SDK error: ${(error as Error).message}`,
+        latencyMs: elapsed(),
+      };
+    }
+  }
+  if (!cfg.baseUrl) {
+    return { ok: false, message: "Base URL provider LLM belum diisi.", latencyMs: elapsed() };
+  }
   const base = cfg.baseUrl.replace(/\/+$/, "");
   try {
     const headers: Record<string, string> = { Accept: "application/json" };

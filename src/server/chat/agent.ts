@@ -20,13 +20,7 @@ import { approvalResponse, prepareWriteChange, setAdvance } from "./review.ts";
 import { readChatToolsSettings } from "./settings.ts";
 import { scheduleSkillLearn } from "./skill-learn.ts";
 import { deleteRun, pruneRuns, setRun } from "./state.ts";
-import {
-  applyWriteFile,
-  executeTool,
-  resolveAttachments,
-  toolsFor,
-  WRITE_TOOLS,
-} from "./tools.ts";
+import { applyWriteFile, executeTool, resolveAttachments, toolsFor, WRITE_TOOLS } from "./tools.ts";
 import type { ChatResponse, Run, VisibleMessage } from "./types.ts";
 
 const CODE_REVIEW_SKILL = "code-review";
@@ -85,7 +79,14 @@ export async function advance(run: Run): Promise<ChatResponse> {
     const disabledTools = new Set(settings.disabledTools);
     const tools = toolsFor(run.workspace, run.mode, run.skills.size > 0, disabledTools);
     for (let step = 0; step < MAX_STEPS; step++) {
-      const response = await complete(run.provider, run.turns, tools, run.temperature);
+      const response = await complete(
+        run.provider,
+        run.turns,
+        tools,
+        run.temperature,
+        undefined,
+        run.workspace,
+      );
       if (run.mode === "plan") {
         if (response.toolCalls.length === 0) {
           const message = response.text ||

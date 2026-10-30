@@ -5,10 +5,10 @@ Chat sidebar kanan (`ChatSidebar`) memanggil `POST /api/projects/:id/chat`. Engi
 
 ## Mode
 
-| Mode | Tools | Tujuan |
-| --- | --- | --- |
-| **Plan** | `use_skill`, `list_documents`, `get_document`, `list_tickets`, `get_ticket` | Rencana + baca konteks (tanpa mutate) |
-| **Build** | Plan tools + file tools + doc/ticket write/sync | Kerja di workspace + docs/tickets |
+| Mode      | Tools                                                                       | Tujuan                                |
+| --------- | --------------------------------------------------------------------------- | ------------------------------------- |
+| **Plan**  | `use_skill`, `list_documents`, `get_document`, `list_tickets`, `get_ticket` | Rencana + baca konteks (tanpa mutate) |
+| **Build** | Plan tools + file tools + doc/ticket write/sync                             | Kerja di workspace + docs/tickets     |
 
 Mode disimpan di localStorage (`rnd.chatMode:v1`).
 
@@ -27,8 +27,8 @@ Mode disimpan di localStorage (`rnd.chatMode:v1`).
 
 ## Dua jalur write
 
-1. **Chat `write_file`** → pending hunk → tab **Review** →
-   `POST /api/chat/change` atau `/api/chat/change-all` → baru ditulis ke disk  
+1. **Chat `write_file`** → pending hunk → tab **Review** → `POST /api/chat/change` atau
+   `/api/chat/change-all` → baru ditulis ke disk\
    (kecuali Global Settings → Tools → **Auto-approve file writes** aktif: langsung ke disk)
 2. **Editor Monaco** → `PUT .../files/content` langsung (user mengedit sendiri)
 
@@ -36,33 +36,48 @@ Event UI: `web/src/lib/review-events.ts`.
 
 ## Global Tools settings
 
-`GET`/`PUT` `/api/settings/chat-tools` (`app_settings.auto_approve_writes`,
-`chat_disabled_tools`):
+`GET`/`PUT` `/api/settings/chat-tools` (`app_settings.auto_approve_writes`, `chat_disabled_tools`):
 
 - **Auto-approve writes** — skip Review untuk `write_file` di chat Build (default off).
 - **Disabled tools** — deny-list nama tool; dihilangkan dari tool list LLM dan ditolak jika
   dipanggil. UI: Global Settings → Tools (+ **Enable all**).
 - Hanya chat interaktif; workflow `action: agent` tetap auto-write dan tidak memakai deny-list ini.
 
+## Cursor SDK provider
+
+Provider LLM dengan `provider: cursor` memakai `@cursor/sdk` (lihat `src/server/chat/cursor.ts`).
+Konfigurasi tetap lewat Global Settings → LLM Providers:
+
+- `apiKey`: Cursor API key (disimpan di `llm_providers.api_key`).
+- `model`: mis. `composer-2`.
+- `baseUrl`: tidak dipakai.
+- `provider`: `cursor`.
+
+Agent lokal Cursor dibuat per completion dengan tool `read`, `grep`, `glob`, `ls`, `edit`, dan
+`task` (shell/delete dinonaktifkan). Workspace project disalin ke direktori sementara, agent bekerja
+di salinan itu, lalu file yang berubah dipetakan menjadi panggilan `write_file` sintetis sehingga
+masuk ke **Review** aplikasi (atau auto-approve bila diaktifkan). Percakapan dikirim sebagai prompt
+gabungan; attachment gambar diteruskan ke SDK. Test koneksi memakai `Cursor.models.list`.
+
 ## Skills
 
 Discovery: workspace `.agents/skills` > project skills (auto) > global skills > builtin
-(`src/skills/builtin`).  
-Composer: `/skill-name` menyuntikkan body ke system prompt.  
+(`src/skills/builtin`).\
+Composer: `/skill-name` menyuntikkan body ke system prompt.\
 Setelah Build sukses yang memakai tools, `skill-learn.ts` dapat menulis skill project.
 
 Saat aplikasi pertama kali dibuka, `installDefaultSkills()` (`src/core/bootstrap.ts`) menyalin skill
 integrasi bawaan ke **global skills** (`{appDataDir}/skills`): `docmost-api`, `jira-api`,
-`confluence-api`, `clickup-api`. Seed hanya sekali (`app_settings.skills_defaults_installed`);
-skill bisa dilihat/diatur di Global Settings → Skills.
+`confluence-api`, `clickup-api`. Seed hanya sekali (`app_settings.skills_defaults_installed`); skill
+bisa dilihat/diatur di Global Settings → Skills.
 
 ### `/code-review`
 
 Skill builtin (`src/skills/builtin/code-review/SKILL.md`). Saat `skillName=code-review`:
 
 - Mode dipaksa **Plan** (UI + server) — tidak menulis file lewat tools
-- Pesan user diperkaya dengan status/diff git (`src/server/code-review.ts`: unstaged, staged,
-  vs upstream merge-base bila ada)
+- Pesan user diperkaya dengan status/diff git (`src/server/code-review.ts`: unstaged, staged, vs
+  upstream merge-base bila ada)
 - Output diharapkan findings-first (severityitas: bug, regresi, security, missing tests)
 
 Detail: [code-review.md](code-review.md).
@@ -73,13 +88,13 @@ Slash command khusus (bukan skill file): menjalankan `npx autoskills -y -a curso
 `workspace_path` project via `POST /api/projects/:id/autoskills`. Skill terinstal ke
 `<workspace>/.agents/skills` dan langsung bisa dipakai `use_skill` / mention.
 
-Prasyarat: Node.js >= 22.6 + `npx` di PATH, jaringan untuk unduh registry, permission
-`--allow-run` (sudah di task `dev`/`desktop`).
+Prasyarat: Node.js >= 22.6 + `npx` di PATH, jaringan untuk unduh registry, permission `--allow-run`
+(sudah di task `dev`/`desktop`).
 
 ## Roles
 
-Role global punya `persona` (+ opsional provider). Dipilih di composer; persona di-prepend ke
-system prompt. Jika role punya provider, selector model terkunci ke provider itu.
+Role global punya `persona` (+ opsional provider). Dipilih di composer; persona di-prepend ke system
+prompt. Jika role punya provider, selector model terkunci ke provider itu.
 
 ## Sesi & lampiran
 
