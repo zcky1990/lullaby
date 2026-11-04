@@ -712,6 +712,7 @@ Deno.test("skill-learn extracts evidence and builds markdown", () => {
     projectId: "proj-1",
     mode: "build" as const,
     skills: new Map(),
+    mcpTools: new Map(),
     createdTickets: [],
     createdAt: Date.now(),
   } satisfies Run;

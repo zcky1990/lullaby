@@ -7,7 +7,8 @@ Panel **Document** mendukung empat sumber. State sumber di UI; remote memakai qu
 - Root: `projects.document_path`
 - File `.md` di disk; buat/rename/simpan dari UI
 - Badge sync: Local / Synced / Error
-- **Sync ke Docmost** manual (`POST .../local-documents/sync`) menyimpan `page_id` di `local_documents`
+- **Sync** manual (`POST .../local-documents/sync` dengan `target`:
+  `docmost` \| `notion` \| `confluence`) menyimpan `page_id` + `sync_target` di `local_documents`
 - **Generate ticket** dari isi dokumen → `POST .../generate-tickets` (LLM + tool `create_ticket` saja)
 
 ## Docmost
@@ -16,24 +17,19 @@ Panel **Document** mendukung empat sumber. State sumber di UI; remote memakai qu
 - List tree (lazy children), buka markdown, **Create** / **Edit** halaman
 - Client: `src/integrations/docmost.ts`
 
-## Notion (read-only v1)
+## Notion
 
-- Auth: Internal Integration Token; opsional `parentPageId`
+- Auth: Internal Integration Token; opsional `parentPageId` (wajib untuk create tanpa parent UI)
 - Host API tetap `https://api.notion.com`
 - Tanpa parent: search pages; dengan parent / expand: block children bertipe page
-- Konten: blocks → markdown sederhana
+- Konten: blocks ↔ markdown sederhana; **Create** / **Edit** didukung
 - Client: `src/integrations/notion.ts`
 
-## Confluence Cloud (read-only v1)
+## Confluence Cloud
 
-- Auth: baseUrl + email + API token; opsional `spaceKey`
+- Auth: baseUrl + email + API token; opsional `spaceKey` (wajib untuk create tanpa space/parent)
 - Tanpa space: daftar spaces (`space:KEY`); expand: pages / children
-- Body HTML → teks/markdown-ish
+- Body storage HTML ↔ markdown sederhana; **Create** / **Edit** didukung
 - Client: `src/integrations/confluence.ts`
-
-## Out of scope v1
-
-- Create/update Notion atau Confluence
-- Sync lokal → Notion/Confluence
 
 Lihat juga [integrations.md](integrations.md).

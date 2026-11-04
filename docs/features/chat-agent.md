@@ -7,8 +7,8 @@ Chat sidebar kanan (`ChatSidebar`) memanggil `POST /api/projects/:id/chat`. Engi
 
 | Mode      | Tools                                                                       | Tujuan                                |
 | --------- | --------------------------------------------------------------------------- | ------------------------------------- |
-| **Plan**  | `use_skill`, `list_documents`, `get_document`, `list_tickets`, `get_ticket` | Rencana + baca konteks (tanpa mutate) |
-| **Build** | Plan tools + file tools + doc/ticket write/sync                             | Kerja di workspace + docs/tickets     |
+| **Plan**  | `use_skill`, doc/ticket reads, enabled MCP (`mcp_*`)                        | Rencana + baca konteks (tanpa mutate file/doc/ticket app) |
+| **Build** | Plan tools + file tools + doc/ticket write/sync + MCP                       | Kerja di workspace + docs/tickets + MCP |
 
 Mode disimpan di localStorage (`rnd.chatMode:v1`).
 
@@ -19,10 +19,16 @@ Mode disimpan di localStorage (`rnd.chatMode:v1`).
   confluence); `create_document` / `update_document` (local \| docmost); `sync_document` (local →
   Docmost). Notion/Confluence read-only seperti UI.
 - **Tickets**: `list_tickets` / `get_ticket`; `create_ticket` / `update_ticket` / `delete_ticket`
-  (local); `sync_ticket` (local → Jira); `transition_ticket` (Jira status).
-- `create_ticket` selalu menulis ke SQLite lokal (bukan langsung Jira)
+  (local); `sync_ticket` (local → Jira/ClickUp); `transition_ticket` (Jira/ClickUp status).
+- `create_ticket` selalu menulis ke SQLite lokal (bukan langsung ke board remote)
 - Mutasi doc/ticket langsung diterapkan (tidak lewat Review tab; Review hanya `write_file`)
 - `use_skill` memuat body `SKILL.md` (progressive disclosure)
+- **MCP**: jika Global Settings → MCP master switch on, tool dari setiap server enabled
+  di-inject ke LLM sebagai `mcp_<server>_<tool>` (`src/server/chat/mcp-tools.ts`). Disable
+  per-tool memakai key `serverId:toolName` (`mcp_disabled_tools`). Eksekusi:
+  `tools/call` lewat stdio/HTTP (`src/server/mcp.ts`). Cache `tools/list` ~60s. Tidak memakai
+  deny-list Chat Tools; kurangi lewat MCP settings. Provider **Cursor SDK** mengabaikan tool
+  OpenAI-style ini (tool Cursor sendiri).
 - Loop tool dibatasi langkah (`MAX_STEPS` di agent); sama untuk workflow `action: agent`
 
 ## Dua jalur write
@@ -60,22 +66,30 @@ tanpa loading. Create/update provider dan `POST /api/llm/cursor/models` (dengan 
 menyimpan ulang katalog.
 
 Setiap sesi chat menyimpan `chat_sessions.cursor_agent_id` (SDK agent id). Turn pertama memakai
-`Agent.create`; turn berikutnya `Agent.resume` (fallback ke create bila resume gagal, mis. cwd
-sementara sudah hilang). Hanya pesan user terbaru (+ gambar) yang dikirim saat resume; create
-pertama menyertakan catatan runtime/system singkat. Mode Plan memakai tool tanpa `edit` dan
-`mode: "plan"`.
+`Agent.create`; turn berikutnya `Agent.resume` (local: fallback create bila resume gagal; cloud
+`bc-…`: error jika resume gagal — tidak dibuat ulang sebagai local). Hanya pesan user terbaru
+(+ gambar) yang dikirim saat resume; create pertama menyertakan catatan runtime/system singkat.
+Mode Plan memakai tool tanpa `edit` dan `mode: "plan"`.
 
-Workspace project tetap disalin ke direktori sementara (`local.cwd`), agent bekerja di salinan, lalu
-file yang berubah dipetakan menjadi `write_file` sintetis → **Review** (atau auto-approve). Setelah
-run sukses, transcript `run.conversation()` disinkronkan ke `chat_messages` (assistant baru saja;
-dedupe). Test koneksi memakai `Cursor.models.list`.
+**Local agents** memakai `local.cwd = projects.workspace_path` (cwd asli, sama dengan Cursor IDE)
+plus `settingSources: ["project"]` agar rules workspace ikut terbaca. Sebelum Build, app
+menyimpan snapshot file; setelah run, diff → `write_file` sintetis → **Review**, lalu workspace
+di-revert ke snapshot sehingga IDE↔app bisa resume agent yang sama tanpa temp copy. **Cloud
+agents** (`bc-…`) di-resume tanpa menulis Review lokal (edit di VM Cursor).
+
+Setelah run sukses, transcript `run.conversation()` disinkronkan ke `chat_messages` (assistant
+baru saja; dedupe). Test koneksi memakai `Cursor.models.list`.
 
 ### Import riwayat Cursor
 
-`GET /api/projects/:id/chat/sessions` memanggil `Agent.list({ runtime: "local", cwd: workspace })`
-bila ada provider Cursor + `workspace_path`, lalu upsert baris `source: "cursor"` (satu sesi per
-`cursor_agent_id`). Sidebar menampilkan badge **Cursor**. Membuka sesi kosong menghidrasi pesan
-via `Agent.messages.list` / `listRuns` + `conversation()` (best-effort).
+`GET /api/projects/:id/chat/sessions` (bila ada provider Cursor + API key):
+
+1. `Agent.list({ runtime: "local", cwd: workspace })` — agent IDE/app di folder project
+2. `Agent.list({ runtime: "cloud", apiKey })` — cloud agents (`bc-…`), judul diprefix `Cloud ·`
+
+Upsert `source: "cursor"` (satu sesi per `cursor_agent_id`). Sidebar badge **Cursor**. Membuka
+sesi kosong menghidrasi via `Agent.messages.list` / `listRuns` + `conversation()` (cloud pakai
+`apiKey`).
 
 ## Skills
 

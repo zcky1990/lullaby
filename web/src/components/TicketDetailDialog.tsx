@@ -22,7 +22,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
-import { api, type TicketDetail } from "@/lib/api";
+import { api, type TicketDetail, type TicketProvider, type TicketSource } from "@/lib/api";
 import { sanitizeHtml } from "@/lib/sanitize-html";
 import { cn } from "@/lib/utils";
 
@@ -37,6 +37,8 @@ interface Props {
   projectId: string | null;
   ticketKey: string | null;
   localId?: string;
+  ticketSource?: TicketSource;
+  syncProviders?: TicketProvider[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onChanged?: () => void;
@@ -46,6 +48,8 @@ export function TicketDetailDialog({
   projectId,
   ticketKey,
   localId,
+  ticketSource,
+  syncProviders = [],
   open,
   onOpenChange,
   onChanged,
@@ -59,6 +63,9 @@ export function TicketDetailDialog({
   const [error, setError] = useState<string | undefined>();
   const [syncError, setSyncError] = useState<string | undefined>();
   const [actionError, setActionError] = useState<string | undefined>();
+  const [syncProvider, setSyncProvider] = useState<TicketProvider>(
+    syncProviders[0] ?? "jira",
+  );
 
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -75,6 +82,13 @@ export function TicketDetailDialog({
   };
 
   useEffect(() => {
+    if (syncProviders.length === 0) return;
+    setSyncProvider((current) =>
+      syncProviders.includes(current) ? current : syncProviders[0]!
+    );
+  }, [syncProviders]);
+
+  useEffect(() => {
     if (!open || !projectId || (!ticketKey && !localId)) return;
     setLoading(true);
     setError(undefined);
@@ -82,9 +96,12 @@ export function TicketDetailDialog({
     setActionError(undefined);
     setEditing(false);
     setTicket(null);
+    const remoteSource = ticketSource === "clickup" || ticketSource === "jira"
+      ? ticketSource
+      : undefined;
     const load = localId
       ? api.getLocalTicket(projectId, localId)
-      : api.getTicket(projectId, ticketKey!);
+      : api.getTicket(projectId, ticketKey!, remoteSource);
     load
       .then((res) => {
         setTicket(res.ticket);
@@ -92,14 +109,17 @@ export function TicketDetailDialog({
       })
       .catch((e) => setError((e as Error).message))
       .finally(() => setLoading(false));
-  }, [open, projectId, ticketKey, localId]);
+  }, [open, projectId, ticketKey, localId, ticketSource]);
 
   const syncNow = async () => {
     if (!projectId || !localId) return;
     setSyncing(true);
     setSyncError(undefined);
     try {
-      const res = await api.syncLocalTicket(projectId, localId);
+      const provider = syncProviders.length > 1
+        ? syncProvider
+        : syncProviders[0];
+      const res = await api.syncLocalTicket(projectId, localId, provider);
       setTicket(res.ticket);
       applyDrafts(res.ticket);
       onChanged?.();
@@ -168,8 +188,19 @@ export function TicketDetailDialog({
 
   const isLocal = ticket?.source === "local";
   const canDelete = isLocal && ticket?.syncStatus !== "synced";
-  const canSync = isLocal && ticket?.syncStatus !== "synced";
+  const canSync = isLocal && ticket?.syncStatus !== "synced" && syncProviders.length > 0;
   const displayKey = ticket?.key ?? ticketKey ?? "—";
+  const remoteLabel = ticket?.source === "clickup" ||
+      (ticket?.source === "local" && ticket.syncProvider === "clickup")
+    ? "ClickUp"
+    : "Jira";
+  const syncLabel = syncProviders.length === 1 && syncProviders[0] === "clickup"
+    ? "ClickUp"
+    : syncProviders.length === 1
+    ? "Jira"
+    : syncProvider === "clickup"
+    ? "ClickUp"
+    : "Jira";
   const isHtmlDescription = ticket?.description
     ? /<[a-z][\s\S]*>/i.test(ticket.description)
     : false;
@@ -225,21 +256,44 @@ export function TicketDetailDialog({
                 </Button>
               ) : null}
               {canSync ? (
-                <Button
-                  size="sm"
-                  onClick={syncNow}
-                  disabled={syncing}
-                  data-icon="inline-start"
-                >
-                  {syncing ? <Spinner /> : <Upload />}
-                  Sync ke Jira
-                </Button>
+                <>
+                  {syncProviders.length > 1 ? (
+                    <Select
+                      value={syncProvider}
+                      onValueChange={(value) =>
+                        setSyncProvider(value as TicketProvider)
+                      }
+                    >
+                      <SelectTrigger size="sm" className="w-[7.5rem]" aria-label="Provider sync">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectGroup>
+                          {syncProviders.map((provider) => (
+                            <SelectItem key={provider} value={provider}>
+                              {provider === "clickup" ? "ClickUp" : "Jira"}
+                            </SelectItem>
+                          ))}
+                        </SelectGroup>
+                      </SelectContent>
+                    </Select>
+                  ) : null}
+                  <Button
+                    size="sm"
+                    onClick={syncNow}
+                    disabled={syncing}
+                    data-icon="inline-start"
+                  >
+                    {syncing ? <Spinner /> : <Upload />}
+                    Sync ke {syncLabel}
+                  </Button>
+                </>
               ) : null}
               {ticket.url ? (
                 <Button asChild size="sm" variant="outline" data-icon="inline-start">
                   <a href={ticket.url} target="_blank" rel="noreferrer">
                     <ExternalLink />
-                    Buka di Jira
+                    Buka di {remoteLabel}
                   </a>
                 </Button>
               ) : null}

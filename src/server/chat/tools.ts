@@ -15,6 +15,7 @@ import {
   updateDocumentTool,
 } from "./document-tools.ts";
 import { safeParse } from "./llm.ts";
+import { executeMcpChatTool, isMcpChatTool } from "./mcp-tools.ts";
 import {
   deleteTicketTool,
   getTicketTool,
@@ -24,6 +25,8 @@ import {
   updateTicketTool,
 } from "./ticket-tools.ts";
 import type { ChatAttachment, Run, ToolCall, ToolDef } from "./types.ts";
+
+export { isMcpChatTool };
 
 export interface ChatToolCatalogEntry {
   name: string;
@@ -59,32 +62,34 @@ export const CHAT_TOOL_CATALOG: ChatToolCatalogEntry[] = [
   },
   {
     name: "create_document",
-    description: "Create a local markdown doc or a Docmost page.",
+    description: "Create a local markdown doc or a Docmost/Notion/Confluence page.",
     requiresApproval: false,
   },
   {
     name: "update_document",
-    description: "Update a local markdown doc or a Docmost page.",
+    description: "Update a local markdown doc or a Docmost/Notion/Confluence page.",
     requiresApproval: false,
   },
   {
     name: "sync_document",
-    description: "Sync a local document to Docmost (create/update remote page).",
+    description:
+      "Sync a local document to Docmost, Notion, or Confluence (create/update remote page).",
     requiresApproval: false,
   },
   {
     name: "list_tickets",
-    description: "List local backlog tickets merged with Jira issues when configured.",
+    description:
+      "List local backlog tickets merged with Jira and/or ClickUp issues when configured.",
     requiresApproval: false,
   },
   {
     name: "get_ticket",
-    description: "Get a local ticket by id or a Jira issue by key.",
+    description: "Get a local ticket by id or a Jira/ClickUp issue by key (optional source).",
     requiresApproval: false,
   },
   {
     name: "create_ticket",
-    description: "Create a ticket in the project's local backlog (not synced to Jira).",
+    description: "Create a ticket in the project's local backlog (not synced remotely).",
     requiresApproval: false,
   },
   {
@@ -99,12 +104,13 @@ export const CHAT_TOOL_CATALOG: ChatToolCatalogEntry[] = [
   },
   {
     name: "sync_ticket",
-    description: "Sync a local ticket to Jira (creates a remote issue).",
+    description:
+      "Sync a local ticket to Jira or ClickUp (optional provider; defaults to Jira then ClickUp).",
     requiresApproval: false,
   },
   {
     name: "transition_ticket",
-    description: "Transition a Jira issue to a named status.",
+    description: "Transition a Jira/ClickUp issue to a named status (optional source).",
     requiresApproval: false,
   },
   {
@@ -183,25 +189,38 @@ const DOC_READ_TOOLS: ToolDef[] = [
 const DOC_WRITE_TOOLS: ToolDef[] = [
   {
     name: "create_document",
-    description: "Create a local markdown document or a Docmost page (source local|docmost).",
+    description:
+      "Create a local markdown document or a Docmost/Notion/Confluence page " +
+      "(source local|docmost|notion|confluence).",
     parameters: {
       type: "object",
       properties: {
-        source: { type: "string", enum: ["local", "docmost"] },
+        source: {
+          type: "string",
+          enum: ["local", "docmost", "notion", "confluence"],
+        },
         title: { type: "string" },
-        parentId: { type: "string", description: "Docmost parent page id (optional)." },
-        content: { type: "string", description: "Optional Docmost content after create." },
+        parentId: {
+          type: "string",
+          description: "Optional parent page id (Notion/Docmost/Confluence) or space:KEY.",
+        },
+        content: { type: "string", description: "Optional markdown content after create." },
       },
       required: ["title"],
     },
   },
   {
     name: "update_document",
-    description: "Update local (path) or Docmost (pageId) document title/content.",
+    description:
+      "Update local (path) or remote (pageId) document title/content for " +
+      "local|docmost|notion|confluence.",
     parameters: {
       type: "object",
       properties: {
-        source: { type: "string", enum: ["local", "docmost"] },
+        source: {
+          type: "string",
+          enum: ["local", "docmost", "notion", "confluence"],
+        },
         path: { type: "string" },
         pageId: { type: "string" },
         title: { type: "string" },
@@ -211,10 +230,18 @@ const DOC_WRITE_TOOLS: ToolDef[] = [
   },
   {
     name: "sync_document",
-    description: "Sync a local document path to Docmost (create/update remote page).",
+    description:
+      "Sync a local document path to Docmost, Notion, or Confluence (create/update remote page).",
     parameters: {
       type: "object",
-      properties: { path: { type: "string", description: "Local document path." } },
+      properties: {
+        path: { type: "string", description: "Local document path." },
+        target: {
+          type: "string",
+          enum: ["docmost", "notion", "confluence"],
+          description: "Remote sync target (default docmost).",
+        },
+      },
       required: ["path"],
     },
   },
@@ -228,12 +255,13 @@ const TICKET_READ_TOOLS: ToolDef[] = [
   },
   {
     name: "get_ticket",
-    description: "Get a local ticket by UUID/LOCAL- prefix or a Jira issue by key.",
+    description: "Get a local ticket by UUID/LOCAL- prefix or a Jira/ClickUp issue by key.",
     parameters: {
       type: "object",
       properties: {
         id: { type: "string", description: "Local ticket UUID or LOCAL-xxxxxx." },
-        key: { type: "string", description: "Jira issue key." },
+        key: { type: "string", description: "Jira issue key or ClickUp task id." },
+        source: { type: "string", enum: ["jira", "clickup"] },
       },
     },
   },
@@ -243,7 +271,7 @@ export const TICKET_TOOL: ToolDef = {
   name: "create_ticket",
   description:
     "Create a ticket in the project's local backlog. It is stored locally and NOT synced to " +
-    "Jira; use sync_ticket later or let the user sync manually.",
+    "Jira/ClickUp; use sync_ticket later or let the user sync manually.",
   parameters: {
     type: "object",
     properties: {
@@ -284,7 +312,7 @@ const TICKET_WRITE_TOOLS: ToolDef[] = [
   },
   {
     name: "delete_ticket",
-    description: "Delete an unsynced local ticket (fails if jira_key is set).",
+    description: "Delete an unsynced local ticket (fails if already synced remotely).",
     parameters: {
       type: "object",
       properties: { id: { type: "string" } },
@@ -293,21 +321,25 @@ const TICKET_WRITE_TOOLS: ToolDef[] = [
   },
   {
     name: "sync_ticket",
-    description: "Push a local ticket to Jira and store jira_key.",
+    description: "Push a local ticket to Jira or ClickUp and store the remote key.",
     parameters: {
       type: "object",
-      properties: { id: { type: "string" } },
+      properties: {
+        id: { type: "string" },
+        provider: { type: "string", enum: ["jira", "clickup"] },
+      },
       required: ["id"],
     },
   },
   {
     name: "transition_ticket",
-    description: "Transition a Jira issue to a status name (e.g. In Progress).",
+    description: "Transition a Jira/ClickUp issue to a status name (e.g. In Progress).",
     parameters: {
       type: "object",
       properties: {
         key: { type: "string" },
         status: { type: "string" },
+        source: { type: "string", enum: ["jira", "clickup"] },
       },
       required: ["key", "status"],
     },
@@ -373,6 +405,11 @@ export async function applyWriteFile(workspace: string, call: ToolCall): Promise
 
 export async function executeTool(run: Run, call: ToolCall): Promise<string> {
   const args = safeParse(call.arguments);
+  if (isMcpChatTool(call.name)) {
+    const binding = run.mcpTools.get(call.name);
+    if (!binding) return `Unknown MCP tool: ${call.name}`;
+    return await executeMcpChatTool(binding, args);
+  }
   if (call.name === "use_skill") {
     const name = String(args.name ?? "").trim().toLowerCase();
     const skill = run.skills.get(name);
@@ -418,7 +455,7 @@ export async function executeTool(run: Run, call: ToolCall): Promise<string> {
     const key = `LOCAL-${ticket.id.slice(0, 6).toUpperCase()}`;
     run.createdTickets.push({ id: ticket.id, key, title: ticket.title });
     return `Created local ticket ${key}: "${ticket.title}" (status ${ticket.status}). ` +
-      "It is stored locally and NOT synced to Jira yet.";
+      "It is stored locally and NOT synced to Jira/ClickUp yet.";
   }
 
   const workspace = run.workspace;

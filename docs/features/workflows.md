@@ -1,8 +1,8 @@
 # Workflow (DAG)
 
 Workflow engine lokal bergaya [Dagu](https://docs.dagu.sh): definisi YAML, dependency graph, eksekusi
-shell paralel, retry/timeout, log per step, dan riwayat run. **Manual run** dari UI (tidak ada
-scheduler/cron di v1).
+shell paralel, retry/timeout, log per step, dan riwayat run. Run bisa **manual** dari UI,
+**cron** (`schedule`), atau **event** bus (`on`).
 
 ## Penyimpanan definisi
 
@@ -39,9 +39,34 @@ steps:
 ```
 
 Field yang didukung: `name`, `description`, `type`, `params`, `env`, `working_dir`,
-`timeout_sec`, `llm`, `defaults` (`env`, `working_dir`, `retry_policy`, `timeout_sec`), dan per
-step: `id`, `run`, `action`, `with`, `output` / `outputs`, `depends`, `env` (map atau list map),
-`working_dir`, `retry_policy`, `timeout_sec`, `continue_on`. Field lain ditolak.
+`timeout_sec`, `llm`, `defaults` (`env`, `working_dir`, `retry_policy`, `timeout_sec`),
+`schedule`, `on`, dan per step: `id`, `run`, `action`, `with`, `output` / `outputs`, `depends`,
+`env` (map atau list map), `working_dir`, `retry_policy`, `timeout_sec`, `continue_on`. Field
+lain ditolak.
+
+## Schedule & event
+
+```yaml
+name: nightly-test
+schedule:
+  cron: "0 2 * * *"          # 5 field: minute hour dom month dow
+  enabled: true                # default true
+  timezone: Asia/Jakarta       # opsional; default zona lokal mesin
+on:
+  - ticket.transitioned        # shorthand
+  - event: ticket.transitioned # bentuk objek
+    status: In Progress        # filter opsional pada payload.status
+steps:
+  - id: test
+    run: npm test
+```
+
+- Cron dijalankan oleh ticker in-process (±30s) setelah bootstrap; `trigger` run = `cron`.
+- Event memakai bus internal (`record` / `publish`); `trigger` = `event:<nama>`.
+  Contoh: `ticket.transitioned` (payload `projectId`, `key`, `status`).
+- Satu run aktif per slug tetap berlaku; jika bentrok, schedule dilewati (next cron tetap maju).
+- Toggle enable tanpa edit YAML: `PATCH .../workflows/:slug/schedule` `{ enabled }`.
+- AI/chat **tidak** boleh auto-run workflow; hanya tombol Run, cron, atau event terdaftar.
 
 Step `action: notification` mengirim pesan ke channel yang didaftarkan di Global Settings →
 Notifications — lihat [notifications.md](notifications.md).
@@ -98,7 +123,7 @@ steps:
 ## Agent step (`action: agent`)
 
 Loop tool-calling penuh (seperti chat Build/Plan): skills, file tools, document tools
-(local/Docmost/Notion/Confluence), dan ticket tools (local + Jira). Write file/doc/ticket di
+(local/Docmost/Notion/Confluence), dan ticket tools (local + Jira/ClickUp). Write file/doc/ticket di
 workflow **langsung diterapkan** (tanpa Review tab).
 
 ```yaml
@@ -194,15 +219,18 @@ steps:
 ## Tabel
 
 - `workflow_runs`: snapshot YAML, path, status (`running|success|failed|canceled|interrupted`),
-  trigger, error, timestamp.
+  trigger (`manual` | `cron` | `event:…`), error, timestamp.
 - `workflow_run_steps`: status per step, command, exit code, log, timestamp.
+- `workflow_schedules`: cron/timezone/enabled/events JSON, `next_run_at`, last run (sync dari YAML
+  saat create/save).
 
 ## API
 
 | Method | Path | Keterangan |
 | --- | --- | --- |
-| `GET`/`POST` | `/api/projects/:id/workflows` | List (file + last run) / create |
+| `GET`/`POST` | `/api/projects/:id/workflows` | List (file + last run + schedule) / create |
 | `GET`/`PUT`/`DELETE` | `/api/projects/:id/workflows/:slug` | Detail / simpan YAML / hapus |
+| `PATCH` | `/api/projects/:id/workflows/:slug/schedule` | `{ enabled }` toggle tanpa edit YAML |
 | `POST` | `/api/projects/:id/workflows/:slug/run` | Mulai run → `{ runId }` (202) |
 | `GET` | `/api/projects/:id/workflow-runs?workflow=&limit=` | Riwayat run |
 | `GET` | `/api/projects/:id/workflow-runs/:runId` | Detail run + steps/log |
@@ -216,17 +244,19 @@ steps:
 - Tab `WorkflowTab`:
   - Editor YAML Monaco (dirty, Save)
   - Graph React Flow (node per step, edge dependency, warna status)
-  - Run / Cancel, riwayat run, daftar step, log per step
+  - Run / Cancel, riwayat run (badge trigger cron/event), daftar step, log per step
+  - Bar schedule: cron / on / next run + Switch enable
 - Chat/aktivitas menyaring event `workflow.step.*` agar tidak membanjiri Activity feed.
 
 ## Kode
 
-- `src/server/workflow/parse.ts`, `store.ts`, `runner.ts`, `types.ts`
+- `src/server/workflow/parse.ts`, `store.ts`, `runner.ts`, `cron.ts`, `scheduler.ts`,
+  `schedule-sync.ts`, `types.ts`
 - `src/server/routes/workflows.ts`
 - `web/src/components/WorkflowPanel.tsx`, `WorkflowTab.tsx`
 - `web/src/lib/workflow-status.ts`
 
 ## Belum termasuk
 
-Cron/scheduler, queue/workers, sub-DAG, human approval, webhook, container/SSH/SQL, retry
-backoff eksponensial, tool-calling/agent loop di AI step, dan eksekusi otomatis oleh AI.
+Queue/workers, sub-DAG, human approval, webhook HTTP masuk, container/SSH/SQL, retry backoff
+eksponensial, dan eksekusi otomatis oleh AI (chat tidak memanggil `run`).

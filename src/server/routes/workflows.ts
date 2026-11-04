@@ -2,23 +2,29 @@ import {
   WorkflowCreateInput,
   WorkflowRunInput,
   WorkflowSaveInput,
+  WorkflowSchedulePatchInput,
 } from "../../config/schema.ts";
 import {
   deleteWorkflowRun,
   getProject,
   getWorkflowRun,
+  getWorkflowSchedule,
   listWorkflowRuns,
   listWorkflowRunSteps,
+  setWorkflowScheduleEnabled,
   type WorkflowRunRow,
   type WorkflowRunStepRow,
 } from "../../db/db.ts";
 import { json, readJson, record } from "../http.ts";
+import { nextCronRun } from "../workflow/cron.ts";
 import { isAllowedParamOverrideKey } from "../workflow/params.ts";
 import { parseWorkflow } from "../workflow/parse.ts";
 import { cancelWorkflowRun, startWorkflowRun } from "../workflow/runner.ts";
+import { scheduleInfoFromRow, syncWorkflowSchedule } from "../workflow/schedule-sync.ts";
 import {
   createWorkflow,
   deleteWorkflow,
+  getScheduleInfo,
   listWorkflows,
   readWorkflow,
   saveWorkflow,
@@ -102,6 +108,10 @@ export async function getWorkflowHandler(
   try {
     const { yaml, path } = await readWorkflow(project, slug);
     const definition = parseWorkflow(yaml, slug);
+    let schedule = await getScheduleInfo(projectId, slug);
+    if (!schedule && (definition.schedule || definition.on.length > 0)) {
+      schedule = await syncWorkflowSchedule(projectId, slug, definition);
+    }
     return json({
       workflow: {
         slug,
@@ -110,6 +120,7 @@ export async function getWorkflowHandler(
         path,
         source: workflowRoot(project).source,
         stepCount: definition.steps.length,
+        schedule,
       },
       yaml,
       definition,
@@ -117,6 +128,47 @@ export async function getWorkflowHandler(
   } catch (error) {
     return workflowError(error);
   }
+}
+
+export async function patchWorkflowScheduleHandler(
+  projectId: string,
+  slug: string,
+  req: Request,
+): Promise<Response> {
+  const project = await projectFor(projectId);
+  if (!project) return json({ error: "project_not_found" }, 404);
+  const parsed = WorkflowSchedulePatchInput.safeParse(await readJson(req));
+  if (!parsed.success) {
+    return json({ error: "invalid_input", issues: parsed.error.issues }, 400);
+  }
+
+  const existing = await getWorkflowSchedule(projectId, slug);
+  if (!existing) {
+    return json({
+      error: "schedule_not_found",
+      message: "Workflow ini belum punya schedule/on di YAML.",
+    }, 404);
+  }
+
+  let nextRunAt: string | null = existing.next_run_at;
+  if (parsed.data.enabled && existing.cron) {
+    nextRunAt = nextCronRun(existing.cron, new Date(), existing.timezone ?? undefined);
+  } else if (!parsed.data.enabled) {
+    nextRunAt = null;
+  }
+
+  const row = await setWorkflowScheduleEnabled(
+    projectId,
+    slug,
+    parsed.data.enabled,
+    nextRunAt,
+  );
+  await record("workflow.schedule.updated", {
+    projectId,
+    slug,
+    enabled: parsed.data.enabled,
+  });
+  return json({ schedule: scheduleInfoFromRow(row) });
 }
 
 export async function createWorkflowHandler(projectId: string, req: Request): Promise<Response> {

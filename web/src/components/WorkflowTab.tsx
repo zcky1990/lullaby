@@ -28,8 +28,10 @@ import {
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
+import { Switch } from "@/components/ui/switch";
 import { useTheme } from "@/components/ThemeProvider";
 import { WorkflowParamsDialog } from "@/components/WorkflowParamsDialog";
 import { WorkflowRouterNode } from "@/components/WorkflowRouterNode";
@@ -108,6 +110,7 @@ export function WorkflowTab({
   const [running, setRunning] = useState(false);
   const [paramsOpen, setParamsOpen] = useState(false);
   const [error, setError] = useState<string | undefined>();
+  const [scheduleBusy, setScheduleBusy] = useState(false);
 
   const refreshRuns = useCallback(async () => {
     if (!projectId || !slug) return;
@@ -303,6 +306,30 @@ export function WorkflowTab({
       onDeleted();
     } catch (e) {
       setError(formatApiError(e));
+    }
+  };
+
+  const toggleSchedule = async (enabled: boolean) => {
+    if (!projectId || !slug || !summary?.schedule) return;
+    setScheduleBusy(true);
+    setError(undefined);
+    try {
+      const { schedule } = await api.patchWorkflowSchedule(projectId, slug, enabled);
+      setSummary((current) => current ? { ...current, schedule } : current);
+      onSaved();
+    } catch (e) {
+      setError(formatApiError(e));
+    } finally {
+      setScheduleBusy(false);
+    }
+  };
+
+  const formatNextRun = (iso?: string) => {
+    if (!iso) return null;
+    try {
+      return new Date(iso).toLocaleString();
+    } catch {
+      return iso;
     }
   };
 
@@ -505,6 +532,50 @@ export function WorkflowTab({
         )
         : null}
 
+      {summary?.schedule
+        ? (
+          <div className="flex flex-wrap items-center gap-3 border-b px-3 py-2 text-[11px]">
+            {summary.schedule.cron
+              ? (
+                <span className="font-mono text-muted-foreground">
+                  cron: {summary.schedule.cron}
+                  {summary.schedule.timezone
+                    ? ` (${summary.schedule.timezone})`
+                    : ""}
+                </span>
+              )
+              : null}
+            {(summary.schedule.events?.length ?? 0) > 0
+              ? (
+                <span className="text-muted-foreground">
+                  on: {summary.schedule.events.map((item) =>
+                    item.status ? `${item.event}[${item.status}]` : item.event
+                  ).join(", ")}
+                </span>
+              )
+              : null}
+            {summary.schedule.nextRunAt && summary.schedule.enabled
+              ? (
+                <span className="text-muted-foreground">
+                  next: {formatNextRun(summary.schedule.nextRunAt)}
+                </span>
+              )
+              : null}
+            <div className="ml-auto flex items-center gap-2">
+              <Label htmlFor="workflow-schedule-enabled" className="text-[11px]">
+                Schedule
+              </Label>
+              <Switch
+                id="workflow-schedule-enabled"
+                checked={summary.schedule.enabled}
+                disabled={scheduleBusy}
+                onCheckedChange={(checked) => void toggleSchedule(checked)}
+              />
+            </div>
+          </div>
+        )
+        : null}
+
       <div className="flex min-h-0 flex-1">
         <div className="flex min-w-0 flex-1 flex-col">
           <div className="flex h-[32px] shrink-0 items-center gap-1 border-b px-2">
@@ -639,6 +710,13 @@ export function WorkflowTab({
                     <span className="min-w-0 flex-1 truncate font-mono">
                       {run.id.slice(0, 8)}
                     </span>
+                    {run.trigger && run.trigger !== "manual"
+                      ? (
+                        <span className="shrink-0 text-[10px] text-muted-foreground">
+                          {run.trigger.startsWith("event:") ? "event" : run.trigger}
+                        </span>
+                      )
+                      : null}
                     <Badge
                       variant={runBadgeVariant(run.status)}
                       className="h-5 px-1.5 text-[10px]"

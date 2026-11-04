@@ -52,6 +52,7 @@ export async function startWorkflowRun(input: {
   yaml: string;
   workflowPath: string;
   params?: Record<string, string>;
+  trigger?: string;
 }): Promise<string> {
   const existing = await findActiveWorkflowRun(input.projectId, input.slug);
   if (existing) throw new Error("Workflow sedang berjalan. Tunggu atau batalkan run aktif.");
@@ -62,6 +63,7 @@ export async function startWorkflowRun(input: {
     name: input.definition.name,
     path: input.workflowPath,
     yaml: input.yaml,
+    trigger: input.trigger ?? "manual",
   });
 
   const stepIds = new Map<string, string>();
@@ -92,6 +94,7 @@ export async function startWorkflowRun(input: {
     projectId: input.projectId,
     slug: input.slug,
     runId: run.id,
+    trigger: input.trigger ?? "manual",
   });
   void execute(run.id, active, input.project, input.definition, input.params).catch(async (error) => {
     activeRuns.delete(run.id);

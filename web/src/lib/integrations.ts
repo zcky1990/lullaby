@@ -99,6 +99,44 @@ export const SINGLETONS: SingletonDef[] = [
     ],
   },
   {
+    kind: "clickup",
+    label: "ClickUp (Board)",
+    fields: [
+      {
+        key: "apiToken",
+        label: "API Token",
+        placeholder: "pk_…",
+        type: "password",
+        secret: true,
+      },
+      {
+        key: "listId",
+        label: "List ID",
+        placeholder: "901234567 — wajib untuk board & sync",
+      },
+      {
+        key: "teamId",
+        label: "Team / Workspace ID (opsional)",
+        placeholder: "digunakan saat test koneksi",
+      },
+      {
+        key: "spaceId",
+        label: "Space ID (opsional)",
+        placeholder: "referensi hierarki",
+      },
+      {
+        key: "folderId",
+        label: "Folder ID (opsional)",
+        placeholder: "referensi hierarki",
+      },
+      {
+        key: "baseUrl",
+        label: "App Base URL (opsional)",
+        placeholder: "https://app.clickup.com",
+      },
+    ],
+  },
+  {
     kind: "github",
     label: "GitHub (Code)",
     fields: [

@@ -235,6 +235,7 @@ export async function seedPendingWriteForTest(opts: {
     projectId: "test-project",
     mode: "build",
     skills: new Map(),
+    mcpTools: new Map(),
     createdTickets: [],
     createdAt: Date.now(),
   };

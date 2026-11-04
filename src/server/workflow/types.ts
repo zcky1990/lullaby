@@ -79,6 +79,18 @@ export interface WorkflowStep {
   routeGate?: { routerId: string };
 }
 
+export interface WorkflowSchedule {
+  cron: string;
+  enabled: boolean;
+  timezone?: string;
+}
+
+export interface WorkflowEventTrigger {
+  event: string;
+  /** Optional exact match on payload.status (e.g. ticket.transitioned). */
+  status?: string;
+}
+
 export interface WorkflowDefinition {
   name: string;
   description?: string;
@@ -88,8 +100,20 @@ export interface WorkflowDefinition {
   workingDir?: string;
   timeoutSec?: number;
   llm?: WorkflowLlmSettings;
+  schedule?: WorkflowSchedule;
+  on: WorkflowEventTrigger[];
   steps: WorkflowStep[];
   layers: string[][];
+}
+
+export interface WorkflowScheduleInfo {
+  cron?: string;
+  timezone?: string;
+  enabled: boolean;
+  events: WorkflowEventTrigger[];
+  nextRunAt?: string;
+  lastRunAt?: string;
+  lastRunId?: string;
 }
 
 export interface WorkflowSummary {
@@ -100,6 +124,7 @@ export interface WorkflowSummary {
   source: "workspace" | "app";
   updatedAt?: string;
   stepCount: number;
+  schedule?: WorkflowScheduleInfo;
   error?: string;
 }
 

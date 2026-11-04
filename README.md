@@ -248,7 +248,7 @@ Fondasi (F0) — yang sudah jalan:
   dan UI editor YAML + graph (React Flow). Step **AI** (`action: chat.completion` atau `agent`)
   memanggil provider LLM/role global (completion satu kali, atau agent loop dengan tools + write
   auto-apply), dengan output `${NAMA}` / `${steps.<id>.output}` untuk step berikutnya.
-  Satu run aktif per workflow; manual run saja (belum ada cron/scheduler). Detail:
+  Satu run aktif per workflow; run manual, cron (`schedule`), atau event (`on`). Detail:
   `docs/features/workflows.md`.
 - **Git**: menu ala **SourceTree** dengan panel kiri berisi branch (checkout) + status; tab utama
   punya **Changes** (staged/unstaged/untracked, stage/unstage, klik file untuk diff, commit
@@ -287,7 +287,7 @@ Fondasi (F0) — yang sudah jalan:
   via SSE.
 
 **Belum termasuk:** eksekusi tool MCP di chat (discovery & toggle sudah ada), generate tiket AI dari
-PRD, bulk-sync/update Jira, **cron/scheduler workflow**, sub-DAG/human task/webhook, sandbox coding
+PRD, bulk-sync/update Jira, sub-DAG/human task/webhook HTTP, sandbox coding
 loop, MCP transport (mode `mcp` tersimpan di config tetapi belum dieksekusi), agent roles
 (Planner/Coder/Verifier).
 

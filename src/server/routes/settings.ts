@@ -22,7 +22,7 @@ import {
 import { CHAT_TOOL_CATALOG } from "../chat/tools.ts";
 import { json, readJson, record } from "../http.ts";
 import { lspPresets, probeLspCommand, readLspSettings, writeLspSettings } from "../lsp.ts";
-import { listMcpTools } from "../mcp.ts";
+import { clearMcpToolsCache, listMcpTools } from "../mcp.ts";
 import { testNotificationChannels } from "../notifications/send.ts";
 import {
   readNotificationSettings,
@@ -84,6 +84,7 @@ export async function saveMcpSettingsHandler(req: Request): Promise<Response> {
   await setAppSetting(MCP_SETTINGS_KEY, JSON.stringify(servers));
   await setAppSetting("mcp_enabled", parsed.data.enabled ? "true" : "false");
   await setAppSetting("mcp_disabled_tools", JSON.stringify(parsed.data.disabledTools));
+  clearMcpToolsCache();
   await record("settings.mcp_updated", {
     count: servers.length,
     enabled: parsed.data.enabled,
@@ -102,6 +103,7 @@ export async function listMcpToolsHandler(req: Request): Promise<Response> {
     return json({ error: "invalid_input", issues: parsed.error.issues }, 400);
   }
   try {
+    clearMcpToolsCache();
     return json({ tools: await listMcpTools(parsed.data) });
   } catch (error) {
     return json({ error: (error as Error).message }, 502);

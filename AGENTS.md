@@ -41,19 +41,20 @@ finishing a change.
   `projects.document_path`), **Docmost**, **Notion**, and **Confluence Cloud**. Remote sources use
   `GET /documents?source=` / `GET /documents/:pageId?source=` (`docmost` default). Notion auth is
   Internal Integration Token (+ optional `parentPageId`); Confluence is baseUrl + email + API token
-  (+ optional `spaceKey`). Create/update remote pages and local→Notion/Confluence sync are out of v1
-  (Create only for Local/Docmost; Notion/Confluence tabs are read-only). Local docs are
-  renamed/saved on disk; manual sync (`POST /local-documents/sync`) creates/updates the Docmost page
-  and stores `page_id` in `local_documents`. `Generate ticket` in the document tab calls
+  (+ optional `spaceKey`). Create/update remote pages are supported for Docmost, Notion, and
+  Confluence. Local docs are renamed/saved on disk; manual sync (`POST /local-documents/sync` with
+  `target` docmost|notion|confluence) creates/updates the remote page and stores `page_id` +
+  `sync_target` in `local_documents`. `Generate ticket` in the document tab calls
   `POST /generate-tickets` (`generateTicketsFromDocument`) which uses the first LLM provider and
   only the `create_ticket` tool.
 - **Tickets**: `local_tickets` (SQLite) are created locally (UI `TicketCreateDialog` + AI tool
-  `create_ticket`); `GET /tickets` merges unsynced local tickets with Jira. Local tickets are
-  editable from `TicketDetailDialog` (`PATCH /local-tickets/:id`, rich text description) and can be
-  deleted only while unsynced (`DELETE` rejects tickets with `jira_key`). Syncing is manual
-  (`POST /local-tickets/:id/sync` → Jira issue) and sets `jira_key`/`sync_status`. Global Automation
-  (`auto_build_on_in_progress`, default off) starts a new Build chat when a Kanban card moves To Do
-  → In Progress; see `docs/automation.md`.
+  `create_ticket`); `GET /tickets` merges unsynced local tickets with Jira and/or ClickUp.
+  Local tickets are editable from `TicketDetailDialog` (`PATCH /local-tickets/:id`, rich text
+  description) and can be deleted only while unsynced (`DELETE` rejects tickets with `jira_key`).
+  Syncing is manual (`POST /local-tickets/:id/sync` with optional `{ provider: "jira"|"clickup" }`)
+  and sets `jira_key` / `sync_provider` / `sync_status`. ClickUp needs `apiToken` + `listId` in
+  project integrations. Global Automation (`auto_build_on_in_progress`, default off) starts a new
+  Build chat when a Kanban card moves To Do → In Progress; see `docs/automation.md`.
 - **Skills**: `src/server/skills.ts` discovers `SKILL.md` folders (frontmatter `name`/`description`)
   from `<workspace>/.agents/skills` (highest), `appDataDir()/<project-slug>/skills` (auto from Build
   chats), `appDataDir()/skills` (global), and `src/skills/builtin` (bundled, lowest priority). On
@@ -101,9 +102,10 @@ finishing a change.
   and a role selector in the chat composer (model select locks when the role has a provider).
 - **LLM providers are global**: `llm_providers` has no `project_id` (existing per-project rows are
   migrated into the global table at startup). Provider type `cursor` uses `@cursor/sdk`
-  (`src/server/chat/cursor.ts`): the agent edits a temporary workspace copy with
-  read/grep/glob/ls/edit/task (shell/delete disabled), then changed files become synthetic
-  `write_file` calls so they still go through Review. API key lives in `llm_providers.api_key`;
+  (`src/server/chat/cursor.ts`): local agents run in `projects.workspace_path` (same cwd as the
+  Cursor IDE) with read/grep/glob/ls/edit/task (shell/delete disabled); a pre-run file snapshot is
+  diffed then reverted so changes become synthetic `write_file` Review hunks. Cloud agents (`bc-…`)
+  are imported/resumed for chat history (no local Review). API key lives in `llm_providers.api_key`;
   model e.g. `composer-2`. Project Settings no longer manages them; Global Settings → LLM Providers
   does, via `GET/POST /api/llm` and `PUT/DELETE /api/llm/:id`. Chat and
   `generateTicketsFromDocument` resolve providers from the global list.
@@ -114,13 +116,15 @@ finishing a change.
   retry/timeout/cancel, capped step logs). Agent steps use `src/server/chat/headless.ts` (tool loop,
   writes auto-applied). Runs live in `workflow_runs` / `workflow_run_steps`;
   `src/server/routes/workflows.ts` exposes CRUD + run/history/cancel. UI: `WorkflowPanel` (sidebar)
-  - `WorkflowTab` (Monaco YAML + React Flow + logs). Manual runs only (no scheduler in v1); AI must
-    not auto-run workflows.
+  - `WorkflowTab` (Monaco YAML + React Flow + logs). Runs: manual UI, optional YAML `schedule.cron`
+  (in-process ticker) and `on` event triggers (`src/server/workflow/scheduler.ts`); AI must not
+  auto-run workflows.
 - **MCP**: global server config (`McpSettings`) is stored in `app_settings` (`mcp_servers` JSON;
   stdio command/args/env or http url/headers) plus `mcp_enabled` and `mcp_disabled_tools`.
   `POST /api/settings/mcp/tools` connects with `initialize` + `tools/list` (`src/server/mcp.ts`,
-  stdio or http) so each server's tools can be discovered and enabled/disabled. Tool execution from
-  chat is not wired yet.
+  stdio or http) so each server's tools can be discovered and enabled/disabled. Enabled tools are
+  injected into chat/workflow agent as `mcp_<server>_<tool>` (`src/server/chat/mcp-tools.ts`) and
+  executed via `tools/call` (Cursor SDK provider uses its own tools instead).
 - **Automation**: global `auto_build_on_in_progress` in `app_settings` (GET/PUT
   `/api/settings/automation`). UI: Global Settings → Automation. When on, Kanban To Do → In Progress
   opens Chat Build with a ticket prompt (`docs/automation.md`).

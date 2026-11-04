@@ -518,6 +518,7 @@ export default function App() {
           ref: res.document.path,
           syncStatus: res.document.syncStatus,
           pageId: res.document.pageId,
+          syncTarget: res.document.syncTarget,
           loading: false,
         });
       } catch (error) {
@@ -667,11 +668,19 @@ export default function App() {
   const createDocument = useCallback(
     async (title: string, parentPageId?: string) => {
       if (!currentId) return;
-      const { document } = await api.createDocument(currentId, { title, parentPageId });
-      await loadDocuments(currentId, "docmost");
-      await openDocument(document.id, document.title, "docmost");
+      const source: DocumentSource =
+        docSource === "notion" || docSource === "confluence" || docSource === "docmost"
+          ? docSource
+          : "docmost";
+      const { document } = await api.createDocument(currentId, {
+        title,
+        parentPageId,
+        source,
+      });
+      await loadDocuments(currentId, source);
+      await openDocument(document.id, document.title, source);
     },
-    [currentId, loadDocuments, openDocument],
+    [currentId, docSource, loadDocuments, openDocument],
   );
 
   const changeDocSource = useCallback((source: PanelDocSource) => {
@@ -685,14 +694,18 @@ export default function App() {
   }, [docSource, enabledDocRemotes]);
 
   const saveDocument = useCallback(
-    async (pageId: string, payload: { title?: string; content: string }) => {
+    async (
+      pageId: string,
+      payload: { title?: string; content: string },
+      source: DocumentSource = "docmost",
+    ) => {
       if (!currentId) return;
-      const { document } = await api.updateDocument(currentId, pageId, payload);
-      patchTab(`doc:docmost:${currentId}:${pageId}`, {
+      const { document } = await api.updateDocument(currentId, pageId, payload, source);
+      patchTab(`doc:${source}:${currentId}:${pageId}`, {
         content: document.content,
         title: document.title ?? payload.title,
       });
-      await loadDocuments(currentId, "docmost");
+      await loadDocuments(currentId, source);
     },
     [currentId, patchTab, loadDocuments],
   );
@@ -747,14 +760,15 @@ export default function App() {
   );
 
   const syncLocalDocument = useCallback(
-    async (path: string) => {
+    async (path: string, target: DocumentSource = "docmost") => {
       if (!currentId) return;
-      const { document } = await api.syncLocalDocument(currentId, path);
+      const { document } = await api.syncLocalDocument(currentId, path, target);
       patchLocalDocTab(path, {
         ref: document.path,
         title: document.title,
         syncStatus: document.syncStatus,
         pageId: document.pageId,
+        syncTarget: document.syncTarget,
       });
       await loadLocalDocuments(currentId);
     },
@@ -967,13 +981,24 @@ export default function App() {
     await loadLlmProviders();
   };
 
+  const ticketSyncProviders = useMemo(() => {
+    const kinds = new Set((detail?.integrations ?? []).map((item) => item.kind));
+    const providers: Array<"jira" | "clickup"> = [];
+    if (kinds.has("jira")) providers.push("jira");
+    if (kinds.has("clickup")) providers.push("clickup");
+    return providers;
+  }, [detail]);
+
   const moveTicket = async (key: string, from: string, to: string) => {
     if (!currentId) return;
     const ticket = tickets.find((item) => item.key === key);
     if (ticket?.source === "local" && ticket.localId) {
       await api.updateLocalTicket(currentId, ticket.localId, { status: to });
     } else {
-      await api.transitionTicket(currentId, key, to);
+      const source = ticket?.source === "clickup" || ticket?.source === "jira"
+        ? ticket.source
+        : undefined;
+      await api.transitionTicket(currentId, key, to, source);
     }
     await loadTickets(currentId);
 
@@ -989,7 +1014,10 @@ export default function App() {
     let description = ticket?.description?.trim() || undefined;
     if (!description) {
       try {
-        const detail = await api.getTicket(currentId, key);
+        const source = ticket?.source === "clickup" || ticket?.source === "jira"
+          ? ticket.source
+          : undefined;
+        const detail = await api.getTicket(currentId, key, source);
         description = detail.ticket.description?.trim() || undefined;
       } catch {
         // continue with summary only
@@ -1097,6 +1125,7 @@ export default function App() {
           <DocumentTab
             key={tab.id}
             tab={tab}
+            syncTargets={enabledDocRemotes}
             onSave={saveDocument}
             onSaveLocal={saveLocalDocument}
             onSyncLocal={syncLocalDocument}
@@ -1348,6 +1377,8 @@ export default function App() {
         projectId={currentId}
         ticketKey={detailTicket?.key ?? null}
         localId={detailTicket?.localId}
+        ticketSource={detailTicket?.source}
+        syncProviders={ticketSyncProviders}
         open={detailOpen}
         onOpenChange={setDetailOpen}
         onChanged={() => currentId && loadTickets(currentId)}
@@ -1648,6 +1679,7 @@ function FileTab({
 
 function DocumentTab({
   tab,
+  syncTargets,
   onSave,
   onSaveLocal,
   onSyncLocal,
@@ -1655,9 +1687,14 @@ function DocumentTab({
   onOpenTickets,
 }: {
   tab: EditorTab;
-  onSave: (pageId: string, payload: { title?: string; content: string }) => Promise<void>;
+  syncTargets: DocumentSource[];
+  onSave: (
+    pageId: string,
+    payload: { title?: string; content: string },
+    source?: DocumentSource,
+  ) => Promise<void>;
   onSaveLocal: (path: string, payload: { title?: string; content: string }) => Promise<void>;
-  onSyncLocal: (path: string) => Promise<void>;
+  onSyncLocal: (path: string, target?: DocumentSource) => Promise<void>;
   onGenerateTickets: (
     title: string,
     content: string,
@@ -1678,7 +1715,16 @@ function DocumentTab({
 
   const docRef = tab.ref ?? "";
   const isLocal = tab.source === "local";
-  const canEdit = isLocal || tab.source === "docmost" || !tab.source;
+  const remoteSource: DocumentSource =
+    tab.source === "notion" || tab.source === "confluence" || tab.source === "docmost"
+      ? tab.source
+      : "docmost";
+  const canEdit = isLocal || tab.source === "docmost" || tab.source === "notion" ||
+    tab.source === "confluence" || !tab.source;
+  const defaultSyncTarget: DocumentSource =
+    tab.syncTarget && syncTargets.includes(tab.syncTarget)
+      ? tab.syncTarget
+      : syncTargets[0] ?? "docmost";
 
   const save = async () => {
     setBusy(true);
@@ -1686,7 +1732,7 @@ function DocumentTab({
     try {
       const payload = { title: draftTitle.trim() || undefined, content: draftContent };
       if (isLocal) await onSaveLocal(docRef, payload);
-      else await onSave(docRef, payload);
+      else await onSave(docRef, payload, remoteSource);
       setEditing(false);
     } catch (e) {
       setError((e as Error).message);
@@ -1695,11 +1741,11 @@ function DocumentTab({
     }
   };
 
-  const sync = async () => {
+  const sync = async (target: DocumentSource = defaultSyncTarget) => {
     setSyncing(true);
     setSyncError(undefined);
     try {
-      await onSyncLocal(docRef);
+      await onSyncLocal(docRef, target);
     } catch (e) {
       setSyncError((e as Error).message);
     } finally {
@@ -1787,17 +1833,43 @@ function DocumentTab({
               Generate ticket
             </Button>
           ) : null}
-          {isLocal && !editing ? (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={sync}
-              disabled={syncing}
-              data-icon="inline-start"
-            >
-              {syncing ? <Spinner /> : <Upload />}
-              {tab.syncStatus === "synced" ? "Sync ulang" : "Sync ke Docmost"}
-            </Button>
+          {isLocal && !editing && syncTargets.length > 0 ? (
+            <div className="flex items-center gap-1">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => sync(defaultSyncTarget)}
+                disabled={syncing}
+                data-icon="inline-start"
+              >
+                {syncing ? <Spinner /> : <Upload />}
+                {tab.syncStatus === "synced"
+                  ? `Sync ulang (${defaultSyncTarget})`
+                  : `Sync ke ${defaultSyncTarget}`}
+              </Button>
+              {syncTargets.length > 1 ? (
+                <Select
+                  value={defaultSyncTarget}
+                  onValueChange={(value) => {
+                    if (value) void sync(value as DocumentSource);
+                  }}
+                  disabled={syncing}
+                >
+                  <SelectTrigger size="sm" className="h-8 w-[8.5rem]">
+                    <SelectValue placeholder="Target" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      {syncTargets.map((target) => (
+                        <SelectItem key={target} value={target}>
+                          {target}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+              ) : null}
+            </div>
           ) : null}
           {canEdit && editing ? (
             <>

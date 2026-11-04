@@ -6,11 +6,22 @@ export const IntegrationKind = z.enum([
   "notion",
   "confluence",
   "jira",
+  "clickup",
   "github",
 ]);
-export const SingletonKind = z.enum(["docmost", "notion", "confluence", "jira", "github"]);
+export const SingletonKind = z.enum([
+  "docmost",
+  "notion",
+  "confluence",
+  "jira",
+  "clickup",
+  "github",
+]);
 export type SingletonKind = z.infer<typeof SingletonKind>;
 export type IntegrationKind = z.infer<typeof IntegrationKind>;
+
+export const TicketProvider = z.enum(["jira", "clickup"]);
+export type TicketProvider = z.infer<typeof TicketProvider>;
 
 export const DocumentSource = z.enum(["docmost", "notion", "confluence"]);
 export type DocumentSource = z.infer<typeof DocumentSource>;
@@ -140,6 +151,11 @@ export const WorkflowRunInput = z.object({
     .optional(),
 });
 export type WorkflowRunInput = z.infer<typeof WorkflowRunInput>;
+
+export const WorkflowSchedulePatchInput = z.object({
+  enabled: z.boolean(),
+});
+export type WorkflowSchedulePatchInput = z.infer<typeof WorkflowSchedulePatchInput>;
 
 export const GitPathsInput = z.object({
   paths: z.array(z.string().trim().min(1).max(1000)).min(1).max(200),
@@ -408,11 +424,14 @@ export const LocalDocumentUpdateInput = z.object({
 
 export const LocalDocumentSyncInput = z.object({
   path: z.string().trim().min(1).max(500),
+  target: DocumentSource.default("docmost"),
 });
+export type LocalDocumentSyncInput = z.infer<typeof LocalDocumentSyncInput>;
 
 export const CreateDocumentInput = z.object({
   title: z.string().trim().min(1).max(200),
   parentPageId: z.string().trim().max(200).optional(),
+  source: DocumentSource.default("docmost"),
 });
 export type CreateDocumentInput = z.infer<typeof CreateDocumentInput>;
 
@@ -424,8 +443,14 @@ export type UpdateDocumentInput = z.infer<typeof UpdateDocumentInput>;
 
 export const TicketTransitionInput = z.object({
   status: z.string().trim().min(1).max(80),
+  source: TicketProvider.optional(),
 });
 export type TicketTransitionInput = z.infer<typeof TicketTransitionInput>;
+
+export const LocalTicketSyncInput = z.object({
+  provider: TicketProvider.optional(),
+});
+export type LocalTicketSyncInput = z.infer<typeof LocalTicketSyncInput>;
 
 export const DocmostConfig = z.object({
   baseUrl: httpUrl,
@@ -441,6 +466,16 @@ export const JiraConfig = z.object({
   projectKey: z.string().trim().default(""),
   email: z.string().trim().optional(),
   apiToken: z.string().trim().optional(),
+});
+
+export const ClickUpConfig = z.object({
+  apiToken: z.string().trim().optional(),
+  teamId: optionalText,
+  spaceId: optionalText,
+  folderId: optionalText,
+  listId: optionalText,
+  baseUrl: optionalText,
+  apiBase: optionalText,
 });
 
 export const GithubConfig = z.object({
@@ -465,6 +500,7 @@ export const ConfluenceConfig = z.object({
 
 export type DocmostConfig = z.infer<typeof DocmostConfig>;
 export type JiraConfig = z.infer<typeof JiraConfig>;
+export type ClickUpConfig = z.infer<typeof ClickUpConfig>;
 export type GithubConfig = z.infer<typeof GithubConfig>;
 export type NotionConfig = z.infer<typeof NotionConfig>;
 export type ConfluenceConfig = z.infer<typeof ConfluenceConfig>;
@@ -479,6 +515,8 @@ export function parseIntegrationConfig(kind: IntegrationKind, config: Record<str
       return ConfluenceConfig.safeParse(config);
     case "jira":
       return JiraConfig.safeParse(config);
+    case "clickup":
+      return ClickUpConfig.safeParse(config);
     case "github":
       return GithubConfig.safeParse(config);
     case "llm":

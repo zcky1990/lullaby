@@ -12,6 +12,7 @@ Form UI: Project Settings → Integrations (`IntegrationForm` + `SINGLETONS` di
 | **notion** | apiToken, parentPageId? | Browse/baca Notion |
 | **confluence** | baseUrl, email, apiToken, spaceKey? | Browse/baca Confluence |
 | **jira** | baseUrl, email, apiToken, projectKey, … | Board + transition + sync lokal |
+| **clickup** | apiToken, listId, teamId?, … | Board + transition + sync lokal |
 | **github** | baseUrl, token, org, repo, … | Health / meta kode (UI Code) |
 | **llm** | Global Settings → LLM Providers | Chat + generate tickets |
 
@@ -26,5 +27,6 @@ Test koneksi: `POST /api/integrations/test` → `src/integrations/index.ts`.
 
 ## Catatan
 
-- Mode integrasi `mcp` ada di schema; eksekusi MCP dari chat **belum** di-wire
+- MCP global (Global Settings → MCP): tool di-inject ke chat sebagai `mcp_<server>_<tool>`
+  (lihat [chat-agent.md](chat-agent.md))
 - Path workspace Git/Terminal bukan integrasi DB — memakai folder project

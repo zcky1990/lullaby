@@ -22,7 +22,15 @@ import { approvalResponse, prepareWriteChange, setAdvance } from "./review.ts";
 import { readChatToolsSettings } from "./settings.ts";
 import { scheduleSkillLearn } from "./skill-learn.ts";
 import { deleteRun, pruneRuns, setRun } from "./state.ts";
-import { applyWriteFile, executeTool, resolveAttachments, toolsFor, WRITE_TOOLS } from "./tools.ts";
+import { loadMcpChatTools } from "./mcp-tools.ts";
+import {
+  applyWriteFile,
+  executeTool,
+  isMcpChatTool,
+  resolveAttachments,
+  toolsFor,
+  WRITE_TOOLS,
+} from "./tools.ts";
 import type { ChatResponse, Run, VisibleMessage } from "./types.ts";
 
 export async function syncCursorConversation(
@@ -109,7 +117,12 @@ export async function advance(run: Run): Promise<ChatResponse> {
   try {
     const settings = await readChatToolsSettings();
     const disabledTools = new Set(settings.disabledTools);
-    const tools = toolsFor(run.workspace, run.mode, run.skills.size > 0, disabledTools);
+    const mcp = await loadMcpChatTools();
+    run.mcpTools = mcp.byName;
+    const tools = [
+      ...toolsFor(run.workspace, run.mode, run.skills.size > 0, disabledTools),
+      ...mcp.defs,
+    ];
     for (let step = 0; step < MAX_STEPS; step++) {
       const response = await complete(
         run.provider,
@@ -155,7 +168,7 @@ export async function advance(run: Run): Promise<ChatResponse> {
           let result: string;
           if (disabledTools.has(call.name)) {
             result = `Tool "${call.name}" dinonaktifkan di Global Settings → Tools.`;
-          } else if (!planAllowed.has(call.name)) {
+          } else if (!planAllowed.has(call.name) && !isMcpChatTool(call.name)) {
             result = "Tool tidak tersedia di mode Plan.";
           } else {
             try {
@@ -226,7 +239,12 @@ export async function advance(run: Run): Promise<ChatResponse> {
             } else {
               result = prepared.result;
             }
-          } else if (!run.workspace && call.name !== "create_ticket" && call.name !== "use_skill") {
+          } else if (
+            !run.workspace &&
+            call.name !== "create_ticket" &&
+            call.name !== "use_skill" &&
+            !isMcpChatTool(call.name)
+          ) {
             result = "No workspace configured.";
           } else {
             result = await executeTool(run, call);
@@ -367,6 +385,7 @@ export async function startChat(
     projectId,
     mode: effectiveMode,
     skills: skillMap,
+    mcpTools: new Map(),
     createdTickets: [],
     createdAt: Date.now(),
   };

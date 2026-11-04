@@ -1,5 +1,6 @@
 import { equal, rejects } from "node:assert/strict";
 import {
+  ClickUpConfig,
   ConfluenceConfig,
   type DocmostConfig,
   type JiraConfig,
@@ -7,8 +8,16 @@ import {
   parseIntegrationConfig,
 } from "../src/config/schema.ts";
 import {
+  createTicket as createClickUpTicket,
+  getTicket as getClickUpTicket,
+  listTickets as listClickUpTickets,
+  transitionTicket as transitionClickUpTicket,
+} from "../src/integrations/clickup.ts";
+import {
+  createDocument as createConfluenceDocument,
   getDocument as getConfluenceDocument,
   listDocuments as listConfluenceDocuments,
+  updateDocument as updateConfluenceDocument,
 } from "../src/integrations/confluence.ts";
 import { getDocument, listDocuments } from "../src/integrations/docmost.ts";
 import {
@@ -17,9 +26,12 @@ import {
   listTickets,
   transitionTicket,
 } from "../src/integrations/jira.ts";
+import { markdownToConfluenceStorage, markdownToNotionBlocks } from "../src/integrations/markdown.ts";
 import {
+  createDocument as createNotionDocument,
   getDocument as getNotionDocument,
   listDocuments as listNotionDocuments,
+  updateDocument as updateNotionDocument,
 } from "../src/integrations/notion.ts";
 
 const TOKEN = "Bearer tok";
@@ -357,4 +369,214 @@ Deno.test("confluence: rejects getDocument on space id", async () => {
     spaceKey: undefined,
   };
   await rejects(() => getConfluenceDocument(cfg, "space:ENG"), /halaman/i);
+});
+
+Deno.test("markdown helpers convert headings and lists", () => {
+  const blocks = markdownToNotionBlocks("# Title\n\n- a\n- b\n\n```ts\nconst x = 1\n```\n");
+  equal(blocks.some((block) => block.type === "heading_1"), true);
+  equal(blocks.some((block) => block.type === "bulleted_list_item"), true);
+  equal(blocks.some((block) => block.type === "code"), true);
+  const html = markdownToConfluenceStorage("## Hi\n\n1. one\n2. two\n");
+  equal(html.includes("<h2>Hi</h2>"), true);
+  equal(html.includes("<ol>"), true);
+});
+
+Deno.test("notion: createDocument and updateDocument", async () => {
+  const deleted: string[] = [];
+  const { server, port } = startMock(async (req) => {
+    if (req.headers.get("authorization") !== "Bearer secret_tok") {
+      return json({ error: "unauth" }, 401);
+    }
+    const { pathname } = new URL(req.url);
+    if (pathname === "/v1/pages" && req.method === "POST") {
+      const body = await req.json() as { parent?: { page_id?: string }; properties?: unknown };
+      equal(body.parent?.page_id, "parent-1");
+      return json({ object: "page", id: "new-page", properties: body.properties });
+    }
+    if (pathname === "/v1/pages/new-page" && req.method === "PATCH") {
+      return json({ object: "page", id: "new-page" });
+    }
+    if (pathname === "/v1/pages/new-page" && req.method === "GET") {
+      return json({
+        object: "page",
+        id: "new-page",
+        properties: {
+          title: { type: "title", title: [{ plain_text: "Updated" }] },
+        },
+      });
+    }
+    if (pathname === "/v1/blocks/new-page/children" && req.method === "GET") {
+      return json({
+        results: [
+          { object: "block", id: "old-1", type: "paragraph", paragraph: {}, has_children: false },
+        ],
+        has_more: false,
+      });
+    }
+    if (pathname === "/v1/blocks/old-1" && req.method === "DELETE") {
+      deleted.push("old-1");
+      return json({ id: "old-1", archived: true });
+    }
+    if (pathname === "/v1/blocks/new-page/children" && req.method === "PATCH") {
+      return json({ results: [] });
+    }
+    return new Response("nf", { status: 404 });
+  });
+
+  const base = `http://127.0.0.1:${await port}`;
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (input, init) => {
+    const url = String(input).replace("https://api.notion.com", base);
+    return originalFetch(url, init);
+  };
+
+  try {
+    const cfg = { apiToken: "secret_tok", parentPageId: "parent-1" };
+    const created = await createNotionDocument(cfg, { title: "New", content: "Hello" });
+    equal(created.id, "new-page");
+    const updated = await updateNotionDocument(cfg, {
+      pageId: "new-page",
+      title: "Updated",
+      content: "# Hi",
+    });
+    equal(updated.title, "Updated");
+    equal(deleted.includes("old-1"), true);
+  } finally {
+    globalThis.fetch = originalFetch;
+    await server.shutdown();
+  }
+});
+
+Deno.test("confluence: createDocument and updateDocument", async () => {
+  const { server, port } = startMock(async (req) => {
+    if (req.headers.get("authorization") !== "Basic Ym90QGUuY29tOnRr") {
+      return json({ error: "unauth" }, 401);
+    }
+    const { pathname } = new URL(req.url);
+    if (pathname === "/wiki/rest/api/content" && req.method === "POST") {
+      const body = await req.json() as { title?: string; space?: { key?: string } };
+      equal(body.space?.key, "ENG");
+      return json({ id: "200", title: body.title, space: { key: "ENG" } });
+    }
+    if (pathname === "/wiki/rest/api/content/200" && req.method === "GET") {
+      return json({
+        id: "200",
+        title: "Home",
+        space: { key: "ENG" },
+        version: { number: 3 },
+        body: { storage: { value: "<p>Old</p>" }, view: { value: "<p>Old</p>" } },
+      });
+    }
+    if (pathname === "/wiki/rest/api/content/200" && req.method === "PUT") {
+      const body = await req.json() as { version?: { number?: number }; title?: string };
+      equal(body.version?.number, 4);
+      return json({ id: "200", title: body.title });
+    }
+    return new Response("nf", { status: 404 });
+  });
+
+  const cfg: ConfluenceConfig = {
+    baseUrl: `http://127.0.0.1:${await port}/wiki`,
+    email: "bot@e.com",
+    apiToken: "tk",
+    spaceKey: "ENG",
+  };
+  const created = await createConfluenceDocument(cfg, { title: "Home", content: "Hi" });
+  equal(created.id, "200");
+  const updated = await updateConfluenceDocument(cfg, {
+    pageId: "200",
+    title: "Home",
+    content: "## New",
+  });
+  equal(updated.id, "200");
+  await server.shutdown();
+});
+
+Deno.test("clickup: list/get/create/transition tasks", async () => {
+  let createdBody = "";
+  let transitionBody = "";
+  const { server, port } = startMock(async (req) => {
+    if (req.headers.get("authorization") !== "pk_test") return json({ error: "unauth" }, 401);
+    const { pathname } = new URL(req.url);
+    if (pathname === "/list/901/task" && req.method === "GET") {
+      return json({
+        tasks: [{
+          id: "abc123",
+          name: "Ship board",
+          status: { status: "to do" },
+          priority: { id: "2", priority: "high" },
+          assignees: [{ username: "Ana" }],
+          url: "https://app.clickup.com/t/abc123",
+        }],
+        last_page: true,
+      });
+    }
+    if (pathname === "/task/abc123" && req.method === "GET") {
+      return json({
+        id: "abc123",
+        name: "Ship board",
+        status: { status: "to do" },
+        description: "Detail body",
+        tags: [{ name: "board" }],
+        date_created: "1700000000000",
+        date_updated: "1700000001000",
+        url: "https://app.clickup.com/t/abc123",
+      });
+    }
+    if (pathname === "/list/901/task" && req.method === "POST") {
+      createdBody = await req.text();
+      return json({ id: "new99", url: "https://app.clickup.com/t/new99" }, 200);
+    }
+    if (pathname === "/list/901" && req.method === "GET") {
+      return json({
+        statuses: [{ status: "to do" }, { status: "in progress" }, { status: "complete" }],
+      });
+    }
+    if (pathname === "/task/abc123" && req.method === "PUT") {
+      transitionBody = await req.text();
+      return json({ id: "abc123" });
+    }
+    return new Response("nf", { status: 404 });
+  });
+
+  const cfg = ClickUpConfig.parse({
+    apiToken: "pk_test",
+    listId: "901",
+    apiBase: `http://127.0.0.1:${await port}`,
+  });
+
+  const tickets = await listClickUpTickets(cfg);
+  equal(tickets[0]?.key, "abc123");
+  equal(tickets[0]?.status, "to do");
+  equal(tickets[0]?.priority, "High");
+  equal(tickets[0]?.source, "clickup");
+
+  const detail = await getClickUpTicket(cfg, "abc123");
+  equal(detail.description, "Detail body");
+  equal(detail.labels[0], "board");
+
+  const created = await createClickUpTicket(cfg, {
+    summary: "New task",
+    description: "<p>Hello</p>",
+    priority: "High",
+  });
+  equal(created.key, "new99");
+  const parsedCreate = JSON.parse(createdBody) as { name?: string; priority?: number };
+  equal(parsedCreate.name, "New task");
+  equal(parsedCreate.priority, 2);
+
+  await transitionClickUpTicket(cfg, "abc123", "In Progress");
+  const parsedTransition = JSON.parse(transitionBody) as { status?: string };
+  equal(parsedTransition.status, "in progress");
+
+  await rejects(() => transitionClickUpTicket(cfg, "abc123", "Nonexistent Status"));
+  await server.shutdown();
+});
+
+Deno.test("parseIntegrationConfig accepts clickup", () => {
+  const parsed = parseIntegrationConfig("clickup", {
+    apiToken: "pk_x",
+    listId: "123",
+  });
+  equal(parsed.success, true);
 });

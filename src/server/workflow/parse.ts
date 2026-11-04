@@ -1,9 +1,12 @@
 import { parse as parseYaml } from "@std/yaml";
 import { z } from "zod";
+import { CronError, isValidTimezone, parseCron } from "./cron.ts";
 import {
   type WorkflowDefinition,
+  type WorkflowEventTrigger,
   WorkflowError,
   type WorkflowParam,
+  type WorkflowSchedule,
   type WorkflowStep,
 } from "./types.ts";
 
@@ -191,6 +194,36 @@ const stepSchema = z
     }
   });
 
+const scheduleSchema = z
+  .object({
+    cron: z.string().trim().min(1).max(120),
+    enabled: z.boolean().optional(),
+    timezone: z.string().trim().min(1).max(80).optional(),
+  })
+  .strict()
+  .optional();
+
+const onEventObjectSchema = z
+  .object({
+    event: z
+      .string()
+      .trim()
+      .regex(/^[a-z][a-z0-9_.-]*$/i, "Nama event tidak valid.")
+      .max(80),
+    status: z.string().trim().min(1).max(80).optional(),
+  })
+  .strict();
+
+const onSchema = z
+  .preprocess((value) => {
+    if (value === undefined || value === null) return undefined;
+    const list = Array.isArray(value) ? value : [value];
+    return list.map((item) => {
+      if (typeof item === "string") return { event: item };
+      return item;
+    });
+  }, z.array(onEventObjectSchema).max(20).optional());
+
 const docSchema = z
   .object({
     name: z.string().trim().regex(/^[a-zA-Z0-9_.-]+$/, "Nama workflow tidak valid.").max(60)
@@ -203,6 +236,8 @@ const docSchema = z
     timeout_sec: z.number().positive().max(86_400).optional(),
     defaults: defaultsSchema,
     llm: llmBlockSchema,
+    schedule: scheduleSchema,
+    on: onSchema,
     steps: z.array(stepSchema).min(1).max(100),
   })
   .strict();
@@ -457,6 +492,30 @@ export function parseWorkflow(yaml: string, fallbackName: string): WorkflowDefin
     }
   }
 
+  let schedule: WorkflowSchedule | undefined;
+  if (doc.schedule) {
+    try {
+      parseCron(doc.schedule.cron);
+    } catch (error) {
+      throw new WorkflowError(
+        error instanceof CronError ? error.message : `Cron tidak valid: ${doc.schedule.cron}`,
+      );
+    }
+    if (doc.schedule.timezone && !isValidTimezone(doc.schedule.timezone)) {
+      throw new WorkflowError(`Timezone tidak valid: ${doc.schedule.timezone}`);
+    }
+    schedule = {
+      cron: doc.schedule.cron.trim(),
+      enabled: doc.schedule.enabled ?? true,
+      timezone: doc.schedule.timezone?.trim() || undefined,
+    };
+  }
+
+  const on: WorkflowEventTrigger[] = (doc.on ?? []).map((item) => ({
+    event: item.event.trim(),
+    status: item.status?.trim() || undefined,
+  }));
+
   return {
     name: doc.name ?? slugName(fallbackName),
     description: doc.description,
@@ -466,6 +525,8 @@ export function parseWorkflow(yaml: string, fallbackName: string): WorkflowDefin
     workingDir: doc.working_dir,
     timeoutSec: doc.timeout_sec,
     llm: doc.llm,
+    schedule,
+    on,
     steps,
     layers: topoLayers(steps),
   };

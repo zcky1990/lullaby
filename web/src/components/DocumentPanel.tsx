@@ -76,7 +76,7 @@ export function DocumentPanel({
   const [busy, setBusy] = useState(false);
   const [createError, setCreateError] = useState<string | undefined>();
 
-  const canCreate = source === "local" || source === "docmost";
+  const canCreate = true;
   const { loading, configured, error, debug, documents } = remote;
   const remoteTabs = REMOTE_TABS.filter((tab) => enabledRemotes.includes(tab.id));
   const showSourceTabs = remoteTabs.length > 0;
@@ -165,6 +165,14 @@ export function DocumentPanel({
             <DialogDescription>
               {source === "local"
                 ? "Dokumen baru disimpan sebagai file .md di document workspace."
+                : source === "notion"
+                ? selectedId
+                  ? "Halaman Notion baru sebagai child dari halaman terpilih."
+                  : "Halaman Notion baru di bawah parentPageId integrasi (wajib)."
+                : source === "confluence"
+                ? selectedId
+                  ? "Halaman Confluence baru di bawah space/halaman terpilih."
+                  : "Halaman Confluence baru di spaceKey integrasi (wajib)."
                 : selectedId
                 ? "Dokumen baru akan dibuat sebagai sub-halaman dari dokumen terpilih."
                 : "Dokumen baru akan dibuat di space Docmost project ini."}

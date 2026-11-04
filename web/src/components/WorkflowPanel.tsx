@@ -123,6 +123,10 @@ export function WorkflowPanel({
               </div>
               <span className="text-[10px] text-muted-foreground">
                 {workflow.slug} · {workflow.stepCount} step
+                {workflow.schedule?.cron
+                  ? ` · cron${workflow.schedule.enabled ? "" : " (off)"}`
+                  : ""}
+                {(workflow.schedule?.events.length ?? 0) > 0 ? " · event" : ""}
                 {workflow.error ? " · YAML error" : ""}
               </span>
             </button>
@@ -152,6 +156,13 @@ export function WorkflowPanel({
               <span className="min-w-0 flex-1 truncate">
                 {run.workflowName}
               </span>
+              {run.trigger && run.trigger !== "manual"
+                ? (
+                  <span className="shrink-0 text-[10px] text-muted-foreground">
+                    {run.trigger.startsWith("event:") ? "event" : run.trigger}
+                  </span>
+                )
+                : null}
               <Badge
                 variant={runBadgeVariant(run.status)}
                 className="h-5 px-1.5 text-[10px]"

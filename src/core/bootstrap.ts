@@ -1,6 +1,7 @@
 import { appendEvent, getDb, markInterruptedWorkflowRuns, pruneEvents } from "../db/db.ts";
 import { syncConfiguredCursorModels } from "../server/chat/cursor-models.ts";
 import { installDefaultSkills } from "../server/skills.ts";
+import { startWorkflowScheduler } from "../server/workflow/scheduler.ts";
 import { log } from "./logger.ts";
 import { appDataDir, ensureAppDataDir } from "./paths.ts";
 
@@ -21,6 +22,7 @@ export async function bootstrap(): Promise<void> {
   } catch (error) {
     log.warn("cursor model sync skipped", { error: String(error) });
   }
+  startWorkflowScheduler();
   await appendEvent("app.started", { dataDir: dir });
   log.info("bootstrap complete", { dataDir: appDataDir() });
 }

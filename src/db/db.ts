@@ -166,6 +166,20 @@ CREATE TABLE IF NOT EXISTS workflow_run_steps (
   finished_at TEXT
 );
 
+CREATE TABLE IF NOT EXISTS workflow_schedules (
+  project_id    TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  workflow_slug TEXT NOT NULL,
+  cron          TEXT,
+  timezone      TEXT,
+  enabled       INTEGER NOT NULL DEFAULT 1,
+  events        TEXT NOT NULL DEFAULT '[]',
+  next_run_at   TEXT,
+  last_run_at   TEXT,
+  last_run_id   TEXT,
+  updated_at    TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (project_id, workflow_slug)
+);
+
 CREATE TABLE IF NOT EXISTS app_settings (
   key        TEXT PRIMARY KEY,
   value      TEXT NOT NULL,
@@ -207,6 +221,8 @@ const ENSURE_COLUMN_TABLES = new Set([
   "llm_providers",
   "chat_messages",
   "chat_sessions",
+  "local_documents",
+  "local_tickets",
 ]);
 
 function ensureColumn(db: DatabaseSync, table: string, column: string, ddl: string): void {
@@ -241,6 +257,13 @@ function migrate(db: DatabaseSync): void {
   ensureColumn(db, "chat_messages", "changes", "changes TEXT");
   ensureColumn(db, "chat_sessions", "cursor_agent_id", "cursor_agent_id TEXT");
   ensureColumn(db, "chat_sessions", "source", "source TEXT NOT NULL DEFAULT 'app'");
+  ensureColumn(
+    db,
+    "local_documents",
+    "sync_target",
+    "sync_target TEXT NOT NULL DEFAULT 'docmost'",
+  );
+  ensureColumn(db, "local_tickets", "sync_provider", "sync_provider TEXT");
 
   try {
     db.exec(`
@@ -252,6 +275,7 @@ function migrate(db: DatabaseSync): void {
       CREATE INDEX IF NOT EXISTS idx_workflow_runs_project ON workflow_runs(project_id, created_at);
       CREATE INDEX IF NOT EXISTS idx_workflow_runs_workflow ON workflow_runs(project_id, workflow_slug, created_at);
       CREATE INDEX IF NOT EXISTS idx_workflow_steps_run ON workflow_run_steps(run_id);
+      CREATE INDEX IF NOT EXISTS idx_workflow_schedules_next ON workflow_schedules(enabled, next_run_at);
       CREATE INDEX IF NOT EXISTS idx_workflow_sessions_project ON workflow_sessions(project_id);
       CREATE INDEX IF NOT EXISTS idx_workflow_session_messages ON workflow_session_messages(session_id);
     `);
@@ -753,6 +777,7 @@ export interface LocalTicketRow {
   assignee: string | null;
   labels: string;
   jira_key: string | null;
+  sync_provider: string | null;
   sync_status: string;
   sync_error: string | null;
   synced_at: string | null;
@@ -846,12 +871,16 @@ export async function deleteLocalTicket(id: string): Promise<void> {
   db.prepare("DELETE FROM local_tickets WHERE id = ?").run(id);
 }
 
-export async function markLocalTicketSynced(id: string, jiraKey: string): Promise<void> {
+export async function markLocalTicketSynced(
+  id: string,
+  remoteKey: string,
+  provider: "jira" | "clickup" = "jira",
+): Promise<void> {
   const db = await getDb();
   db.prepare(
-    "UPDATE local_tickets SET jira_key = ?, sync_status = 'synced', sync_error = NULL, " +
-      "synced_at = datetime('now'), updated_at = datetime('now') WHERE id = ?",
-  ).run(jiraKey, id);
+    "UPDATE local_tickets SET jira_key = ?, sync_provider = ?, sync_status = 'synced', " +
+      "sync_error = NULL, synced_at = datetime('now'), updated_at = datetime('now') WHERE id = ?",
+  ).run(remoteKey, provider, id);
 }
 
 export async function markLocalTicketSyncError(id: string, message: string): Promise<void> {
@@ -866,6 +895,7 @@ export interface LocalDocumentMetaRow {
   project_id: string;
   path: string;
   page_id: string | null;
+  sync_target: string | null;
   sync_status: string;
   sync_error: string | null;
   synced_at: string | null;
@@ -894,15 +924,16 @@ export async function markLocalDocumentSynced(
   projectId: string,
   path: string,
   pageId: string,
+  syncTarget = "docmost",
 ): Promise<void> {
   const db = await getDb();
   db.prepare(
-    "INSERT INTO local_documents (project_id, path, page_id, sync_status, sync_error, synced_at, updated_at) " +
-      "VALUES (?, ?, ?, 'synced', NULL, datetime('now'), datetime('now')) " +
+    "INSERT INTO local_documents (project_id, path, page_id, sync_target, sync_status, sync_error, synced_at, updated_at) " +
+      "VALUES (?, ?, ?, ?, 'synced', NULL, datetime('now'), datetime('now')) " +
       "ON CONFLICT(project_id, path) DO UPDATE SET page_id = excluded.page_id, " +
-      "sync_status = 'synced', sync_error = NULL, synced_at = datetime('now'), " +
-      "updated_at = datetime('now')",
-  ).run(projectId, path, pageId);
+      "sync_target = excluded.sync_target, sync_status = 'synced', sync_error = NULL, " +
+      "synced_at = datetime('now'), updated_at = datetime('now')",
+  ).run(projectId, path, pageId, syncTarget);
 }
 
 export async function markLocalDocumentSyncError(
@@ -936,12 +967,13 @@ export async function moveLocalDocumentMeta(
     );
     if (!existing) return;
     db.prepare(
-      "INSERT INTO local_documents (project_id, path, page_id, sync_status, sync_error, synced_at, updated_at) " +
-        "VALUES (?, ?, ?, ?, ?, ?, datetime('now'))",
+      "INSERT INTO local_documents (project_id, path, page_id, sync_target, sync_status, sync_error, synced_at, updated_at) " +
+        "VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))",
     ).run(
       projectId,
       to,
       existing.page_id,
+      existing.sync_target ?? "docmost",
       existing.sync_status,
       existing.sync_error,
       existing.synced_at,
@@ -1228,6 +1260,159 @@ export async function markInterruptedWorkflowRuns(): Promise<void> {
     "UPDATE workflow_run_steps SET status = 'canceled', finished_at = datetime('now') " +
       "WHERE status IN ('pending','running')",
   ).run();
+}
+
+export interface WorkflowScheduleRow {
+  project_id: string;
+  workflow_slug: string;
+  cron: string | null;
+  timezone: string | null;
+  enabled: number;
+  events: string;
+  next_run_at: string | null;
+  last_run_at: string | null;
+  last_run_id: string | null;
+  updated_at: string;
+}
+
+export async function upsertWorkflowSchedule(input: {
+  projectId: string;
+  slug: string;
+  cron?: string | null;
+  timezone?: string | null;
+  enabled: boolean;
+  events: unknown[];
+  nextRunAt?: string | null;
+}): Promise<WorkflowScheduleRow> {
+  const db = await getDb();
+  db.prepare(
+    "INSERT INTO workflow_schedules (project_id, workflow_slug, cron, timezone, enabled, events, " +
+      "next_run_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now')) " +
+      "ON CONFLICT(project_id, workflow_slug) DO UPDATE SET " +
+      "cron = excluded.cron, timezone = excluded.timezone, enabled = excluded.enabled, " +
+      "events = excluded.events, next_run_at = excluded.next_run_at, " +
+      "updated_at = datetime('now')",
+  ).run(
+    input.projectId,
+    input.slug,
+    input.cron ?? null,
+    input.timezone ?? null,
+    input.enabled ? 1 : 0,
+    JSON.stringify(input.events ?? []),
+    input.nextRunAt ?? null,
+  );
+  return (await getWorkflowSchedule(input.projectId, input.slug))!;
+}
+
+export async function getWorkflowSchedule(
+  projectId: string,
+  slug: string,
+): Promise<WorkflowScheduleRow | null> {
+  const db = await getDb();
+  const row = db
+    .prepare(
+      "SELECT * FROM workflow_schedules WHERE project_id = ? AND workflow_slug = ?",
+    )
+    .get(projectId, slug);
+  return (row as WorkflowScheduleRow | undefined) ?? null;
+}
+
+export async function listWorkflowSchedules(
+  projectId?: string,
+): Promise<WorkflowScheduleRow[]> {
+  const db = await getDb();
+  if (projectId) {
+    return rows<WorkflowScheduleRow>(
+      db
+        .prepare(
+          "SELECT * FROM workflow_schedules WHERE project_id = ? ORDER BY workflow_slug",
+        )
+        .all(projectId),
+    );
+  }
+  return rows<WorkflowScheduleRow>(
+    db.prepare("SELECT * FROM workflow_schedules ORDER BY project_id, workflow_slug").all(),
+  );
+}
+
+export async function listDueWorkflowSchedules(
+  nowIso: string,
+): Promise<WorkflowScheduleRow[]> {
+  const db = await getDb();
+  return rows<WorkflowScheduleRow>(
+    db
+      .prepare(
+        "SELECT * FROM workflow_schedules WHERE enabled = 1 AND cron IS NOT NULL " +
+          "AND next_run_at IS NOT NULL AND next_run_at <= ? " +
+          "ORDER BY next_run_at ASC LIMIT 50",
+      )
+      .all(nowIso),
+  );
+}
+
+export async function listEventWorkflowSchedules(
+  eventType: string,
+): Promise<WorkflowScheduleRow[]> {
+  const db = await getDb();
+  return rows<WorkflowScheduleRow>(
+    db
+      .prepare(
+        "SELECT * FROM workflow_schedules WHERE enabled = 1 AND events != '[]' " +
+          "AND events LIKE ?",
+      )
+      .all(`%${eventType}%`),
+  );
+}
+
+export async function touchWorkflowScheduleRun(
+  projectId: string,
+  slug: string,
+  patch: { nextRunAt?: string | null; lastRunAt?: string; lastRunId?: string },
+): Promise<void> {
+  const db = await getDb();
+  const existing = await getWorkflowSchedule(projectId, slug);
+  if (!existing) return;
+  db.prepare(
+    "UPDATE workflow_schedules SET next_run_at = ?, last_run_at = ?, last_run_id = ?, " +
+      "updated_at = datetime('now') WHERE project_id = ? AND workflow_slug = ?",
+  ).run(
+    patch.nextRunAt === undefined ? existing.next_run_at : patch.nextRunAt,
+    patch.lastRunAt ?? existing.last_run_at,
+    patch.lastRunId ?? existing.last_run_id,
+    projectId,
+    slug,
+  );
+}
+
+export async function setWorkflowScheduleEnabled(
+  projectId: string,
+  slug: string,
+  enabled: boolean,
+  nextRunAt?: string | null,
+): Promise<WorkflowScheduleRow | null> {
+  const db = await getDb();
+  const existing = await getWorkflowSchedule(projectId, slug);
+  if (!existing) return null;
+  db.prepare(
+    "UPDATE workflow_schedules SET enabled = ?, next_run_at = ?, updated_at = datetime('now') " +
+      "WHERE project_id = ? AND workflow_slug = ?",
+  ).run(
+    enabled ? 1 : 0,
+    nextRunAt === undefined ? existing.next_run_at : nextRunAt,
+    projectId,
+    slug,
+  );
+  return await getWorkflowSchedule(projectId, slug);
+}
+
+export async function deleteWorkflowSchedule(
+  projectId: string,
+  slug: string,
+): Promise<void> {
+  const db = await getDb();
+  db.prepare(
+    "DELETE FROM workflow_schedules WHERE project_id = ? AND workflow_slug = ?",
+  ).run(projectId, slug);
 }
 
 export interface WorkflowSessionRow {

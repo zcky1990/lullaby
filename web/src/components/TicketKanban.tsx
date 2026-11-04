@@ -164,7 +164,11 @@ export function TicketKanban({ tickets, onMove, onOpenDetail, onError }: Props) 
                             className="inline-flex shrink-0 items-center gap-1 hover:text-foreground"
                           >
                             <ExternalLink className="size-3" />
-                            Jira
+                            {ticket.source === "clickup"
+                              ? "ClickUp"
+                              : ticket.source === "local" && ticket.syncProvider === "clickup"
+                              ? "ClickUp"
+                              : "Jira"}
                           </a>
                         ) : ticket.source === "local" ? (
                           <span className="shrink-0">Belum sync</span>

@@ -26,25 +26,35 @@ import {
   updateDocument,
 } from "../../integrations/docmost.ts";
 import {
+  createDocument as createConfluenceDocument,
   getDocument as getConfluenceDocument,
   listDocuments as listConfluenceDocuments,
+  updateDocument as updateConfluenceDocument,
 } from "../../integrations/confluence.ts";
 import {
+  createDocument as createNotionDocument,
   getDocument as getNotionDocument,
   listDocuments as listNotionDocuments,
+  updateDocument as updateNotionDocument,
 } from "../../integrations/notion.ts";
 
 const MAX_RESULT = 60_000;
 
 export type DocToolSource = "local" | "docmost" | "notion" | "confluence";
+export type DocSyncTarget = "docmost" | "notion" | "confluence";
 
 function clip(value: unknown): string {
   return JSON.stringify(value).slice(0, MAX_RESULT);
 }
 
-function localDocumentPayload(
+export function localDocumentPayload(
   doc: { path: string; title: string },
-  meta?: { page_id: string | null; sync_status: string; sync_error: string | null },
+  meta?: {
+    page_id: string | null;
+    sync_status: string;
+    sync_error: string | null;
+    sync_target?: string | null;
+  },
 ) {
   return {
     id: doc.path,
@@ -52,6 +62,7 @@ function localDocumentPayload(
     title: doc.title,
     syncStatus: meta?.sync_status ?? "local",
     pageId: meta?.page_id ?? undefined,
+    syncTarget: meta?.sync_target ?? undefined,
     syncError: meta?.sync_error ?? undefined,
   };
 }
@@ -74,6 +85,11 @@ function parseSource(raw: unknown): DocToolSource | null {
   if (value === "local") return "local";
   const parsed = DocumentSource.safeParse(value);
   return parsed.success ? parsed.data : null;
+}
+
+function parseSyncTarget(raw: unknown): DocSyncTarget {
+  const parsed = DocumentSource.safeParse(raw ?? "docmost");
+  return parsed.success ? parsed.data : "docmost";
 }
 
 export async function listDocumentsTool(
@@ -198,8 +214,8 @@ export async function createDocumentTool(
   args: Record<string, unknown>,
 ): Promise<string> {
   const source = parseSource(args.source ?? "local");
-  if (source !== "local" && source !== "docmost") {
-    return "Error: create_document hanya untuk source=local atau docmost.";
+  if (!source) {
+    return 'Error: source harus "local", "docmost", "notion", atau "confluence".';
   }
   const title = typeof args.title === "string" ? args.title.trim() : "";
   if (!title) return "Error: title wajib.";
@@ -218,24 +234,46 @@ export async function createDocumentTool(
     }
   }
 
-  const config = await integrationConfig(projectId, "docmost");
-  if (!config) return "Integrasi Docmost belum dikonfigurasi.";
-  const parsedCfg = DocmostConfig.safeParse(config);
-  if (!parsedCfg.success) return "Konfigurasi Docmost tidak valid.";
-  const spaceId = parsedCfg.data.spaceId ?? project.docmost_space_id ?? undefined;
-  if (!spaceId) return "Space ID Docmost belum diisi.";
   const parentPageId = typeof args.parentId === "string" && args.parentId.trim()
     ? args.parentId.trim()
     : typeof args.parentPageId === "string" && args.parentPageId.trim()
     ? args.parentPageId.trim()
     : undefined;
+  const content = typeof args.content === "string" ? args.content : undefined;
+  const config = await integrationConfig(projectId, source);
+  if (!config) return `Integrasi ${source} belum dikonfigurasi.`;
+
   try {
+    if (source === "notion") {
+      const parsed = NotionConfig.safeParse(config);
+      if (!parsed.success) return "Konfigurasi Notion tidak valid.";
+      const created = await createNotionDocument(parsed.data, {
+        title,
+        parentPageId,
+        content,
+      });
+      return clip({ source, document: created });
+    }
+    if (source === "confluence") {
+      const parsed = ConfluenceConfig.safeParse(config);
+      if (!parsed.success) return "Konfigurasi Confluence tidak valid.";
+      const created = await createConfluenceDocument(parsed.data, {
+        title,
+        parentPageId,
+        content,
+      });
+      return clip({ source, document: created });
+    }
+
+    const parsedCfg = DocmostConfig.safeParse(config);
+    if (!parsedCfg.success) return "Konfigurasi Docmost tidak valid.";
+    const spaceId = parsedCfg.data.spaceId ?? project.docmost_space_id ?? undefined;
+    if (!spaceId) return "Space ID Docmost belum diisi.";
     const document = await createDocument(parsedCfg.data, {
       spaceId,
       title,
       parentPageId,
     });
-    const content = typeof args.content === "string" ? args.content : undefined;
     if (content != null) {
       const updated = await updateDocument(parsedCfg.data, {
         pageId: document.id,
@@ -255,8 +293,8 @@ export async function updateDocumentTool(
   args: Record<string, unknown>,
 ): Promise<string> {
   const source = parseSource(args.source ?? "local");
-  if (source !== "local" && source !== "docmost") {
-    return "Error: update_document hanya untuk source=local atau docmost.";
+  if (!source) {
+    return 'Error: source harus "local", "docmost", "notion", atau "confluence".';
   }
   const project = await getProject(projectId);
   if (!project) return "Error: project tidak ditemukan.";
@@ -285,14 +323,35 @@ export async function updateDocumentTool(
   }
 
   const pageId = typeof args.pageId === "string" ? args.pageId.trim() : "";
-  if (!pageId) return "Error: pageId wajib untuk docmost.";
+  if (!pageId) return "Error: pageId wajib untuk remote source.";
   const content = typeof args.content === "string" ? args.content : undefined;
-  if (content == null) return "Error: content wajib untuk update Docmost.";
-  const config = await integrationConfig(projectId, "docmost");
-  if (!config) return "Integrasi Docmost belum dikonfigurasi.";
-  const parsedCfg = DocmostConfig.safeParse(config);
-  if (!parsedCfg.success) return "Konfigurasi Docmost tidak valid.";
+  if (content == null) return "Error: content wajib untuk update remote.";
+  const config = await integrationConfig(projectId, source);
+  if (!config) return `Integrasi ${source} belum dikonfigurasi.`;
+
   try {
+    if (source === "notion") {
+      const parsed = NotionConfig.safeParse(config);
+      if (!parsed.success) return "Konfigurasi Notion tidak valid.";
+      const document = await updateNotionDocument(parsed.data, {
+        pageId,
+        title: typeof args.title === "string" ? args.title : undefined,
+        content,
+      });
+      return clip({ source, document });
+    }
+    if (source === "confluence") {
+      const parsed = ConfluenceConfig.safeParse(config);
+      if (!parsed.success) return "Konfigurasi Confluence tidak valid.";
+      const document = await updateConfluenceDocument(parsed.data, {
+        pageId,
+        title: typeof args.title === "string" ? args.title : undefined,
+        content,
+      });
+      return clip({ source, document });
+    }
+    const parsedCfg = DocmostConfig.safeParse(config);
+    if (!parsedCfg.success) return "Konfigurasi Docmost tidak valid.";
     const document = await updateDocument(parsedCfg.data, {
       pageId,
       title: typeof args.title === "string" ? args.title : undefined,
@@ -304,53 +363,103 @@ export async function updateDocumentTool(
   }
 }
 
+export async function syncLocalDocumentToTarget(
+  projectId: string,
+  path: string,
+  targetRaw: unknown = "docmost",
+): Promise<{
+  document: Record<string, unknown>;
+}> {
+  const target = parseSyncTarget(targetRaw);
+  const project = await getProject(projectId);
+  if (!project) throw new Error("project tidak ditemukan.");
+  const root = project.document_path?.trim();
+  if (!root) throw new Error("Document workspace belum diatur.");
+
+  const config = await integrationConfig(projectId, target);
+  if (!config) throw new Error(`Integrasi ${target} belum dikonfigurasi.`);
+
+  let pageId = "";
+  try {
+    const doc = await readLocalDocument(root, path);
+    const meta = await getLocalDocumentMeta(projectId, doc.path);
+    const sameTarget = (meta?.sync_target ?? "docmost") === target;
+    pageId = sameTarget ? (meta?.page_id ?? "") : "";
+
+    if (target === "notion") {
+      const parsed = NotionConfig.safeParse(config);
+      if (!parsed.success) throw new Error("Konfigurasi Notion tidak valid.");
+      if (!pageId) {
+        const created = await createNotionDocument(parsed.data, {
+          title: doc.title,
+          content: doc.content,
+        });
+        pageId = created.id;
+        await markLocalDocumentSynced(projectId, doc.path, pageId, target);
+      } else {
+        await updateNotionDocument(parsed.data, {
+          pageId,
+          title: doc.title,
+          content: doc.content,
+        });
+      }
+    } else if (target === "confluence") {
+      const parsed = ConfluenceConfig.safeParse(config);
+      if (!parsed.success) throw new Error("Konfigurasi Confluence tidak valid.");
+      if (!pageId) {
+        const created = await createConfluenceDocument(parsed.data, {
+          title: doc.title,
+          content: doc.content,
+        });
+        pageId = created.id;
+        await markLocalDocumentSynced(projectId, doc.path, pageId, target);
+      } else {
+        await updateConfluenceDocument(parsed.data, {
+          pageId,
+          title: doc.title,
+          content: doc.content,
+        });
+      }
+    } else {
+      const parsedCfg = DocmostConfig.safeParse(config);
+      if (!parsedCfg.success) throw new Error("Konfigurasi Docmost tidak valid.");
+      const spaceId = parsedCfg.data.spaceId?.trim() || project.docmost_space_id?.trim();
+      if (!spaceId) throw new Error("Space ID Docmost belum diisi.");
+      if (!pageId) {
+        const created = await createDocument(parsedCfg.data, { spaceId, title: doc.title });
+        pageId = created.id;
+        await markLocalDocumentSynced(projectId, doc.path, pageId, target);
+      }
+      await updateDocument(parsedCfg.data, {
+        pageId,
+        title: doc.title,
+        content: doc.content,
+      });
+    }
+
+    await markLocalDocumentSynced(projectId, doc.path, pageId, target);
+    const updatedMeta = await getLocalDocumentMeta(projectId, doc.path);
+    return {
+      document: { ...doc, ...localDocumentPayload(doc, updatedMeta ?? undefined) },
+    };
+  } catch (error) {
+    const message = (error as Error).message;
+    if (pageId) await markLocalDocumentSynced(projectId, path, pageId, target);
+    await markLocalDocumentSyncError(projectId, path, message);
+    throw error;
+  }
+}
+
 export async function syncDocumentTool(
   projectId: string,
   args: Record<string, unknown>,
 ): Promise<string> {
   const path = typeof args.path === "string" ? args.path.trim() : "";
   if (!path) return "Error: path dokumen lokal wajib.";
-
-  const project = await getProject(projectId);
-  if (!project) return "Error: project tidak ditemukan.";
-  const root = project.document_path?.trim();
-  if (!root) return "Document workspace belum diatur.";
-
-  const config = await integrationConfig(projectId, "docmost");
-  if (!config) return "Integrasi Docmost belum dikonfigurasi.";
-  const parsedCfg = DocmostConfig.safeParse(config);
-  if (!parsedCfg.success) return "Konfigurasi Docmost tidak valid.";
-  const spaceId = parsedCfg.data.spaceId?.trim() || project.docmost_space_id?.trim();
-  if (!spaceId) return "Space ID Docmost belum diisi.";
-
-  let pageId = "";
   try {
-    const doc = await readLocalDocument(root, path);
-    const meta = await getLocalDocumentMeta(projectId, doc.path);
-    pageId = meta?.page_id ?? "";
-
-    if (!pageId) {
-      const created = await createDocument(parsedCfg.data, { spaceId, title: doc.title });
-      pageId = created.id;
-      await markLocalDocumentSynced(projectId, doc.path, pageId);
-    }
-
-    await updateDocument(parsedCfg.data, {
-      pageId,
-      title: doc.title,
-      content: doc.content,
-    });
-    await markLocalDocumentSynced(projectId, doc.path, pageId);
-    const updatedMeta = await getLocalDocumentMeta(projectId, doc.path);
-    return clip({
-      source: "local",
-      synced: true,
-      document: { ...doc, ...localDocumentPayload(doc, updatedMeta ?? undefined) },
-    });
+    const result = await syncLocalDocumentToTarget(projectId, path, args.target ?? args.source);
+    return clip({ source: "local", synced: true, ...result });
   } catch (error) {
-    const message = (error as Error).message;
-    if (pageId) await markLocalDocumentSynced(projectId, path, pageId);
-    await markLocalDocumentSyncError(projectId, path, message);
-    return `Error: ${message}`;
+    return `Error: ${(error as Error).message}`;
   }
 }

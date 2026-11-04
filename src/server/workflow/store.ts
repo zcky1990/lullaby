@@ -1,8 +1,15 @@
 import { join, resolve } from "node:path";
 import { appDataDir } from "../../core/paths.ts";
+import { listWorkflowSchedules } from "../../db/db.ts";
 import { resolveWithin } from "../../fs/workspace.ts";
 import { projectSlug } from "../skills.ts";
 import { parseWorkflow, slugName, workflowTemplate } from "./parse.ts";
+import {
+  getScheduleInfo,
+  removeWorkflowSchedule,
+  scheduleInfoFromRow,
+  syncWorkflowSchedule,
+} from "./schedule-sync.ts";
 import { WorkflowError, type WorkflowSummary } from "./types.ts";
 
 export interface WorkflowProject {
@@ -59,6 +66,11 @@ export async function listWorkflows(project: WorkflowProject): Promise<WorkflowS
     return [];
   }
 
+  const scheduleRows = await listWorkflowSchedules(project.id);
+  const schedules = new Map(
+    scheduleRows.map((row) => [row.workflow_slug, scheduleInfoFromRow(row)]),
+  );
+
   for (const entry of entries) {
     if (!entry.isFile) continue;
     if (!/\.(ya?ml)$/i.test(entry.name)) continue;
@@ -84,6 +96,7 @@ export async function listWorkflows(project: WorkflowProject): Promise<WorkflowS
         source,
         updatedAt,
         stepCount: definition.steps.length,
+        schedule: schedules.get(slug),
       });
     } catch (error) {
       summaries.push({
@@ -93,6 +106,7 @@ export async function listWorkflows(project: WorkflowProject): Promise<WorkflowS
         source,
         updatedAt,
         stepCount: 0,
+        schedule: schedules.get(slug),
         error: (error as Error).message,
       });
     }
@@ -131,6 +145,7 @@ export async function createWorkflow(
     throw new WorkflowError(`Workflow "${clean}" sudah ada.`);
   }
   const definition = parseWorkflow(content, clean);
+  const schedule = await syncWorkflowSchedule(project.id, clean, definition);
   return {
     slug: clean,
     name: definition.name,
@@ -138,6 +153,7 @@ export async function createWorkflow(
     path: file,
     source,
     stepCount: definition.steps.length,
+    schedule,
   };
 }
 
@@ -153,6 +169,7 @@ export async function saveWorkflow(
   if (!stat?.isFile) throw new WorkflowError("Workflow tidak ditemukan.");
   const definition = parseWorkflow(yaml, clean);
   await Deno.writeTextFile(file, yaml);
+  const schedule = await syncWorkflowSchedule(project.id, clean, definition);
   return {
     slug: clean,
     name: definition.name,
@@ -160,6 +177,7 @@ export async function saveWorkflow(
     path: file,
     source,
     stepCount: definition.steps.length,
+    schedule,
   };
 }
 
@@ -169,7 +187,10 @@ export async function deleteWorkflow(project: WorkflowProject, slug: string): Pr
   const stat = await Deno.stat(file).catch(() => null);
   if (!stat?.isFile) throw new WorkflowError("Workflow tidak ditemukan.");
   await Deno.remove(file);
+  await removeWorkflowSchedule(project.id, slug);
 }
+
+export { getScheduleInfo };
 
 export function workflowSlug(name: string): string {
   return slugName(name);
