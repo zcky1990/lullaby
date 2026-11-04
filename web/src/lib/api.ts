@@ -894,6 +894,11 @@ export const api = {
       `/api/projects/${projectId}/workflow-runs/${encodeURIComponent(runId)}/cancel`,
       { method: "POST" },
     ),
+  deleteWorkflowRun: (projectId: string, runId: string) =>
+    request<{ ok: boolean }>(
+      `/api/projects/${projectId}/workflow-runs/${encodeURIComponent(runId)}`,
+      { method: "DELETE" },
+    ),
   gitStatus: (projectId: string) =>
     request<{ status: GitStatus }>(`/api/projects/${projectId}/git/status`),
   gitBranches: (projectId: string) =>

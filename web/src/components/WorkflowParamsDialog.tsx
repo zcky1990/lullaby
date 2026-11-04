@@ -106,7 +106,7 @@ export function WorkflowParamsDialog({
                           [param.name]: event.target.value,
                         }))}
                       className={cn(
-                        "border-input placeholder:text-muted-foreground flex w-full rounded-md border bg-transparent px-3 py-2 text-sm shadow-xs outline-none",
+                        "border-input placeholder:text-muted-foreground flex w-full rounded-md border bg-transparent px-3 py-2 text-xs shadow-xs outline-none",
                         "focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]",
                         "disabled:cursor-not-allowed disabled:opacity-50",
                       )}

@@ -118,7 +118,7 @@ export function RichTextEditor({ value, onChange, placeholder, disabled, classNa
           onPaste={onPaste}
           suppressContentEditableWarning
           className={cn(
-            "min-h-28 w-full px-3 py-2 text-sm outline-none",
+            "min-h-28 w-full px-3 py-2 text-xs outline-none",
             "[&_p]:mb-2 last:[&_p]:mb-0 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5",
             "[&_h1]:mb-1 [&_h1]:text-lg [&_h1]:font-semibold [&_h2]:mb-1 [&_h2]:text-base [&_h2]:font-semibold",
             "[&_h3]:mb-1 [&_h3]:font-semibold [&_blockquote]:border-l-2 [&_blockquote]:pl-3",
@@ -128,7 +128,7 @@ export function RichTextEditor({ value, onChange, placeholder, disabled, classNa
           )}
         />
         {!value ? (
-          <span className="pointer-events-none absolute inset-x-0 top-0 px-3 py-2 text-sm text-muted-foreground">
+          <span className="pointer-events-none absolute inset-x-0 top-0 px-3 py-2 text-xs text-muted-foreground">
             {placeholder}
           </span>
         ) : null}

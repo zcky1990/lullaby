@@ -107,7 +107,7 @@ export function WorkflowPanel({
               title={workflow.path}
             >
               <div className="flex w-full items-center gap-2">
-                <span className="min-w-0 flex-1 truncate text-sm">
+                <span className="min-w-0 flex-1 truncate text-xs">
                   {workflow.name}
                 </span>
                 {workflow.lastRun
@@ -130,7 +130,7 @@ export function WorkflowPanel({
         </div>
 
         <div className="flex flex-col gap-1">
-          <span className="px-2 text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">
+          <span className="px-2 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
             Recent runs
           </span>
           {runs.length === 0

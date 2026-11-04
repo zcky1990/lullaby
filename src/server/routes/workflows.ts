@@ -4,6 +4,7 @@ import {
   WorkflowSaveInput,
 } from "../../config/schema.ts";
 import {
+  deleteWorkflowRun,
   getProject,
   getWorkflowRun,
   listWorkflowRuns,
@@ -251,5 +252,22 @@ export async function cancelWorkflowRunHandler(
   const canceled = await cancelWorkflowRun(runId);
   if (!canceled) return json({ error: "run_not_active" }, 400);
   await record("workflow.run.cancel_requested", { projectId, runId });
+  return json({ ok: true });
+}
+
+export async function deleteWorkflowRunHandler(
+  projectId: string,
+  runId: string,
+): Promise<Response> {
+  const run = await getWorkflowRun(runId);
+  if (!run || run.project_id !== projectId) {
+    return json({ error: "run_not_found" }, 404);
+  }
+  if (run.status === "running") {
+    cancelWorkflowRun(runId);
+  }
+  const deleted = await deleteWorkflowRun(runId);
+  if (!deleted) return json({ error: "run_not_found" }, 404);
+  await record("workflow.run.deleted", { projectId, runId, slug: run.workflow_slug });
   return json({ ok: true });
 }

@@ -1396,8 +1396,8 @@ function WorkspaceOverview({
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="text-xl font-semibold">{project.name}</h1>
-        <p className="text-sm text-muted-foreground">
+        <h1 className="text-sm font-semibold">{project.name}</h1>
+        <p className="text-xs text-muted-foreground">
           Workspace: {project.workspace_path ?? "—"}
         </p>
       </div>
@@ -1409,7 +1409,7 @@ function WorkspaceOverview({
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Mulai dari sini</CardTitle>
+          <CardTitle className="text-xs">Mulai dari sini</CardTitle>
           <CardDescription>
             Set workspace folder di <span className="font-medium">Settings → Workspace</span> agar
             menu <span className="font-medium">Explorer</span> aktif.
@@ -1544,9 +1544,9 @@ function FileTab({
   }, [projectId, workspacePath, path, reportLspStatus]);
 
   if (tab.loading) return <Skeleton className="h-full w-full rounded-none" />;
-  if (tab.error) return <p className="p-6 text-sm text-destructive">{tab.error}</p>;
+  if (tab.error) return <p className="p-6 text-xs text-destructive">{tab.error}</p>;
   if (tab.binary) {
-    return <p className="p-6 text-sm text-muted-foreground">File biner (tidak ditampilkan).</p>;
+    return <p className="p-6 text-xs text-muted-foreground">File biner (tidak ditampilkan).</p>;
   }
 
   const save = async () => {
@@ -1736,7 +1736,7 @@ function DocumentTab({
       </div>
     );
   }
-  if (tab.error) return <p className="p-8 text-sm text-destructive">{tab.error}</p>;
+  if (tab.error) return <p className="p-8 text-xs text-destructive">{tab.error}</p>;
 
   return (
     <div className="flex h-full flex-col">
@@ -1750,7 +1750,7 @@ function DocumentTab({
           />
         ) : (
           <div className="flex min-w-0 items-center gap-2">
-            <h1 className="truncate text-base font-semibold">{tab.title}</h1>
+            <h1 className="truncate text-xs font-semibold">{tab.title}</h1>
             {isLocal ? (
               <Badge
                 variant={

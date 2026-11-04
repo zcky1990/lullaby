@@ -567,7 +567,7 @@ export function GitTab({
                   onAll={() => stage(untracked.map((file) => file.path), false)}
                 />
                 {status?.clean ? (
-                  <p className="px-3 py-6 text-center text-sm text-muted-foreground">
+                  <p className="px-3 py-6 text-center text-xs text-muted-foreground">
                     Working tree clean — tidak ada perubahan.
                   </p>
                 ) : null}
@@ -578,7 +578,7 @@ export function GitTab({
                   onChange={(event) => setMessage(event.target.value)}
                   rows={3}
                   placeholder="Commit message…"
-                  className="border-input focus-visible:border-ring focus-visible:ring-ring/50 w-full resize-none rounded-md border bg-background px-3 py-2 text-sm shadow-xs outline-none focus-visible:ring-[3px]"
+                  className="border-input focus-visible:border-ring focus-visible:ring-ring/50 w-full resize-none rounded-md border bg-background px-3 py-2 text-xs shadow-xs outline-none focus-visible:ring-[3px]"
                 />
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-xs text-muted-foreground">
@@ -599,7 +599,7 @@ export function GitTab({
           ) : (
             <div className="min-h-0 flex-1 overflow-y-auto">
               {commits.length === 0 ? (
-                <p className="px-3 py-6 text-center text-sm text-muted-foreground">
+                <p className="px-3 py-6 text-center text-xs text-muted-foreground">
                   Belum ada commit.
                 </p>
               ) : (
@@ -619,7 +619,7 @@ export function GitTab({
                         <span className="font-mono text-[10px] text-muted-foreground">
                           {commit.short}
                         </span>
-                        <span className="min-w-0 flex-1 truncate text-sm">{commit.subject}</span>
+                        <span className="min-w-0 flex-1 truncate text-xs">{commit.subject}</span>
                         {commit.refs ? (
                           <Badge variant="secondary" className="h-5 max-w-40 truncate text-[10px]">
                             {commit.refs}
@@ -680,7 +680,7 @@ export function GitTab({
                 ) : selected ? (
                   <GitDiffView diff={diff} />
                 ) : (
-                  <p className="p-6 text-center text-sm text-muted-foreground">
+                  <p className="p-6 text-center text-xs text-muted-foreground">
                     Tidak ada file terpilih.
                   </p>
                 )}
@@ -695,7 +695,7 @@ export function GitTab({
                       <Badge variant="outline" className="font-mono text-[10px]">
                         {commitDetail.short}
                       </Badge>
-                      <span className="min-w-0 flex-1 text-sm font-medium">
+                      <span className="min-w-0 flex-1 text-xs font-medium">
                         {commitDetail.subject}
                       </span>
                     </div>
@@ -726,7 +726,7 @@ export function GitTab({
                 ) : commitDetail?.diff ? (
                   <GitDiffView diff={commitDetail.diff} />
                 ) : (
-                  <p className="p-6 text-center text-sm text-muted-foreground">
+                  <p className="p-6 text-center text-xs text-muted-foreground">
                     Tidak ada patch untuk commit ini.
                   </p>
                 )}

@@ -27,10 +27,10 @@ export function LlmProvidersSettings({
       <div className="flex flex-col gap-2">
         <div className="flex items-center justify-between">
           <div className="flex flex-col gap-1">
-            <h2 className="text-sm font-medium tracking-wider text-muted-foreground uppercase">
+            <h2 className="text-xs font-medium tracking-wider text-muted-foreground uppercase">
               LLM Providers
             </h2>
-            <p className="text-sm text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               Provider LLM global, dipakai semua project (chat dan generate ticket).
             </p>
           </div>
@@ -48,7 +48,7 @@ export function LlmProvidersSettings({
       </div>
 
       {providers.length === 0 && !addingProvider ? (
-        <p className="text-sm text-muted-foreground">
+        <p className="text-xs text-muted-foreground">
           Belum ada provider LLM. Tambahkan minimal satu untuk chat dan generate ticket.
         </p>
       ) : null}

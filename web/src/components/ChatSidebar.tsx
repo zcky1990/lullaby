@@ -876,7 +876,7 @@ export function ChatSidebar({
       {dragging
         ? (
           <div className="pointer-events-none absolute inset-2 z-10 flex items-center justify-center rounded-lg border-2 border-dashed border-primary/60 bg-background/85">
-            <p className="text-sm font-medium">Lepaskan file di sini</p>
+            <p className="text-xs font-medium">Lepaskan file di sini</p>
           </div>
         )
         : null}
@@ -1002,7 +1002,7 @@ export function ChatSidebar({
               ))}
               {sending
                 ? (
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
                     <Spinner />
                     Bekerja…
                   </div>

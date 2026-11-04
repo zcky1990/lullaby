@@ -59,10 +59,10 @@ export function TerminalSettings() {
   return (
     <section className="flex w-full flex-col gap-4">
       <div className="flex flex-col gap-2">
-        <h2 className="text-sm font-medium tracking-wider text-muted-foreground uppercase">
+        <h2 className="text-xs font-medium tracking-wider text-muted-foreground uppercase">
           Terminal
         </h2>
-        <p className="text-sm text-muted-foreground">
+        <p className="text-xs text-muted-foreground">
           Shell default untuk session terminal baru. Bisa diganti per session di panel Terminal
           sebelum menekan +.
         </p>
@@ -70,14 +70,14 @@ export function TerminalSettings() {
       </div>
 
       {loading ? (
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <Spinner />
           Memuat…
         </div>
       ) : (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border p-4">
           <div className="flex min-w-0 flex-col gap-1">
-            <span className="text-sm font-medium">Default shell</span>
+            <span className="text-xs font-medium">Default shell</span>
             <span className="text-xs text-muted-foreground">
               Disimpan di global settings. Session yang sudah terbuka tidak berubah.
             </span>

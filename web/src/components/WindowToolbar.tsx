@@ -17,7 +17,7 @@ export function WindowToolbar({ projectName, workspace, chatOpen, onToggleChat }
           <Sparkles className="size-4" />
         </div>
         <div className="flex min-w-0 flex-col">
-          <span className="truncate text-[13px] font-semibold tracking-tight">
+          <span className="truncate text-xs font-semibold tracking-tight">
             {projectName ?? "Lullaby IDE"}
           </span>
           <span className="truncate text-[10px] text-muted-foreground">

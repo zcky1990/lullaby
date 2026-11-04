@@ -1160,6 +1160,12 @@ export async function listWorkflowRuns(
   );
 }
 
+export async function deleteWorkflowRun(id: string): Promise<boolean> {
+  const db = await getDb();
+  const result = db.prepare("DELETE FROM workflow_runs WHERE id = ?").run(id);
+  return Number(result.changes ?? 0) > 0;
+}
+
 export async function createWorkflowRunStep(
   runId: string,
   stepId: string,

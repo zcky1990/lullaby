@@ -77,7 +77,7 @@ export function GitPanel({
       {error ? (
         <div className="flex flex-col gap-1 px-3 pb-3">
           <p className="text-xs text-destructive">{error}</p>
-          <p className="text-[11px] text-muted-foreground">
+          <p className="text-xs text-muted-foreground">
             Pastikan git terpasang dan workspace menunjuk ke folder di dalam repository (bukan
             folder induk).
           </p>
@@ -105,9 +105,9 @@ export function GitPanel({
               ) : null}
             </div>
             {status?.clean ? (
-              <p className="mt-1 text-[11px] text-muted-foreground">Working tree clean</p>
+              <p className="mt-1 text-xs text-muted-foreground">Working tree clean</p>
             ) : status ? (
-              <p className="mt-1 text-[11px] text-muted-foreground">
+              <p className="mt-1 text-xs text-muted-foreground">
                 {status.staged.length} staged · {status.unstaged.length} unstaged ·{" "}
                 {status.untracked.length} untracked
               </p>
@@ -129,7 +129,7 @@ export function GitPanel({
                       if (confirm(`Checkout branch "${branch.name}"?`)) onCheckout(branch.name);
                     }}
                     className={cn(
-                      "flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-sm transition-colors hover:bg-accent",
+                      "flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-xs transition-colors hover:bg-accent",
                       branch.current && "bg-accent",
                     )}
                     title={branch.current ? "Branch aktif" : `Checkout ${branch.name}`}
@@ -202,7 +202,7 @@ export function GitPanel({
                                 onCheckout(branch.name);
                               }
                             }}
-                            className="flex w-full items-center gap-2 rounded-md py-1 pr-2 pl-7 text-left text-sm transition-colors hover:bg-accent"
+                            className="flex w-full items-center gap-2 rounded-md py-1 pr-2 pl-7 text-left text-xs transition-colors hover:bg-accent"
                             title={`Checkout ${branch.name}`}
                           >
                             <GitBranchIcon className="size-3.5 shrink-0 text-muted-foreground" />
@@ -242,7 +242,7 @@ export function GitPanel({
                     >
                       <div className="flex items-center gap-2">
                         <Archive className="size-3.5 shrink-0 text-muted-foreground" />
-                        <span className="font-mono text-[11px] text-muted-foreground">
+                        <span className="font-mono text-xs text-muted-foreground">
                           {stash.label}
                         </span>
                       </div>

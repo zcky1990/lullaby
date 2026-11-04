@@ -213,7 +213,7 @@ export function FileTreePanel({ projectId, selectedPath, onOpenFile }: Props) {
             ref={createInputRef}
             value={createName}
             disabled={createBusy}
-            className="h-7 text-sm"
+            className="h-7 text-xs"
             aria-label={creating.kind === "dir" ? "Nama folder baru" : "Nama file baru"}
             onChange={(event) => setCreateName(event.target.value)}
             onKeyDown={(event) => {
@@ -265,7 +265,7 @@ export function FileTreePanel({ projectId, selectedPath, onOpenFile }: Props) {
               }}
               style={{ paddingLeft: depth * 12 + 8 }}
               className={cn(
-                "flex w-full items-center gap-1.5 rounded-md py-1 pr-2 text-left text-sm transition-colors hover:bg-accent",
+                "flex w-full items-center gap-1.5 rounded-md py-1 pr-2 text-left text-xs transition-colors hover:bg-accent",
                 (entry.path === selectedPath || focused) && "bg-accent",
               )}
               title={entry.name}
@@ -340,14 +340,14 @@ export function FileTreePanel({ projectId, selectedPath, onOpenFile }: Props) {
           </Button>
         </div>
       </div>
-      <div className="flex-1 overflow-y-auto px-2 pb-2">
-        {!configured && <p className="px-2 py-4 text-sm text-muted-foreground">Workspace belum diset.</p>}
-        {configured && error && <p className="px-2 py-2 text-sm text-destructive">{error}</p>}
+      <div className="flex-1 overflow-y-auto px-2 pb-2 text-xs">
+        {!configured && <p className="px-2 py-4 text-xs text-muted-foreground">Workspace belum diset.</p>}
+        {configured && error && <p className="px-2 py-2 text-xs text-destructive">{error}</p>}
         {configured && !error && rootEntries.length === 0 && !loading && !creating && (
-          <p className="px-2 py-4 text-sm text-muted-foreground">Folder kosong.</p>
+          <p className="px-2 py-4 text-xs text-muted-foreground">Folder kosong.</p>
         )}
         {configured && loading && (
-          <div className="flex items-center gap-2 px-2 py-4 text-sm text-muted-foreground">
+          <div className="flex items-center gap-2 px-2 py-4 text-xs text-muted-foreground">
             <Spinner />
             Memuat file…
           </div>

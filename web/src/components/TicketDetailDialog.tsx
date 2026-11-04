@@ -262,15 +262,15 @@ export function TicketDetailDialog({
 
         <div className="min-h-0 flex-1 overflow-y-auto px-6 py-4">
           {loading ? (
-            <div className="flex items-center gap-2 py-8 text-sm text-muted-foreground">
+            <div className="flex items-center gap-2 py-8 text-xs text-muted-foreground">
               <Spinner />
               Memuat detail tiket…
             </div>
           ) : null}
-          {error ? <p className="text-sm text-destructive">{error}</p> : null}
+          {error ? <p className="text-xs text-destructive">{error}</p> : null}
 
           {ticket && !loading && !error && editing ? (
-            <div className="flex flex-col gap-4 text-sm">
+            <div className="flex flex-col gap-4 text-xs">
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="ticket-edit-title">Judul</Label>
                 <Input
@@ -351,7 +351,7 @@ export function TicketDetailDialog({
           ) : null}
 
           {ticket && !loading && !error && !editing ? (
-            <div className="flex flex-col gap-5 text-sm">
+            <div className="flex flex-col gap-5 text-xs">
               {(ticket.syncError || syncError || actionError) ? (
                 <div className="flex flex-col gap-1">
                   {ticket.syncError ? (
@@ -398,12 +398,12 @@ export function TicketDetailDialog({
                       dangerouslySetInnerHTML={{ __html: sanitizeHtml(ticket.description) }}
                     />
                   ) : (
-                    <pre className="max-h-[min(50vh,420px)] overflow-auto rounded-lg border bg-muted/30 p-4 font-sans text-sm leading-relaxed whitespace-pre-wrap">
+                    <pre className="max-h-[min(50vh,420px)] overflow-auto rounded-lg border bg-muted/30 p-4 font-sans text-xs leading-relaxed whitespace-pre-wrap">
                       {ticket.description}
                     </pre>
                   )
                 ) : (
-                  <p className="rounded-lg border border-dashed px-4 py-6 text-center text-sm text-muted-foreground">
+                  <p className="rounded-lg border border-dashed px-4 py-6 text-center text-xs text-muted-foreground">
                     Tidak ada deskripsi
                   </p>
                 )}

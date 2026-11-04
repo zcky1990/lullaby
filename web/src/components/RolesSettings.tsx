@@ -44,10 +44,10 @@ export function RolesSettings({
       <div className="flex flex-col gap-2">
         <div className="flex items-center justify-between">
           <div className="flex flex-col gap-1">
-            <h2 className="text-sm font-medium tracking-wider text-muted-foreground uppercase">
+            <h2 className="text-xs font-medium tracking-wider text-muted-foreground uppercase">
               Roles
             </h2>
-            <p className="text-sm text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               Role menentukan persona dan provider LLM yang dipakai otomatis saat chat.
             </p>
           </div>
@@ -65,7 +65,7 @@ export function RolesSettings({
       </div>
 
       {roles.length === 0 && !addingRole ? (
-        <p className="text-sm text-muted-foreground">
+        <p className="text-xs text-muted-foreground">
           Belum ada role. Tambahkan role untuk persona + provider khusus.
         </p>
       ) : null}
@@ -202,7 +202,7 @@ function RoleForm({
           onChange={(event) => setPersona(event.target.value)}
           rows={7}
           placeholder="Kamu adalah senior backend engineer. Selalu pertimbangkan performa, keamanan, dan test…"
-          className="border-input focus-visible:border-ring focus-visible:ring-ring/50 w-full resize-none rounded-md border bg-transparent px-3 py-2 text-sm shadow-xs outline-none focus-visible:ring-[3px]"
+          className="border-input focus-visible:border-ring focus-visible:ring-ring/50 w-full resize-none rounded-md border bg-transparent px-3 py-2 text-xs shadow-xs outline-none focus-visible:ring-[3px]"
         />
       </div>
       <div className="flex flex-col gap-1.5">

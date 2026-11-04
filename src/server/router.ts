@@ -159,6 +159,7 @@ import {
   cancelWorkflowRunHandler,
   createWorkflowHandler,
   deleteWorkflowHandler,
+  deleteWorkflowRunHandler,
   getWorkflowHandler,
   getWorkflowRunHandler,
   listWorkflowRunsHandler,
@@ -1608,8 +1609,13 @@ export async function handleRequest(req: Request): Promise<Response> {
     const workflowRunItem = pathname.match(
       /^\/api\/projects\/([^/]+)\/workflow-runs\/([^/]+)$/,
     );
-    if (workflowRunItem && method === "GET") {
-      return await getWorkflowRunHandler(workflowRunItem[1], workflowRunItem[2]);
+    if (workflowRunItem) {
+      if (method === "GET") {
+        return await getWorkflowRunHandler(workflowRunItem[1], workflowRunItem[2]);
+      }
+      if (method === "DELETE") {
+        return await deleteWorkflowRunHandler(workflowRunItem[1], workflowRunItem[2]);
+      }
     }
 
     const gitStatus = pathname.match(/^\/api\/projects\/([^/]+)\/git\/status$/);

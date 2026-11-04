@@ -225,11 +225,11 @@ export function LspSettingsPanel() {
   return (
     <section className="flex w-full flex-col gap-4">
       <div className="flex flex-col gap-2">
-        <h2 className="flex items-center gap-2 text-sm font-medium tracking-wider text-muted-foreground uppercase">
+        <h2 className="flex items-center gap-2 text-xs font-medium tracking-wider text-muted-foreground uppercase">
           <ServerCog className="size-4" />
           Language Servers
         </h2>
-        <p className="max-w-3xl text-sm text-muted-foreground">
+        <p className="max-w-3xl text-xs text-muted-foreground">
           Hubungkan Monaco ke language server (LSP) untuk diagnostics, completion, hover, go to
           definition, references, rename, dan formatting. Server dijalankan lokal dengan hak user.
           Language server <span className="font-medium text-foreground">tidak di-bundle</span> —
@@ -239,7 +239,7 @@ export function LspSettingsPanel() {
       </div>
 
       {loading ? (
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <Spinner />
           Memuat konfigurasi LSP…
         </div>
@@ -247,7 +247,7 @@ export function LspSettingsPanel() {
         <>
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border p-4">
             <div className="flex min-w-0 flex-col gap-1">
-              <span className="text-sm font-medium">Aktifkan LSP</span>
+              <span className="text-xs font-medium">Aktifkan LSP</span>
               <span className="text-xs text-muted-foreground">
                 {enabledCount} server aktif. Setelah disimpan, tab file terbuka reconnect otomatis.
               </span>
@@ -310,7 +310,7 @@ export function LspSettingsPanel() {
           </div>
 
           {settings.servers.length === 0 ? (
-            <p className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
+            <p className="rounded-md border border-dashed p-4 text-xs text-muted-foreground">
               Belum ada language server. Tambahkan preset, lalu sesuaikan command/args bila perlu.
             </p>
           ) : (

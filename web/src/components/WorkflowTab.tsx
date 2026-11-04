@@ -236,6 +236,28 @@ export function WorkflowTab({ projectId, slug, onSaved, onDeleted }: Props) {
     }
   };
 
+  const removeRun = async (runId: string) => {
+    if (!projectId) return;
+    if (!confirm("Hapus run ini dari riwayat?")) return;
+    setError(undefined);
+    try {
+      await api.deleteWorkflowRun(projectId, runId);
+      const nextRuns = await refreshRuns();
+      if (selectedRunId === runId) {
+        const latest = nextRuns?.[0];
+        if (latest) await loadRun(latest.id);
+        else {
+          setSelectedRunId(null);
+          setSteps([]);
+          setSelectedStep(definition?.steps[0]?.id ?? null);
+        }
+      }
+      onSaved();
+    } catch (e) {
+      setError(formatApiError(e));
+    }
+  };
+
   const save = useCallback(async () => {
     if (!projectId || !slug || saving || !dirty) return;
     setSaving(true);
@@ -383,7 +405,7 @@ export function WorkflowTab({ projectId, slug, onSaved, onDeleted }: Props) {
 
   if (!slug) {
     return (
-      <div className="flex h-full items-center justify-center p-8 text-sm text-muted-foreground">
+      <div className="flex h-full items-center justify-center p-8 text-xs text-muted-foreground">
         Pilih workflow di panel kiri atau buat workflow baru.
       </div>
     );
@@ -403,7 +425,7 @@ export function WorkflowTab({ projectId, slug, onSaved, onDeleted }: Props) {
       <div className="flex h-[35px] shrink-0 items-center justify-between gap-2 border-b px-3">
         <div className="flex min-w-0 items-center gap-2">
           <GitBranch className="size-4 shrink-0 text-muted-foreground" />
-          <span className="truncate text-sm font-medium">
+          <span className="truncate text-xs font-medium">
             {summary?.name ?? slug}
           </span>
           <span className="truncate font-mono text-[10px] text-muted-foreground">
@@ -590,25 +612,42 @@ export function WorkflowTab({ projectId, slug, onSaved, onDeleted }: Props) {
             )
             : (
               runs.map((run) => (
-                <button
+                <div
                   key={run.id}
-                  type="button"
-                  onClick={() => void loadRun(run.id)}
                   className={cn(
-                    "flex items-center gap-2 border-b px-3 py-1.5 text-left text-[11px] hover:bg-accent",
+                    "flex items-center gap-1 border-b px-2 py-1 text-[11px] hover:bg-accent",
                     run.id === selectedRunId && "bg-accent",
                   )}
                 >
-                  <span className="min-w-0 flex-1 truncate font-mono">
-                    {run.id.slice(0, 8)}
-                  </span>
-                  <Badge
-                    variant={runBadgeVariant(run.status)}
-                    className="h-5 px-1.5 text-[10px]"
+                  <button
+                    type="button"
+                    onClick={() => void loadRun(run.id)}
+                    className="flex min-w-0 flex-1 items-center gap-2 px-1 py-0.5 text-left"
                   >
-                    {run.status}
-                  </Badge>
-                </button>
+                    <span className="min-w-0 flex-1 truncate font-mono">
+                      {run.id.slice(0, 8)}
+                    </span>
+                    <Badge
+                      variant={runBadgeVariant(run.status)}
+                      className="h-5 px-1.5 text-[10px]"
+                    >
+                      {run.status}
+                    </Badge>
+                  </button>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="size-6 shrink-0 text-muted-foreground hover:text-destructive"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      void removeRun(run.id);
+                    }}
+                    aria-label={`Hapus run ${run.id.slice(0, 8)}`}
+                    title="Hapus run"
+                  >
+                    <Trash2 className="size-3" />
+                  </Button>
+                </div>
               ))
             )}
 

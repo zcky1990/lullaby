@@ -100,7 +100,7 @@ export function TicketKanban({ tickets, onMove, onOpenDetail, onError }: Props) 
             className="bg-muted/25 flex h-full w-72 shrink-0 flex-col overflow-hidden rounded-lg border"
           >
             <div className="flex items-center justify-between gap-2 border-b px-3 py-2.5">
-              <span className="truncate text-sm font-semibold">{status}</span>
+              <span className="truncate text-xs font-semibold">{status}</span>
               <Badge variant="secondary" className="tabular-nums">
                 {items.length}
               </Badge>
@@ -148,7 +148,7 @@ export function TicketKanban({ tickets, onMove, onOpenDetail, onError }: Props) 
                           ) : null}
                         </div>
                       </div>
-                      <p className="line-clamp-3 text-sm leading-snug font-medium">
+                      <p className="line-clamp-3 text-xs leading-snug font-medium">
                         {ticket.summary}
                       </p>
                       <div className="flex items-center justify-between gap-2 text-[11px] text-muted-foreground">

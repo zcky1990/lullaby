@@ -107,7 +107,7 @@ export function FindTab({ projectId, onOpenFile }: Props) {
             </Button>
           </div>
         </div>
-        <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+        <div className="flex items-center justify-between text-xs text-muted-foreground">
           <span>
             {loading
               ? "Mencari…"
@@ -122,15 +122,15 @@ export function FindTab({ projectId, onOpenFile }: Props) {
 
       <div className="min-h-0 flex-1 overflow-y-auto px-2 py-2">
         {!projectId ? (
-          <p className="p-3 text-sm text-muted-foreground">Pilih project dengan workspace dulu.</p>
+          <p className="p-3 text-xs text-muted-foreground">Pilih project dengan workspace dulu.</p>
         ) : error ? (
-          <p className="p-3 text-sm text-destructive">{error}</p>
+          <p className="p-3 text-xs text-destructive">{error}</p>
         ) : !result ? (
-          <p className="p-3 text-sm text-muted-foreground">
+          <p className="p-3 text-xs text-muted-foreground">
             Cari teks di seluruh file workspace. Klik hasil untuk membuka file pada baris tersebut.
           </p>
         ) : total === 0 ? (
-          <p className="p-3 text-sm text-muted-foreground">Tidak ada hasil.</p>
+          <p className="p-3 text-xs text-muted-foreground">Tidak ada hasil.</p>
         ) : (
           <div className="flex flex-col gap-3">
             {groups.map((group) => (

@@ -42,10 +42,10 @@ export function PromptsSettings() {
   return (
     <section className="flex w-full flex-col gap-4">
       <div className="flex flex-col gap-2">
-        <h2 className="text-sm font-medium tracking-wider text-muted-foreground uppercase">
+        <h2 className="text-xs font-medium tracking-wider text-muted-foreground uppercase">
           Prompts
         </h2>
-        <p className="text-sm text-muted-foreground">
+        <p className="text-xs text-muted-foreground">
           Override system prompt global untuk mode Build dan Plan. Persona role (jika aktif) tetap
           ditambahkan di atas prompt ini.
         </p>
@@ -53,7 +53,7 @@ export function PromptsSettings() {
       </div>
 
       {loading ? (
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <Spinner />
           Memuat prompts…
         </div>

@@ -180,10 +180,10 @@ function Section({
   return (
     <section className="flex flex-col gap-4">
       <div className="flex flex-col gap-2">
-        <h2 className="text-sm font-medium tracking-wider text-muted-foreground uppercase">
+        <h2 className="text-xs font-medium tracking-wider text-muted-foreground uppercase">
           {title}
         </h2>
-        {description ? <p className="text-sm text-muted-foreground">{description}</p> : null}
+        {description ? <p className="text-xs text-muted-foreground">{description}</p> : null}
         <Separator />
       </div>
       {children}
@@ -443,7 +443,7 @@ function About() {
 
   return (
     <Section title="About">
-      <div className="grid gap-2 text-sm">
+      <div className="grid gap-2 text-xs">
         <Row label="Name" value={health?.name ?? "Lullaby IDE"} />
         <Row label="Version" value={health?.version ?? "—"} />
         <Row label="Data dir" value={health?.dataDir ?? "—"} />
