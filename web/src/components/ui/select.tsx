@@ -21,6 +21,19 @@ function SelectGroup({ className, ...props }: React.ComponentProps<typeof Select
   );
 }
 
+function SelectLabel({
+  className,
+  ...props
+}: React.ComponentProps<typeof SelectPrimitive.Label>) {
+  return (
+    <SelectPrimitive.Label
+      data-slot="select-label"
+      className={cn("text-muted-foreground px-2 py-1.5 text-xs", className)}
+      {...props}
+    />
+  );
+}
+
 function SelectTrigger({
   className,
   size = "default",
@@ -142,6 +155,7 @@ export {
   SelectContent,
   SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectScrollDownButton,
   SelectScrollUpButton,
   SelectTrigger,

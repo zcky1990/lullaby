@@ -1,4 +1,13 @@
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
 import { FileCode2, FileText, Paperclip, Plus, Send, Sparkles, Trash2, X } from "lucide-react";
 import { SkillMentionMenu, type SkillOption } from "@/components/SkillMentionMenu";
 import { Badge } from "@/components/ui/badge";
@@ -8,6 +17,7 @@ import {
   SelectContent,
   SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
@@ -86,6 +96,26 @@ const VARIANTS = [
 const MAX_IMAGE_BYTES = 3 * 1024 * 1024;
 const MAX_TEXT_BYTES = 200_000;
 const MAX_ATTACHMENTS = 6;
+const CHAT_WIDTH_KEY = "rnd.chatWidth:v1";
+const CHAT_MIN_WIDTH = 280;
+const CHAT_MAX_WIDTH = 720;
+const CHAT_DEFAULT_WIDTH = 384;
+const CURSOR_VALUE_SEP = "::";
+
+function readChatWidth(): number {
+  try {
+    const value = Number(localStorage.getItem(CHAT_WIDTH_KEY));
+    if (
+      Number.isFinite(value) && value >= CHAT_MIN_WIDTH && value <= CHAT_MAX_WIDTH
+    ) {
+      return value;
+    }
+  } catch {
+    // ignore
+  }
+  return CHAT_DEFAULT_WIDTH;
+}
+
 const TEXT_FILE =
   /\.(txt|md|markdown|json|jsonc|ts|tsx|js|jsx|mjs|cjs|css|scss|html|xml|yml|yaml|toml|ini|env|rb|py|go|rs|java|kt|swift|php|sh|bash|zsh|sql|csv|log|diff|patch)$/i;
 
@@ -152,7 +182,9 @@ export function ChatSidebar({
   hidden,
 }: Props) {
   const [providerId, setProviderId] = useState(providers[0]?.id ?? "");
-  const [cursorModels, setCursorModels] = useState<CursorModel[]>([]);
+  const [cursorModelsByProvider, setCursorModelsByProvider] = useState<
+    Record<string, CursorModel[]>
+  >({});
   const [cursorModelId, setCursorModelId] = useState("");
   const [variant, setVariant] = useState("medium");
   const [roleId, setRoleId] = useState<string | null>(() => {
@@ -174,6 +206,8 @@ export function ChatSidebar({
   const [entries, setEntries] = useState<Entry[]>([]);
   const [attachments, setAttachments] = useState<AttachmentDraft[]>([]);
   const [dragging, setDragging] = useState(false);
+  const [resizing, setResizing] = useState(false);
+  const [width, setWidth] = useState(readChatWidth);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | undefined>();
@@ -188,6 +222,39 @@ export function ChatSidebar({
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(CHAT_WIDTH_KEY, String(width));
+    } catch {
+      // ignore
+    }
+  }, [width]);
+
+  const startResize = (event: ReactPointerEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    const startX = event.clientX;
+    const startWidth = width;
+    setResizing(true);
+    const onMove = (moveEvent: PointerEvent) => {
+      const next = Math.min(
+        CHAT_MAX_WIDTH,
+        Math.max(CHAT_MIN_WIDTH, startWidth + (startX - moveEvent.clientX)),
+      );
+      setWidth(next);
+    };
+    const onUp = () => {
+      setResizing(false);
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      document.body.style.userSelect = "";
+      document.body.style.cursor = "";
+    };
+    document.body.style.userSelect = "none";
+    document.body.style.cursor = "col-resize";
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+  };
 
   const enabledSkills = useMemo(
     () => skills.filter((skill) => skill.enabled).map((skill) => ({
@@ -216,34 +283,73 @@ export function ChatSidebar({
   }, [providers, providerId]);
 
   const activeProvider = providers.find((provider) => provider.id === providerId) ?? null;
+  const cursorModels = activeProvider?.provider === "cursor"
+    ? (cursorModelsByProvider[activeProvider.id] ?? activeProvider.models ?? [])
+    : [];
+
+  const providerSelectValue = activeProvider?.provider === "cursor" && cursorModelId
+    ? `${providerId}${CURSOR_VALUE_SEP}${cursorModelId}`
+    : providerId;
+
+  const selectProviderValue = (value: string) => {
+    const sep = value.indexOf(CURSOR_VALUE_SEP);
+    if (sep >= 0) {
+      setProviderId(value.slice(0, sep));
+      setCursorModelId(value.slice(sep + CURSOR_VALUE_SEP.length));
+      return;
+    }
+    setProviderId(value);
+    setCursorModelId("");
+  };
 
   useEffect(() => {
     let cancelled = false;
-    const provider = providers.find((item) => item.id === providerId);
-    if (!provider || provider.provider !== "cursor") {
-      setCursorModels([]);
+    const cursorProviders = providers.filter((provider) => provider.provider === "cursor");
+    if (cursorProviders.length === 0) {
+      setCursorModelsByProvider({});
       setCursorModelId("");
       return;
     }
-    if (provider.models?.length) {
-      setCursorModels(provider.models);
-      return;
+
+    const next: Record<string, CursorModel[]> = {};
+    for (const provider of cursorProviders) {
+      if (provider.models?.length) next[provider.id] = provider.models;
     }
-    api
-      .listCursorModels({ providerId: provider.id })
-      .then((res) => {
-        if (!cancelled) setCursorModels(res.models);
-      })
-      .catch(() => {
-        if (!cancelled) setCursorModels([]);
-      });
+    setCursorModelsByProvider((current) => ({ ...current, ...next }));
+
+    void Promise.all(
+      cursorProviders
+        .filter((provider) => !provider.models?.length)
+        .map(async (provider) => {
+          try {
+            const res = await api.listCursorModels({ providerId: provider.id });
+            if (!cancelled) {
+              setCursorModelsByProvider((current) => ({
+                ...current,
+                [provider.id]: res.models,
+              }));
+            }
+          } catch {
+            if (!cancelled) {
+              setCursorModelsByProvider((current) => ({
+                ...current,
+                [provider.id]: current[provider.id] ?? [],
+              }));
+            }
+          }
+        }),
+    );
+
     return () => {
       cancelled = true;
     };
-  }, [providerId, providers]);
+  }, [providers]);
 
   useEffect(() => {
-    if (activeProvider?.provider !== "cursor") return;
+    if (activeProvider?.provider !== "cursor") {
+      setCursorModelId("");
+      return;
+    }
     setCursorModelId((current) => {
       if (current && cursorModels.some((model) => model.id === current)) return current;
       if (
@@ -731,9 +837,11 @@ export function ChatSidebar({
 
   return (
     <aside
+      style={{ width }}
       className={cn(
-        "relative flex w-96 shrink-0 flex-col border-l border-border/50 bg-[var(--sidebar)]/70 backdrop-blur-xl",
+        "relative flex shrink-0 flex-col border-l border-border/50 bg-[var(--sidebar)]/70 backdrop-blur-xl",
         hidden && "hidden",
+        resizing && "select-none",
       )}
       onDragOver={(event) => {
         const types = Array.from(event.dataTransfer.types);
@@ -757,6 +865,14 @@ export function ChatSidebar({
         if (event.dataTransfer.files.length) void handleFiles(Array.from(event.dataTransfer.files));
       }}
     >
+      <div
+        onPointerDown={startResize}
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Resize chat"
+        title="Drag to resize"
+        className="hover:bg-primary/40 absolute inset-y-0 left-0 z-20 w-1 cursor-col-resize transition-colors"
+      />
       {dragging
         ? (
           <div className="pointer-events-none absolute inset-2 z-10 flex items-center justify-center rounded-lg border-2 border-dashed border-primary/60 bg-background/85">
@@ -768,8 +884,8 @@ export function ChatSidebar({
       <div className="flex items-center justify-between gap-3 border-b py-2 max-h-[35px] h-[35px]">
         <div className="flex items-center justify-between gap-1 w-full">
           <Select value={sessionId ?? "new"} onValueChange={selectSession} disabled={!!pending}>
-            <SelectTrigger size="sm" className="min-w-0 flex-1" aria-label="Sesi chat">
-              <SelectValue placeholder="Chat baru" className="text-sm"/>
+            <SelectTrigger size="sm" className="h-7 min-w-0 flex-1 border-0 bg-transparent px-1 text-xs shadow-none focus-visible:ring-0 data-[size=sm]:h-7" aria-label="Sesi chat">
+              <SelectValue placeholder="Chat baru" className="text-xs"/>
             </SelectTrigger>
             <SelectContent>
               <SelectGroup>
@@ -1130,55 +1246,56 @@ export function ChatSidebar({
               </SelectContent>
             </Select>
             <Select
-              value={providerId}
-              onValueChange={setProviderId}
+              value={providerSelectValue}
+              onValueChange={selectProviderValue}
               disabled={providers.length === 0 || !!pending || !!roleProviderId}
             >
               <SelectTrigger
                 size="sm"
                 className="h-7 min-w-0 flex-1 border-0 bg-transparent px-1 text-xs shadow-none focus-visible:ring-0 data-[size=sm]:h-7"
-                aria-label="Pilih provider"
+                aria-label="Pilih provider / model"
                 title={roleProviderId ? "Provider ditentukan oleh role" : undefined}
               >
                 <SelectValue placeholder="Provider" />
               </SelectTrigger>
-              <SelectContent>
-                <SelectGroup>
-                  {providers.map((provider) => (
-                    <SelectItem key={provider.id} value={provider.id}>
-                      {provider.name}
-                      {provider.provider !== "cursor" && provider.model
-                        ? ` · ${provider.model}`
-                        : ""}
-                    </SelectItem>
-                  ))}
-                </SelectGroup>
+              <SelectContent className="min-w-[14rem]">
+                {providers.map((provider) => {
+                  if (provider.provider === "cursor") {
+                    const models = cursorModelsByProvider[provider.id] ??
+                      provider.models ?? [];
+                    return (
+                      <SelectGroup key={provider.id}>
+                        <SelectLabel>{provider.name}</SelectLabel>
+                        {models.length > 0
+                          ? models.map((model) => (
+                            <SelectItem
+                              key={`${provider.id}${CURSOR_VALUE_SEP}${model.id}`}
+                              value={`${provider.id}${CURSOR_VALUE_SEP}${model.id}`}
+                            >
+                              {model.name === model.id
+                                ? model.id
+                                : `${model.name} (${model.id})`}
+                            </SelectItem>
+                          ))
+                          : (
+                            <SelectItem value={provider.id} disabled>
+                              Memuat model…
+                            </SelectItem>
+                          )}
+                      </SelectGroup>
+                    );
+                  }
+                  return (
+                    <SelectGroup key={provider.id}>
+                      <SelectLabel>{provider.name}</SelectLabel>
+                      <SelectItem value={provider.id}>
+                        {provider.model ? provider.model : provider.name}
+                      </SelectItem>
+                    </SelectGroup>
+                  );
+                })}
               </SelectContent>
             </Select>
-            {activeProvider?.provider === "cursor" ? (
-              <Select
-                value={cursorModelId}
-                onValueChange={setCursorModelId}
-                disabled={!!pending || cursorModels.length === 0}
-              >
-                <SelectTrigger
-                  size="sm"
-                  className="h-7 w-36 shrink-0 border-0 bg-transparent px-1 text-xs shadow-none focus-visible:ring-0 data-[size=sm]:h-7"
-                  aria-label="Pilih model Cursor"
-                >
-                  <SelectValue placeholder="Model Cursor" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectGroup>
-                    {cursorModels.map((model) => (
-                      <SelectItem key={model.id} value={model.id}>
-                        {model.name === model.id ? model.id : `${model.name} (${model.id})`}
-                      </SelectItem>
-                    ))}
-                  </SelectGroup>
-                </SelectContent>
-              </Select>
-            ) : null}
             <Select value={variant} onValueChange={setVariant} disabled={!!pending}>
               <SelectTrigger
                 size="sm"
