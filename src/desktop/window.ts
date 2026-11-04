@@ -17,7 +17,7 @@ export function createMainWindow(options: { title: string }): Deno.BrowserWindow
 
   win.bind("appInfo", () =>
     Promise.resolve({
-      name: "Lullaby IDE",
+      name: "Lullaby",
       version: "0.1.0",
       dataDir: appDataDir(),
       platform: Deno.build.os,

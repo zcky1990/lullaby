@@ -1,4 +1,25 @@
-# RND Workflow
+# Lullaby
+
+<p align="center">
+  <img src="assets/brand/lullaby.webp" alt="Lullaby — Dreamy Developer Lullaby" width="320" />
+</p>
+
+<p align="center"><strong>Let Developers Dream, We'll Handle the Work.</strong></p>
+
+**Lullaby** is your AI-powered developer companion that takes care of the tedious work, so you can
+focus on building great things — dari PRD, ticket generation, coding, testing, code review, hingga
+persiapan release.
+
+| | |
+| --- | --- |
+| **Comfort** | Developer bekerja lebih tenang; beban repetitif digantikan automation. |
+| **Simplicity** | Hal kompleks dibuat sederhana dan mudah diarahkan. |
+| **Automation** | AI + workflow menangani busywork (ticket, coding loop, notifikasi, …). |
+| **Empowerment** | Fokus pada kreativitas dan problem solving, bukan pekerjaan administratif. |
+
+Tagline: *Code Less, Dream More.* · *Sleep Easy, Ship Better.* · *Let AI Handle the Busywork.*
+
+---
 
 Desktop workspace untuk alur **Docmost PRD → draft tiket → Jira → coding loop**, dibangun dengan
 **Deno Desktop** (`deno desktop`, Deno 2.9+). Backend berjalan di **main process**: semua akses
@@ -44,7 +65,7 @@ deno task build     # build client (Vite) + generate src/ui/assets.generated.ts
 deno task dev       # build lalu desktop + hot reload (deno desktop --hmr)
 deno task start     # build lalu jalankan tanpa shell desktop
 deno task web:dev   # Vite dev server client saja (HMR UI, untuk iterasi komponen)
-deno task desktop   # build client lalu -> ./dist/RNDWorkflow.app
+deno task desktop   # build client lalu -> ./dist/Lullaby.app
 ```
 
 `deno desktop` membaca `src/ui/assets.generated.ts` (hasil build), jadi jalankan `deno task build`

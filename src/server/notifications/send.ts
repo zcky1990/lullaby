@@ -124,7 +124,7 @@ export async function testNotificationChannels(
     ? channels.filter((channel) => channel.id === channelId)
     : channels;
   const payload: NotifyMessagePayload = {
-    text: "Test notifikasi dari RND Workflow (Global Settings → Notifications).",
+    text: "Test notifikasi dari Lullaby (Global Settings → Notifications).",
   };
   return await Promise.all(targets.map((channel) => sendToChannel(channel, payload)));
 }

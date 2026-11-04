@@ -9,7 +9,7 @@ export interface McpTool {
 const TIMEOUT_MS = 15_000;
 const MAX_TOOLS = 200;
 
-const CLIENT_INFO = { name: "rnd-workflow", version: "0.1.0" };
+const CLIENT_INFO = { name: "Lullaby", version: "0.1.0" };
 const PROTOCOL_VERSION = "2024-11-05";
 
 function normalizeTools(value: unknown): McpTool[] {

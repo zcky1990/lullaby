@@ -1496,7 +1496,7 @@ export async function handleRequest(req: Request): Promise<Response> {
 
   try {
     if (pathname === "/api/health" && method === "GET") {
-      return json({ ok: true, name: "rnd-workflow", version: VERSION });
+      return json({ ok: true, name: "Lullaby", version: VERSION });
     }
 
     if (pathname.startsWith("/api/") && !isAuthorized(req)) {

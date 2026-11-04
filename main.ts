@@ -21,4 +21,4 @@ createMainWindow({ title: "Lullaby" });
 
 Deno.serve(opts, handleRequest);
 
-console.log(`Lullaby IDE listening on 127.0.0.1:${opts.port ?? "(auto)"}`);
+console.log(`Lullaby listening on 127.0.0.1:${opts.port ?? "(auto)"}`);

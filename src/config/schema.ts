@@ -279,7 +279,7 @@ export type CursorModelsInput = z.infer<typeof CursorModelsInput>;
 export const UiPreferencesInput = z
   .object({
     theme: z.enum(["light", "dark", "system"]).optional(),
-    colorTheme: z.enum(["vscode", "shadcn", "claude", "supabase"]).optional(),
+    colorTheme: z.enum(["vscode", "shadcn", "claude", "supabase", "lullaby"]).optional(),
     appFont: z.enum(["system", "inter", "manrope", "jetbrains"]).optional(),
     editorTheme: z.enum(["auto", "vs", "vs-dark", "hc-black", "hc-light"]).optional(),
     editorFont: z.enum(["jetbrains", "fira", "menlo", "consolas", "monospace"]).optional(),

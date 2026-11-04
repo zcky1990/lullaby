@@ -47,6 +47,11 @@ const THEME_OPTIONS: { id: Theme; label: string; icon: typeof Sun }[] = [
 ];
 
 const COLOR_THEME_OPTIONS: { id: ThemePreset; label: string; description: string }[] = [
+  {
+    id: "lullaby",
+    label: "Lullaby",
+    description: "Midnight indigo + soft gold — sesuai brand icon",
+  },
   { id: "vscode", label: "VS Code", description: "Tampilan VS Code (biru, abu-abu gelap)" },
   { id: "shadcn", label: "shadcn", description: "Neutral hitam-putih" },
   { id: "claude", label: "Claude", description: "Krem hangat dengan aksen terracotta" },
@@ -445,10 +450,29 @@ function About() {
 
   return (
     <Section title="About">
-      <div className="grid gap-2 text-xs">
-        <Row label="Name" value={health?.name ?? "Lullaby IDE"} />
-        <Row label="Version" value={health?.version ?? "—"} />
-        <Row label="Data dir" value={health?.dataDir ?? "—"} />
+      <div className="flex flex-col gap-4">
+        <div className="flex items-start gap-4">
+          <img
+            src="/lullaby.webp"
+            alt="Lullaby"
+            className="size-20 shrink-0 rounded-xl object-cover shadow-sm"
+          />
+          <div className="flex min-w-0 flex-col gap-1">
+            <p className="text-sm font-semibold tracking-tight">Lullaby</p>
+            <p className="text-xs text-muted-foreground italic">
+              Let Developers Dream, We'll Handle the Work.
+            </p>
+            <p className="text-xs text-muted-foreground">
+              AI-powered developer companion untuk pekerjaan repetitif — supaya kamu fokus membangun
+              hal yang berarti.
+            </p>
+          </div>
+        </div>
+        <div className="grid gap-2 text-xs">
+          <Row label="Name" value={health?.name ?? "Lullaby"} />
+          <Row label="Version" value={health?.version ?? "—"} />
+          <Row label="Data dir" value={health?.dataDir ?? "—"} />
+        </div>
       </div>
     </Section>
   );

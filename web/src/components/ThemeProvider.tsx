@@ -4,7 +4,7 @@ import { api } from "@/lib/api";
 export type Theme = "light" | "dark" | "system";
 export type ResolvedTheme = "light" | "dark";
 export type EditorTheme = "auto" | "vs" | "vs-dark" | "hc-black" | "hc-light";
-export type ThemePreset = "vscode" | "shadcn" | "claude" | "supabase";
+export type ThemePreset = "vscode" | "shadcn" | "claude" | "supabase" | "lullaby";
 export type AppFont = "system" | "inter" | "manrope" | "jetbrains";
 export type EditorFont = "jetbrains" | "fira" | "menlo" | "consolas" | "monospace";
 export type IconSize = "sm" | "md" | "lg";
@@ -79,7 +79,7 @@ const ThemeContext = createContext<ThemeContextValue>({
   setChatFont: () => {},
   chatFontSize: 16,
   setChatFontSize: () => {},
-  colorTheme: "shadcn",
+  colorTheme: "lullaby",
   setColorTheme: () => {},
   iconSize: "md",
   setIconSize: () => {},
@@ -141,8 +141,8 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const [colorTheme, setColorThemeState] = useState<ThemePreset>(() =>
     readString(
       COLOR_THEME_KEY,
-      ["vscode", "shadcn", "claude", "supabase"] as const,
-      "vscode",
+      ["vscode", "shadcn", "claude", "supabase", "lullaby"] as const,
+      "lullaby",
     )
   );
   const [appFont, setAppFontState] = useState<AppFont>(() =>

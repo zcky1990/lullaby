@@ -434,7 +434,7 @@ export interface LspPreset {
 
 export interface UiPreferences {
   theme?: "light" | "dark" | "system";
-  colorTheme?: "vscode" | "shadcn" | "claude" | "supabase";
+  colorTheme?: "vscode" | "shadcn" | "claude" | "supabase" | "lullaby";
   appFont?: "system" | "inter" | "manrope" | "jetbrains";
   editorTheme?: "auto" | "vs" | "vs-dark" | "hc-black" | "hc-light";
   editorFont?: "jetbrains" | "fira" | "menlo" | "consolas" | "monospace";

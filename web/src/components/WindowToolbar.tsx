@@ -18,7 +18,7 @@ export function WindowToolbar({ projectName, workspace, chatOpen, onToggleChat }
         </div>
         <div className="flex min-w-0 flex-col">
           <span className="truncate text-xs font-semibold tracking-tight">
-            {projectName ?? "Lullaby IDE"}
+            {projectName ?? "Lullaby"}
           </span>
           <span className="truncate text-[10px] text-muted-foreground">
             {workspace ?? "No workspace"}

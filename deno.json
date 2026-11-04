@@ -1,5 +1,5 @@
 {
-  "name": "lullaby-ide",
+  "name": "lullaby",
   "version": "0.1.0",
   "exports": "./main.ts",
   "tasks": {
@@ -7,8 +7,8 @@
     "build:web": "npm --prefix web run build",
     "assets": "deno run -A scripts/build-assets.ts",
     "web:dev": "npm --prefix web run dev",
-    "dev": "deno task build && deno desktop --hmr --allow-read --allow-write --allow-net --allow-env --allow-run --allow-ffi --allow-sys main.ts",
-    "desktop": "deno task build && deno desktop --allow-read --allow-write --allow-net --allow-env --allow-run --allow-ffi --output ./dist/LullabyIDE.app main.ts",
+    "dev": "deno task build && deno desktop --hmr --icon ./icons/lullaby.png --allow-read --allow-write --allow-net --allow-env --allow-run --allow-ffi --allow-sys main.ts",
+    "desktop": "deno task build && deno desktop --allow-read --allow-write --allow-net --allow-env --allow-run --allow-ffi --icon ./icons/lullaby.png --output ./dist/Lullaby.app main.ts",
     "start": "deno task build && deno run --allow-read --allow-write --allow-net --allow-env --allow-run --allow-ffi main.ts",
     "check": "deno check --desktop main.ts",
     "test": "deno test -A test/",
@@ -24,14 +24,19 @@
   },
   "desktop": {
     "app": {
-      "name": "Lullaby IDE",
-      "identifier": "com.klgroup.rndworkflow"
+      "name": "Lullaby",
+      "identifier": "com.lullaby.app",
+      "icons": {
+        "macos": "./icons/lullaby.png",
+        "windows": "./icons/lullaby.png",
+        "linux": "./icons/lullaby-512.png"
+      }
     },
     "backend": "webview",
     "output": {
-      "macos": "./dist/LullabyIDE",
-      "windows": "./dist/LullabyIDE",
-      "linux": "./dist/LullabyIDE"
+      "macos": "./dist/Lullaby",
+      "windows": "./dist/Lullaby",
+      "linux": "./dist/Lullaby"
     }
   },
   "fmt": {
