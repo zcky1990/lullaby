@@ -1307,6 +1307,7 @@ export default function App() {
               activeTab?.kind === "workflow" ||
               activeTab?.kind === "workflow-docs" ||
               activeTab?.kind === "document" ||
+              activeTab?.kind === "ticket" ||
               activeTab?.kind === "settings" ||
               activeTab?.kind === "global"
               ? "overflow-hidden"
@@ -1938,33 +1939,50 @@ function TicketTab({
   onOpenDetail: (ticket: TicketSummary) => void;
   onError: (message: string) => void;
 }) {
-  if (!hasProject) return <Empty text="Pilih project dulu di menu Workspace." />;
+  if (!hasProject) {
+    return (
+      <div className="p-6">
+        <Empty text="Pilih project dulu di menu Workspace." />
+      </div>
+    );
+  }
+
+  const showBoard = visibleTickets.length > 0;
+  const showInitialLoading = loading && tickets.length === 0;
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex h-full min-h-0 flex-col">
       {error && tickets.length > 0 ? (
-        <p className="text-xs text-destructive">Jira: {error}</p>
+        <p className="shrink-0 border-b px-4 py-2 text-xs text-destructive">Jira: {error}</p>
+      ) : null}
+      {loading && tickets.length > 0 ? (
+        <p className="text-muted-foreground flex shrink-0 items-center gap-2 border-b px-4 py-1.5 text-xs">
+          <Spinner className="size-3" />
+          Memuat ulang tiket…
+        </p>
       ) : null}
 
-      {loading ? (
-        <Empty text="Memuat tiket…" />
-      ) : error && tickets.length === 0 ? (
-        <Empty text={error} />
-      ) : tickets.length === 0 ? (
-        <Empty text="Belum ada tiket. Buat tiket lokal (bisa disync ke Jira nanti) atau periksa integrasi Jira." />
-      ) : visibleTickets.length === 0 ? (
-        <Empty
-          text={`Tidak ada tiket untuk "${assigneeFilter === "none" ? "tanpa assignee" : assigneeFilter}".`}
-        />
-      ) : (
-        <TicketKanban
-          key={boardKey}
-          tickets={visibleTickets}
-          onMove={onMove}
-          onOpenDetail={onOpenDetail}
-          onError={onError}
-        />
-      )}
+      <div className="min-h-0 flex-1 p-4">
+        {showInitialLoading ? (
+          <Empty text="Memuat tiket…" />
+        ) : error && tickets.length === 0 ? (
+          <Empty text={error} />
+        ) : tickets.length === 0 ? (
+          <Empty text="Belum ada tiket. Buat tiket lokal (bisa disync ke Jira nanti) atau periksa integrasi Jira." />
+        ) : visibleTickets.length === 0 ? (
+          <Empty
+            text={`Tidak ada tiket untuk "${assigneeFilter === "none" ? "tanpa assignee" : assigneeFilter}".`}
+          />
+        ) : showBoard ? (
+          <TicketKanban
+            key={boardKey}
+            tickets={visibleTickets}
+            onMove={onMove}
+            onOpenDetail={onOpenDetail}
+            onError={onError}
+          />
+        ) : null}
+      </div>
     </div>
   );
 }

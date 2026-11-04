@@ -36,19 +36,33 @@ export function TicketPanel({
 }: Props) {
   return (
     <>
-      <PanelHeader title="Tickets" count={count} />
-      <div className="flex flex-col gap-3 px-3 pb-3">
-        <Button
-          size="sm"
-          onClick={onCreate}
-          disabled={!canCreate}
-          data-icon="inline-start"
-          className="w-full"
-        >
-          <Plus />
-          Tiket baru
-        </Button>
+      <div className="flex items-center justify-between pr-2">
+        <PanelHeader title="Tickets" count={count} />
+        <div className="flex items-center gap-0.5">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={onCreate}
+            disabled={!canCreate}
+            aria-label="Tiket baru"
+            title="Tiket baru"
+          >
+            <Plus />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={onRefresh}
+            disabled={loading}
+            aria-label="Refresh tickets"
+            title="Refresh"
+          >
+            {loading ? <Spinner /> : <RefreshCw />}
+          </Button>
+        </div>
+      </div>
 
+      <div className="flex flex-col gap-3 px-3 pb-3">
         <div className="flex flex-col gap-1.5">
           <span className="text-[11px] text-muted-foreground">Filter assignee</span>
           <Select value={assigneeFilter} onValueChange={onFilter}>
@@ -69,22 +83,10 @@ export function TicketPanel({
           </Select>
         </div>
 
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={onRefresh}
-          disabled={loading}
-          data-icon="inline-start"
-          className="w-full"
-        >
-          {loading ? <Spinner /> : <RefreshCw />}
-          Refresh
-        </Button>
+        <p className="text-[11px] leading-relaxed text-muted-foreground">
+          Tiket lokal dan Jira. Drag kartu antar kolom untuk mengubah status.
+        </p>
       </div>
-
-      <p className="px-3 text-[11px] leading-relaxed text-muted-foreground">
-        Tiket lokal dan Jira. Drag kartu antar kolom untuk mengubah status.
-      </p>
     </>
   );
 }
