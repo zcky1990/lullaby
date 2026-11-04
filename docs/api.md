@@ -97,20 +97,21 @@ Prefix: `/api/projects/:id/git/`
 
 | Method                 | Path                                        | Keterangan                       |
 | ---------------------- | ------------------------------------------- | -------------------------------- |
-| `GET`                  | `/api/projects/:id/tickets`                 | Lokal unsynced + Jira            |
-| `GET`                  | `/api/projects/:id/tickets/:key`            | Detail Jira                      |
-| `POST`                 | `/api/projects/:id/tickets/:key/transition` | `{ status }`                     |
+| `GET`                  | `/api/projects/:id/tickets`                 | Lokal + Jira + ClickUp           |
+| `GET`                  | `/api/projects/:id/tickets/:key`            | Detail Jira/ClickUp (`?source=`) |
+| `POST`                 | `/api/projects/:id/tickets/:key/transition` | `{ status, source? }`            |
 | `POST`                 | `/api/projects/:id/local-tickets`           | Buat lokal                       |
 | `GET`/`PATCH`/`DELETE` | `/api/projects/:id/local-tickets/:id`       | Detail / edit / hapus (unsynced) |
-| `POST`                 | `/api/projects/:id/local-tickets/:id/sync`  | Push ke Jira                     |
+| `POST`                 | `/api/projects/:id/local-tickets/:id/sync`  | `{ provider?: jira\|clickup }`   |
 | `POST`                 | `/api/projects/:id/generate-tickets`        | AI dari dokumen                  |
 
 ## Workflows
 
 | Method               | Path                                               | Keterangan                               |
 | -------------------- | -------------------------------------------------- | ---------------------------------------- |
-| `GET`/`POST`         | `/api/projects/:id/workflows`                      | Daftar (file + last run) / buat workflow |
+| `GET`/`POST`         | `/api/projects/:id/workflows`                      | Daftar (file + last run + schedule) / buat |
 | `GET`/`PUT`/`DELETE` | `/api/projects/:id/workflows/:slug`                | Detail + YAML / simpan / hapus           |
+| `PATCH`              | `/api/projects/:id/workflows/:slug/schedule`       | `{ enabled }` toggle schedule/event      |
 | `POST`               | `/api/projects/:id/workflows/:slug/run`            | Mulai run (`202 { runId }`)              |
 | `GET`                | `/api/projects/:id/workflow-runs?workflow=&limit=` | Riwayat run                              |
 | `GET`                | `/api/projects/:id/workflow-runs/:runId`           | Detail run + step/log                    |

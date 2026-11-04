@@ -3,6 +3,7 @@ import {
   collectAgentParamAttachments,
   resolveWorkflowLlmSelection,
 } from "../src/server/workflow/params.ts";
+import { nextCronRun, parseCron } from "../src/server/workflow/cron.ts";
 import { parseWorkflow, slugName, workflowTemplate } from "../src/server/workflow/parse.ts";
 
 Deno.test("parseWorkflow builds dependencies, defaults and parallel layers", () => {
@@ -392,4 +393,75 @@ steps:
   );
   equal(attachments.length, 1);
   equal(attachments[0]?.name, "a.png");
+});
+
+Deno.test("parseCron accepts 5-field expressions and nextCronRun advances", () => {
+  const expr = parseCron("*/15 9-17 * * 1-5");
+  equal(expr.minute.values.has(0), true);
+  equal(expr.minute.values.has(15), true);
+  equal(expr.hour.values.has(9), true);
+  equal(expr.hour.values.has(18), false);
+
+  const from = new Date("2026-03-02T08:00:00.000Z");
+  const next = nextCronRun("0 2 * * *", from, "UTC");
+  equal(next.startsWith("2026-03-0"), true);
+  throws(() => parseCron("invalid"));
+  throws(() => parseCron("* * *"));
+});
+
+Deno.test("parseWorkflow accepts schedule and on triggers", () => {
+  const definition = parseWorkflow(
+    `
+name: nightly
+schedule:
+  cron: "0 2 * * *"
+  enabled: true
+  timezone: UTC
+on:
+  - ticket.transitioned
+  - event: ticket.synced
+    status: Done
+steps:
+  - id: ping
+    run: echo hi
+`,
+    "nightly",
+  );
+  equal(definition.schedule?.cron, "0 2 * * *");
+  equal(definition.schedule?.enabled, true);
+  equal(definition.schedule?.timezone, "UTC");
+  equal(definition.on.length, 2);
+  equal(definition.on[0]?.event, "ticket.transitioned");
+  equal(definition.on[1]?.event, "ticket.synced");
+  equal(definition.on[1]?.status, "Done");
+});
+
+Deno.test("parseWorkflow rejects invalid cron and timezone", () => {
+  throws(() =>
+    parseWorkflow(
+      `
+name: bad
+schedule:
+  cron: "not-a-cron"
+steps:
+  - id: a
+    run: echo a
+`,
+      "bad",
+    )
+  );
+  throws(() =>
+    parseWorkflow(
+      `
+name: bad-tz
+schedule:
+  cron: "0 * * * *"
+  timezone: Not/AZone
+steps:
+  - id: a
+    run: echo a
+`,
+      "bad-tz",
+    )
+  );
 });

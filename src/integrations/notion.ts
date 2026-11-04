@@ -1,6 +1,7 @@
 import type { NotionConfig } from "../config/schema.ts";
 import type { DocContent, DocSummary } from "./docmost.ts";
 import { request, type TestResult, truncate } from "./http.ts";
+import { markdownToNotionBlocks, notionRichText } from "./markdown.ts";
 
 const NOTION_API = "https://api.notion.com";
 const NOTION_VERSION = "2022-06-28";
@@ -298,4 +299,94 @@ export async function getDocument(cfg: NotionConfig, pageId: string): Promise<Do
   const title = pageTitle(page);
   const content = await blocksToMarkdown(cfg, pageId);
   return { id: pageId, title, content };
+}
+
+function titleProperty(title: string): Record<string, unknown> {
+  return {
+    title: {
+      title: notionRichText(title),
+    },
+  };
+}
+
+export async function createDocument(
+  cfg: NotionConfig,
+  input: { title: string; parentPageId?: string; content?: string },
+): Promise<DocSummary> {
+  const token = requireToken(cfg);
+  const parentId = input.parentPageId?.trim() || cfg.parentPageId?.trim();
+  if (!parentId) {
+    throw new Error(
+      "Parent page Notion wajib (pilih halaman induk atau isi parentPageId di integrasi).",
+    );
+  }
+  const children = input.content?.trim()
+    ? markdownToNotionBlocks(input.content)
+    : undefined;
+  const res = await notionRequest("/v1/pages", token, {
+    method: "POST",
+    body: JSON.stringify({
+      parent: { page_id: parentId },
+      properties: titleProperty(input.title),
+      ...(children?.length ? { children } : {}),
+    }),
+  });
+  if (!res.ok) throw new Error(`${statusMessage(res.status)} ${truncate(res.text, 300)}`);
+  const page = JSON.parse(res.text || "{}") as Record<string, unknown>;
+  const id = page.id ? String(page.id) : "";
+  if (!id) throw new Error("Notion tidak mengembalikan page id.");
+  return { id, title: input.title, hasChildren: Boolean(children?.length) };
+}
+
+async function deleteContentBlocks(cfg: NotionConfig, pageId: string): Promise<void> {
+  const blocks = await listRawBlocks(cfg, pageId);
+  const token = requireToken(cfg);
+  for (const block of blocks) {
+    const type = String(block.type ?? "");
+    if (type === "child_page" || type === "child_database") continue;
+    const id = block.id ? String(block.id) : "";
+    if (!id) continue;
+    const res = await notionRequest(`/v1/blocks/${encodeURIComponent(id)}`, token, {
+      method: "DELETE",
+    });
+    if (!res.ok && res.status !== 404) {
+      throw new Error(`${statusMessage(res.status)} ${truncate(res.text, 300)}`);
+    }
+  }
+}
+
+export async function updateDocument(
+  cfg: NotionConfig,
+  input: { pageId: string; title?: string; content: string },
+): Promise<DocContent> {
+  const token = requireToken(cfg);
+  const pageId = input.pageId.trim();
+  if (!pageId) throw new Error("pageId Notion wajib.");
+
+  if (input.title?.trim()) {
+    const patch = await notionRequest(`/v1/pages/${encodeURIComponent(pageId)}`, token, {
+      method: "PATCH",
+      body: JSON.stringify({ properties: titleProperty(input.title.trim()) }),
+    });
+    if (!patch.ok) throw new Error(`${statusMessage(patch.status)} ${truncate(patch.text, 300)}`);
+  }
+
+  await deleteContentBlocks(cfg, pageId);
+  const children = markdownToNotionBlocks(input.content);
+  if (children.length) {
+    // Notion appends max 100 children per request
+    for (let i = 0; i < children.length; i += 100) {
+      const chunk = children.slice(i, i + 100);
+      const append = await notionRequest(
+        `/v1/blocks/${encodeURIComponent(pageId)}/children`,
+        token,
+        { method: "PATCH", body: JSON.stringify({ children: chunk }) },
+      );
+      if (!append.ok) {
+        throw new Error(`${statusMessage(append.status)} ${truncate(append.text, 300)}`);
+      }
+    }
+  }
+
+  return await getDocument(cfg, pageId);
 }

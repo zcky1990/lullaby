@@ -19,8 +19,8 @@ Mode disimpan di localStorage (`rnd.chatMode:v1`).
   confluence); `create_document` / `update_document` (local \| docmost); `sync_document` (local →
   Docmost). Notion/Confluence read-only seperti UI.
 - **Tickets**: `list_tickets` / `get_ticket`; `create_ticket` / `update_ticket` / `delete_ticket`
-  (local); `sync_ticket` (local → Jira); `transition_ticket` (Jira status).
-- `create_ticket` selalu menulis ke SQLite lokal (bukan langsung Jira)
+  (local); `sync_ticket` (local → Jira/ClickUp); `transition_ticket` (Jira/ClickUp status).
+- `create_ticket` selalu menulis ke SQLite lokal (bukan langsung ke board remote)
 - Mutasi doc/ticket langsung diterapkan (tidak lewat Review tab; Review hanya `write_file`)
 - `use_skill` memuat body `SKILL.md` (progressive disclosure)
 - **MCP**: jika Global Settings → MCP master switch on, tool dari setiap server enabled

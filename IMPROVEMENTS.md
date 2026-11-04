@@ -9,10 +9,10 @@ prioritas bisa berubah.
 | Ide | Mengapa | Catatan |
 | --- | --- | --- |
 | ~~**MCP tools di chat**~~ | ~~Config + `tools/list` sudah ada; agent belum bisa memanggil tool MCP~~ | **Done** — lihat [`docs/features/chat-agent.md`](docs/features/chat-agent.md) |
-| **Workflow scheduler** | Run masih manual; cron/event menutup busywork berulang | Out of scope v1 di workflows |
+| ~~**Workflow scheduler**~~ | ~~Run masih manual; cron/event menutup busywork berulang~~ | **Done** — `schedule`/`on` + ticker; lihat [`docs/features/workflows.md`](docs/features/workflows.md) |
 | **Automation loop penuh** | Auto-accept Review (opsional), auto-move tiket ke Test/Done setelah Build sukses | [`docs/automation.md`](docs/automation.md) |
-| **Notion / Confluence write + sync lokal** | Browse/baca sudah ada; create/update & sync lokal belum | [`docs/features/documents.md`](docs/features/documents.md) |
-| **Tiket multi-provider** | Board hari ini Jira-centric; ClickUp skill sudah ada | Linear / ClickUp sebagai provider board |
+| ~~**Notion / Confluence write + sync lokal**~~ | ~~Browse/baca sudah ada; create/update & sync lokal belum~~ | **Done** — lihat [`docs/features/documents.md`](docs/features/documents.md) |
+| ~~**Tiket multi-provider (ClickUp)**~~ | ~~Board Jira-centric; skill ClickUp sudah ada~~ | **Done** — ClickUp board + sync; Linear masih open |
 
 ## Coding loop
 

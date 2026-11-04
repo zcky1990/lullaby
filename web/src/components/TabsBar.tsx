@@ -37,6 +37,7 @@ export interface EditorTab {
   size?: number;
   source?: "local" | "docmost" | "notion" | "confluence";
   syncStatus?: "local" | "synced" | "error";
+  syncTarget?: "docmost" | "notion" | "confluence";
   pageId?: string;
   preview?: boolean;
   dirty?: boolean;

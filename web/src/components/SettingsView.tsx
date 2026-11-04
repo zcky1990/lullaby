@@ -64,10 +64,10 @@ const INTEGRATION_SECTIONS: IntegrationSectionDef[] = [
   {
     id: "ticket",
     title: "Ticket",
-    kinds: ["jira"],
+    kinds: ["jira", "clickup"],
     options: [
       { label: "Jira", kind: "jira" },
-      { label: "ClickUp", kind: null },
+      { label: "ClickUp", kind: "clickup" },
       { label: "Linear", kind: null },
     ],
   },

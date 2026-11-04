@@ -173,6 +173,21 @@ export interface WorkflowRunStep {
   finishedAt?: string;
 }
 
+export interface WorkflowEventTrigger {
+  event: string;
+  status?: string;
+}
+
+export interface WorkflowScheduleInfo {
+  cron?: string;
+  timezone?: string;
+  enabled: boolean;
+  events: WorkflowEventTrigger[];
+  nextRunAt?: string;
+  lastRunAt?: string;
+  lastRunId?: string;
+}
+
 export interface WorkflowSummary {
   slug: string;
   name: string;
@@ -181,6 +196,7 @@ export interface WorkflowSummary {
   source: "workspace" | "app";
   updatedAt?: string;
   stepCount: number;
+  schedule?: WorkflowScheduleInfo;
   error?: string;
   lastRun?: WorkflowRunSummary;
 }
@@ -263,6 +279,12 @@ export interface WorkflowDefinition {
     system?: string;
     temperature?: number;
   };
+  schedule?: {
+    cron: string;
+    enabled: boolean;
+    timezone?: string;
+  };
+  on?: WorkflowEventTrigger[];
   steps: WorkflowDefinitionStep[];
   layers: string[][];
 }
@@ -338,6 +360,7 @@ export interface LocalDocSummary {
   title: string;
   syncStatus: "local" | "synced" | "error";
   pageId?: string;
+  syncTarget?: DocumentSource;
   syncError?: string;
 }
 
@@ -352,6 +375,9 @@ export interface LocalDocumentsResponse {
   documents: LocalDocSummary[];
 }
 
+export type TicketSource = "local" | "jira" | "clickup";
+export type TicketProvider = "jira" | "clickup";
+
 export interface TicketSummary {
   key: string;
   summary: string;
@@ -360,9 +386,10 @@ export interface TicketSummary {
   assignee?: string;
   priority?: string;
   url: string;
-  source?: "local" | "jira";
+  source?: TicketSource;
   localId?: string;
   syncStatus?: "local" | "synced" | "error";
+  syncProvider?: TicketProvider | string;
   syncError?: string;
 }
 
@@ -379,9 +406,10 @@ export interface TicketDetail {
   labels: string[];
   description: string;
   url: string;
-  source?: "local" | "jira";
+  source?: TicketSource;
   localId?: string;
   syncStatus?: "local" | "synced" | "error";
+  syncProvider?: TicketProvider | string;
   syncError?: string;
 }
 
@@ -550,7 +578,9 @@ export interface DocumentsResponse {
 
 export interface TicketsResponse {
   configured: boolean;
+  providers?: TicketProvider[];
   error?: string;
+  errors?: Partial<Record<TicketProvider, string>>;
   tickets: TicketSummary[];
 }
 
@@ -715,8 +745,11 @@ export const api = {
     request<{ document: DocContent; source?: DocumentSource }>(
       `/api/projects/${projectId}/documents/${encodeURIComponent(pageId)}?source=${source}`,
     ),
-  createDocument: (projectId: string, payload: { title: string; parentPageId?: string }) =>
-    request<{ document: DocSummary }>(
+  createDocument: (
+    projectId: string,
+    payload: { title: string; parentPageId?: string; source?: DocumentSource },
+  ) =>
+    request<{ document: DocSummary; source?: DocumentSource }>(
       `/api/projects/${projectId}/documents`,
       jsonInit("POST", payload),
     ),
@@ -724,9 +757,10 @@ export const api = {
     projectId: string,
     pageId: string,
     payload: { title?: string; content: string },
+    source: DocumentSource = "docmost",
   ) =>
-    request<{ document: DocContent }>(
-      `/api/projects/${projectId}/documents/${encodeURIComponent(pageId)}`,
+    request<{ document: DocContent; source?: DocumentSource }>(
+      `/api/projects/${projectId}/documents/${encodeURIComponent(pageId)}?source=${source}`,
       jsonInit("PUT", payload),
     ),
   listLocalDocuments: (projectId: string) =>
@@ -748,10 +782,10 @@ export const api = {
       `/api/projects/${projectId}/local-documents`,
       jsonInit("PUT", payload),
     ),
-  syncLocalDocument: (projectId: string, path: string) =>
+  syncLocalDocument: (projectId: string, path: string, target: DocumentSource = "docmost") =>
     request<{ document: LocalDocContent }>(
       `/api/projects/${projectId}/local-documents/sync`,
-      jsonInit("POST", { path }),
+      jsonInit("POST", { path, target }),
     ),
   listTickets: (projectId: string) =>
     request<TicketsResponse>(`/api/projects/${projectId}/tickets`),
@@ -763,14 +797,21 @@ export const api = {
       `/api/projects/${projectId}/generate-tickets`,
       jsonInit("POST", payload),
     ),
-  getTicket: (projectId: string, key: string) =>
+  getTicket: (projectId: string, key: string, source?: TicketProvider) =>
     request<{ ticket: TicketDetail }>(
-      `/api/projects/${projectId}/tickets/${encodeURIComponent(key)}`,
+      `/api/projects/${projectId}/tickets/${encodeURIComponent(key)}${
+        source ? `?source=${encodeURIComponent(source)}` : ""
+      }`,
     ),
-  transitionTicket: (projectId: string, key: string, status: string) =>
+  transitionTicket: (
+    projectId: string,
+    key: string,
+    status: string,
+    source?: TicketProvider,
+  ) =>
     request<{ ok: boolean }>(
       `/api/projects/${projectId}/tickets/${encodeURIComponent(key)}/transition`,
-      jsonInit("POST", { status }),
+      jsonInit("POST", { status, source }),
     ),
   createLocalTicket: (projectId: string, payload: LocalTicketPayload) =>
     request<{ ticket: TicketDetail }>(
@@ -791,10 +832,10 @@ export const api = {
       `/api/projects/${projectId}/local-tickets/${encodeURIComponent(id)}`,
       { method: "DELETE" },
     ),
-  syncLocalTicket: (projectId: string, id: string) =>
+  syncLocalTicket: (projectId: string, id: string, provider?: TicketProvider) =>
     request<{ ticket: TicketDetail }>(
       `/api/projects/${projectId}/local-tickets/${encodeURIComponent(id)}/sync`,
-      { method: "POST" },
+      jsonInit("POST", provider ? { provider } : {}),
     ),
   saveIntegration: (projectId: string, payload: IntegrationPayload) =>
     request<{ integration: Integration }>(
@@ -897,6 +938,11 @@ export const api = {
     request<{ runId: string }>(
       `/api/projects/${projectId}/workflows/${encodeURIComponent(slug)}/run`,
       jsonInit("POST", payload ?? {}),
+    ),
+  patchWorkflowSchedule: (projectId: string, slug: string, enabled: boolean) =>
+    request<{ schedule: WorkflowScheduleInfo }>(
+      `/api/projects/${projectId}/workflows/${encodeURIComponent(slug)}/schedule`,
+      jsonInit("PATCH", { enabled }),
     ),
   listWorkflowRuns: (projectId: string, options?: { workflow?: string; limit?: number }) =>
     request<{ runs: WorkflowRunSummary[] }>(

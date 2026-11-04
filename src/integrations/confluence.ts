@@ -1,6 +1,7 @@
 import type { ConfluenceConfig } from "../config/schema.ts";
 import type { DocContent, DocSummary } from "./docmost.ts";
 import { request, type TestResult, truncate } from "./http.ts";
+import { markdownToConfluenceStorage } from "./markdown.ts";
 
 export interface ListDocumentsResult {
   documents: DocSummary[];
@@ -78,6 +79,25 @@ async function confluenceGet(
     method: "GET",
     headers: headers(cfg),
   });
+}
+
+async function confluenceWrite(
+  cfg: ConfluenceConfig,
+  path: string,
+  method: "POST" | "PUT",
+  body: unknown,
+): Promise<{ status: number; ok: boolean; text: string }> {
+  return await request(`${apiRoot(cfg)}${path}`, {
+    method,
+    headers: headers(cfg),
+    body: JSON.stringify(body),
+  });
+}
+
+function requireAuth(cfg: ConfluenceConfig): void {
+  if (!cfg.email || !cfg.apiToken) {
+    throw new Error("Email/API token Confluence belum diisi.");
+  }
 }
 
 export async function testConfluence(cfg: ConfluenceConfig): Promise<TestResult> {
@@ -222,15 +242,13 @@ export async function listDocuments(
 }
 
 export async function getDocument(cfg: ConfluenceConfig, pageId: string): Promise<DocContent> {
-  if (!cfg.email || !cfg.apiToken) {
-    throw new Error("Email/API token Confluence belum diisi.");
-  }
+  requireAuth(cfg);
   if (parseSpaceId(pageId)) {
     throw new Error("Pilih halaman, bukan space.");
   }
   const res = await confluenceGet(
     cfg,
-    `/rest/api/content/${encodeURIComponent(pageId)}?expand=body.storage,body.view,space`,
+    `/rest/api/content/${encodeURIComponent(pageId)}?expand=body.storage,body.view,space,version`,
   );
   if (!res.ok) throw new Error(`${statusMessage(res.status)} ${truncate(res.text, 300)}`);
   const page = JSON.parse(res.text || "{}") as Record<string, unknown>;
@@ -243,4 +261,102 @@ export async function getDocument(cfg: ConfluenceConfig, pageId: string): Promis
     title: String(page.title ?? "(untitled)"),
     content: htmlToPlain(raw),
   };
+}
+
+export async function createDocument(
+  cfg: ConfluenceConfig,
+  input: { title: string; parentPageId?: string; spaceKey?: string; content?: string },
+): Promise<DocSummary> {
+  requireAuth(cfg);
+  let spaceKey = input.spaceKey?.trim() || cfg.spaceKey?.trim() || "";
+  let parentId = input.parentPageId?.trim() || "";
+  const asSpace = parentId ? parseSpaceId(parentId) : null;
+  if (asSpace) {
+    spaceKey = asSpace;
+    parentId = "";
+  }
+
+  if (!spaceKey && parentId) {
+    const pageRes = await confluenceGet(
+      cfg,
+      `/rest/api/content/${encodeURIComponent(parentId)}?expand=space`,
+    );
+    if (!pageRes.ok) {
+      throw new Error(`${statusMessage(pageRes.status)} ${truncate(pageRes.text, 300)}`);
+    }
+    const page = JSON.parse(pageRes.text || "{}") as Record<string, unknown>;
+    const space = page.space as Record<string, unknown> | undefined;
+    spaceKey = String(space?.key ?? "");
+  }
+  if (!spaceKey) {
+    throw new Error("Space key Confluence wajib (isi di integrasi atau pilih space/halaman induk).");
+  }
+
+  const payload: Record<string, unknown> = {
+    type: "page",
+    title: input.title,
+    space: { key: spaceKey },
+    body: {
+      storage: {
+        value: markdownToConfluenceStorage(input.content ?? ""),
+        representation: "storage",
+      },
+    },
+  };
+  if (parentId) payload.ancestors = [{ id: parentId }];
+
+  const res = await confluenceWrite(cfg, "/rest/api/content", "POST", payload);
+  if (!res.ok) throw new Error(`${statusMessage(res.status)} ${truncate(res.text, 300)}`);
+  const created = JSON.parse(res.text || "{}") as Record<string, unknown>;
+  const id = created.id ? String(created.id) : "";
+  if (!id) throw new Error("Confluence tidak mengembalikan page id.");
+  return {
+    id,
+    title: String(created.title ?? input.title),
+    spaceId: spaceKey,
+    hasChildren: false,
+  };
+}
+
+export async function updateDocument(
+  cfg: ConfluenceConfig,
+  input: { pageId: string; title?: string; content: string },
+): Promise<DocContent> {
+  requireAuth(cfg);
+  const pageId = input.pageId.trim();
+  if (!pageId) throw new Error("pageId Confluence wajib.");
+  if (parseSpaceId(pageId)) throw new Error("Pilih halaman, bukan space.");
+
+  const currentRes = await confluenceGet(
+    cfg,
+    `/rest/api/content/${encodeURIComponent(pageId)}?expand=body.storage,version,space`,
+  );
+  if (!currentRes.ok) {
+    throw new Error(`${statusMessage(currentRes.status)} ${truncate(currentRes.text, 300)}`);
+  }
+  const current = JSON.parse(currentRes.text || "{}") as Record<string, unknown>;
+  const version = current.version as Record<string, unknown> | undefined;
+  const number = Number(version?.number ?? 0);
+  if (!number) throw new Error("Versi halaman Confluence tidak ditemukan.");
+
+  const payload = {
+    id: pageId,
+    type: "page",
+    title: input.title?.trim() || String(current.title ?? "Untitled"),
+    version: { number: number + 1 },
+    body: {
+      storage: {
+        value: markdownToConfluenceStorage(input.content),
+        representation: "storage",
+      },
+    },
+  };
+  const res = await confluenceWrite(
+    cfg,
+    `/rest/api/content/${encodeURIComponent(pageId)}`,
+    "PUT",
+    payload,
+  );
+  if (!res.ok) throw new Error(`${statusMessage(res.status)} ${truncate(res.text, 300)}`);
+  return await getDocument(cfg, pageId);
 }

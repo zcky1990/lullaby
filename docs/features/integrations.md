@@ -12,6 +12,7 @@ Form UI: Project Settings → Integrations (`IntegrationForm` + `SINGLETONS` di
 | **notion** | apiToken, parentPageId? | Browse/baca Notion |
 | **confluence** | baseUrl, email, apiToken, spaceKey? | Browse/baca Confluence |
 | **jira** | baseUrl, email, apiToken, projectKey, … | Board + transition + sync lokal |
+| **clickup** | apiToken, listId, teamId?, … | Board + transition + sync lokal |
 | **github** | baseUrl, token, org, repo, … | Health / meta kode (UI Code) |
 | **llm** | Global Settings → LLM Providers | Chat + generate tickets |
 

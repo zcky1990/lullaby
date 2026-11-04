@@ -1,4 +1,10 @@
-import { JiraConfig, LocalTicketUpdateInput } from "../../config/schema.ts";
+import {
+  ClickUpConfig,
+  JiraConfig,
+  LocalTicketSyncInput,
+  LocalTicketUpdateInput,
+  type TicketProvider,
+} from "../../config/schema.ts";
 import {
   deleteLocalTicket,
   getIntegration,
@@ -9,7 +15,18 @@ import {
   type LocalTicketRow,
   updateLocalTicket,
 } from "../../db/db.ts";
-import { createTicket, getTicket, listTickets, transitionTicket } from "../../integrations/jira.ts";
+import {
+  createTicket as createClickUpTicket,
+  getTicket as getClickUpTicket,
+  listTickets as listClickUpTickets,
+  transitionTicket as transitionClickUpTicket,
+} from "../../integrations/clickup.ts";
+import {
+  createTicket,
+  getTicket,
+  listTickets,
+  transitionTicket,
+} from "../../integrations/jira.ts";
 
 const MAX_RESULT = 60_000;
 
@@ -30,29 +47,44 @@ function localTicketKey(row: LocalTicketRow): string {
   return row.jira_key ?? `LOCAL-${row.id.slice(0, 6).toUpperCase()}`;
 }
 
-function localTicketUrl(row: LocalTicketRow, baseUrl?: string): string {
-  if (!row.jira_key || !baseUrl) return "";
-  return `${baseUrl.replace(/\/+$/, "")}/browse/${row.jira_key}`;
+function localTicketUrl(
+  row: LocalTicketRow,
+  bases?: { jira?: string; clickup?: string },
+): string {
+  if (!row.jira_key) return "";
+  if (row.sync_provider === "clickup") {
+    const base = (bases?.clickup ?? "https://app.clickup.com").replace(/\/+$/, "");
+    return `${base}/t/${row.jira_key}`;
+  }
+  if (!bases?.jira) return "";
+  return `${bases.jira.replace(/\/+$/, "")}/browse/${row.jira_key}`;
 }
 
-function localTicketSummary(row: LocalTicketRow, baseUrl?: string) {
+function localTicketSummary(
+  row: LocalTicketRow,
+  bases?: { jira?: string; clickup?: string },
+) {
   return {
     key: localTicketKey(row),
     summary: row.title,
     status: row.status,
     assignee: row.assignee ?? undefined,
     priority: row.priority ?? undefined,
-    url: localTicketUrl(row, baseUrl),
+    url: localTicketUrl(row, bases),
     source: "local" as const,
     localId: row.id,
     syncStatus: row.sync_status,
+    syncProvider: row.sync_provider ?? undefined,
     syncError: row.sync_error ?? undefined,
   };
 }
 
-function localTicketDetail(row: LocalTicketRow, baseUrl?: string) {
+function localTicketDetail(
+  row: LocalTicketRow,
+  bases?: { jira?: string; clickup?: string },
+) {
   return {
-    ...localTicketSummary(row, baseUrl),
+    ...localTicketSummary(row, bases),
     type: row.type,
     created: row.created_at,
     updated: row.updated_at,
@@ -61,48 +93,111 @@ function localTicketDetail(row: LocalTicketRow, baseUrl?: string) {
   };
 }
 
-async function jiraConfig(
+async function readIntegrationConfig(
   projectId: string,
-): Promise<{ ok: true; config: ReturnType<typeof JiraConfig.parse> } | { ok: false; error: string }> {
-  const row = await getIntegration(projectId, "jira");
-  if (!row) return { ok: false, error: "Integrasi Jira belum dikonfigurasi." };
-  let raw: Record<string, unknown> = {};
+  kind: "jira" | "clickup",
+): Promise<Record<string, unknown> | null> {
+  const row = await getIntegration(projectId, kind);
+  if (!row) return null;
   try {
-    raw = JSON.parse(row.config) as Record<string, unknown>;
+    return JSON.parse(row.config) as Record<string, unknown>;
   } catch {
-    raw = {};
+    return {};
   }
-  const parsed = JiraConfig.safeParse(raw);
-  if (!parsed.success) return { ok: false, error: "Konfigurasi Jira tidak valid." };
-  return { ok: true, config: parsed.data };
+}
+
+async function ticketUrlBases(
+  projectId: string,
+): Promise<{ jira?: string; clickup?: string }> {
+  const bases: { jira?: string; clickup?: string } = {};
+  const jiraRaw = await readIntegrationConfig(projectId, "jira");
+  if (jiraRaw) {
+    const parsed = JiraConfig.safeParse(jiraRaw);
+    if (parsed.success) bases.jira = parsed.data.baseUrl;
+  }
+  const clickupRaw = await readIntegrationConfig(projectId, "clickup");
+  if (clickupRaw) {
+    const parsed = ClickUpConfig.safeParse(clickupRaw);
+    if (parsed.success) bases.clickup = parsed.data.baseUrl ?? "https://app.clickup.com";
+  }
+  return bases;
+}
+
+function looksLikeJiraKey(key: string): boolean {
+  return /^[A-Z][A-Z0-9]+-\d+$/i.test(key);
+}
+
+async function resolveTicketProvider(
+  projectId: string,
+  preferred?: TicketProvider,
+  keyHint?: string,
+): Promise<TicketProvider | null> {
+  if (preferred) return preferred;
+  const jira = await readIntegrationConfig(projectId, "jira");
+  const clickup = await readIntegrationConfig(projectId, "clickup");
+  if (keyHint) {
+    if (looksLikeJiraKey(keyHint) && jira) return "jira";
+    if (!looksLikeJiraKey(keyHint) && clickup) return "clickup";
+  }
+  if (jira) return "jira";
+  if (clickup) return "clickup";
+  return null;
 }
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export async function listTicketsTool(projectId: string): Promise<string> {
   const locals = await listLocalTickets(projectId);
-  const jira = await jiraConfig(projectId);
-  if (!jira.ok) {
-    return clip({
-      configured: false,
-      tickets: locals.map((row) => localTicketSummary(row)),
-      note: jira.error,
-    });
+  const bases = await ticketUrlBases(projectId);
+  const providers: TicketProvider[] = [];
+  const errors: Record<string, string> = {};
+  const remote: Array<Record<string, unknown>> = [];
+
+  const jiraRaw = await readIntegrationConfig(projectId, "jira");
+  if (jiraRaw) {
+    providers.push("jira");
+    const parsed = JiraConfig.safeParse(jiraRaw);
+    if (!parsed.success) {
+      errors.jira = "Konfigurasi Jira tidak valid.";
+    } else {
+      try {
+        const tickets = await listTickets(parsed.data);
+        remote.push(...tickets.map((ticket) => ({ ...ticket, source: "jira" as const })));
+      } catch (error) {
+        errors.jira = (error as Error).message;
+      }
+    }
   }
-  try {
-    const remote = await listTickets(jira.config);
-    const remoteKeys = new Set(remote.map((ticket) => ticket.key));
-    const pending = locals
-      .filter((row) => !row.jira_key || !remoteKeys.has(row.jira_key))
-      .map((row) => localTicketSummary(row, jira.config.baseUrl));
-    return clip({ configured: true, tickets: [...pending, ...remote] });
-  } catch (error) {
-    return clip({
-      configured: true,
-      error: (error as Error).message,
-      tickets: locals.map((row) => localTicketSummary(row, jira.config.baseUrl)),
-    });
+
+  const clickupRaw = await readIntegrationConfig(projectId, "clickup");
+  if (clickupRaw) {
+    providers.push("clickup");
+    const parsed = ClickUpConfig.safeParse(clickupRaw);
+    if (!parsed.success) {
+      errors.clickup = "Konfigurasi ClickUp tidak valid.";
+    } else {
+      try {
+        remote.push(
+          ...await listClickUpTickets(parsed.data) as unknown as Array<Record<string, unknown>>,
+        );
+      } catch (error) {
+        errors.clickup = (error as Error).message;
+      }
+    }
   }
+
+  const remoteKeys = new Set(remote.map((ticket) => String(ticket.key ?? "")));
+  const pending = locals
+    .filter((row) => !row.jira_key || !remoteKeys.has(row.jira_key))
+    .map((row) => localTicketSummary(row, bases));
+
+  return clip({
+    configured: providers.length > 0,
+    providers,
+    errors: Object.keys(errors).length ? errors : undefined,
+    tickets: [...pending, ...remote],
+    note: providers.length === 0 ? "Integrasi Jira/ClickUp belum dikonfigurasi." : undefined,
+  });
 }
 
 export async function getTicketTool(
@@ -114,8 +209,9 @@ export async function getTicketTool(
     : typeof args.key === "string"
     ? args.key.trim()
     : "";
-  if (!idOrKey) return "Error: id (local UUID) atau key (Jira) wajib.";
+  if (!idOrKey) return "Error: id (local UUID) atau key (Jira/ClickUp) wajib.";
 
+  const bases = await ticketUrlBases(projectId);
   if (UUID_RE.test(idOrKey) || idOrKey.toUpperCase().startsWith("LOCAL-")) {
     let ticket = UUID_RE.test(idOrKey) ? await getLocalTicket(idOrKey) : null;
     if (!ticket && idOrKey.toUpperCase().startsWith("LOCAL-")) {
@@ -126,16 +222,26 @@ export async function getTicketTool(
     if (!ticket || ticket.project_id !== projectId) {
       return "Error: tiket lokal tidak ditemukan.";
     }
-    const jira = await jiraConfig(projectId);
-    return clip({
-      ticket: localTicketDetail(ticket, jira.ok ? jira.config.baseUrl : undefined),
-    });
+    return clip({ ticket: localTicketDetail(ticket, bases) });
   }
 
-  const jira = await jiraConfig(projectId);
-  if (!jira.ok) return jira.error;
+  const preferred = args.source === "clickup" || args.source === "jira"
+    ? args.source
+    : undefined;
+  const provider = await resolveTicketProvider(projectId, preferred, idOrKey);
+  if (!provider) return "Error: Integrasi Jira/ClickUp belum dikonfigurasi.";
+
   try {
-    return clip({ ticket: await getTicket(jira.config, idOrKey) });
+    if (provider === "clickup") {
+      const raw = await readIntegrationConfig(projectId, "clickup");
+      const parsed = ClickUpConfig.safeParse(raw ?? {});
+      if (!parsed.success) return "Error: Konfigurasi ClickUp tidak valid.";
+      return clip({ ticket: await getClickUpTicket(parsed.data, idOrKey) });
+    }
+    const raw = await readIntegrationConfig(projectId, "jira");
+    const parsed = JiraConfig.safeParse(raw ?? {});
+    if (!parsed.success) return "Error: Konfigurasi Jira tidak valid.";
+    return clip({ ticket: { ...await getTicket(parsed.data, idOrKey), source: "jira" } });
   } catch (error) {
     return `Error: ${(error as Error).message}`;
   }
@@ -165,7 +271,9 @@ export async function updateTicketTool(
     return `Error: ${parsed.error.issues[0]?.message ?? "input tidak valid"}`;
   }
   const updated = await updateLocalTicket(id, parsed.data);
-  return clip({ ticket: updated ? localTicketDetail(updated) : null });
+  return clip({
+    ticket: updated ? localTicketDetail(updated, await ticketUrlBases(projectId)) : null,
+  });
 }
 
 export async function deleteTicketTool(
@@ -179,7 +287,7 @@ export async function deleteTicketTool(
     return "Error: tiket lokal tidak ditemukan.";
   }
   if (ticket.jira_key) {
-    return "Error: tiket sudah synced ke Jira; hapus lewat Jira.";
+    return "Error: tiket sudah synced ke board remote; hapus lewat Jira/ClickUp.";
   }
   await deleteLocalTicket(id);
   return clip({ ok: true, deleted: id });
@@ -195,22 +303,48 @@ export async function syncTicketTool(
   if (!ticket || ticket.project_id !== projectId) {
     return "Error: tiket lokal tidak ditemukan.";
   }
+  const bases = await ticketUrlBases(projectId);
   if (ticket.jira_key) {
-    return clip({ ticket: localTicketDetail(ticket), note: "Sudah tersinkron." });
+    return clip({ ticket: localTicketDetail(ticket, bases), note: "Sudah tersinkron." });
   }
-  const jira = await jiraConfig(projectId);
-  if (!jira.ok) return jira.error;
+
+  const syncParsed = LocalTicketSyncInput.safeParse({
+    provider: args.provider === "jira" || args.provider === "clickup" ? args.provider : undefined,
+  });
+  if (!syncParsed.success) {
+    return `Error: ${syncParsed.error.issues[0]?.message ?? "input tidak valid"}`;
+  }
+  const provider = await resolveTicketProvider(projectId, syncParsed.data.provider);
+  if (!provider) return "Error: Integrasi Jira/ClickUp belum dikonfigurasi.";
+
   try {
-    const created = await createTicket(jira.config, {
-      summary: ticket.title,
-      description: ticket.description,
-      type: ticket.type,
-      priority: ticket.priority ?? undefined,
-      labels: localLabels(ticket),
-    });
-    await markLocalTicketSynced(ticket.id, created.key);
+    if (provider === "clickup") {
+      const raw = await readIntegrationConfig(projectId, "clickup");
+      const parsed = ClickUpConfig.safeParse(raw ?? {});
+      if (!parsed.success) return "Error: Konfigurasi ClickUp tidak valid.";
+      const created = await createClickUpTicket(parsed.data, {
+        summary: ticket.title,
+        description: ticket.description,
+        status: ticket.status,
+        priority: ticket.priority ?? undefined,
+        labels: localLabels(ticket),
+      });
+      await markLocalTicketSynced(ticket.id, created.key, "clickup");
+    } else {
+      const raw = await readIntegrationConfig(projectId, "jira");
+      const parsed = JiraConfig.safeParse(raw ?? {});
+      if (!parsed.success) return "Error: Konfigurasi Jira tidak valid.";
+      const created = await createTicket(parsed.data, {
+        summary: ticket.title,
+        description: ticket.description,
+        type: ticket.type,
+        priority: ticket.priority ?? undefined,
+        labels: localLabels(ticket),
+      });
+      await markLocalTicketSynced(ticket.id, created.key, "jira");
+    }
     const updated = (await getLocalTicket(ticket.id))!;
-    return clip({ ticket: localTicketDetail(updated, jira.config.baseUrl) });
+    return clip({ ticket: localTicketDetail(updated, await ticketUrlBases(projectId)) });
   } catch (error) {
     const message = (error as Error).message;
     await markLocalTicketSyncError(ticket.id, message);
@@ -224,13 +358,27 @@ export async function transitionTicketTool(
 ): Promise<string> {
   const key = typeof args.key === "string" ? args.key.trim() : "";
   const status = typeof args.status === "string" ? args.status.trim() : "";
-  if (!key) return "Error: key Jira wajib.";
+  if (!key) return "Error: key tiket remote wajib.";
   if (!status) return "Error: status wajib.";
-  const jira = await jiraConfig(projectId);
-  if (!jira.ok) return jira.error;
+  const preferred = args.source === "clickup" || args.source === "jira"
+    ? args.source
+    : undefined;
+  const provider = await resolveTicketProvider(projectId, preferred, key);
+  if (!provider) return "Error: Integrasi Jira/ClickUp belum dikonfigurasi.";
+
   try {
-    await transitionTicket(jira.config, key, status);
-    return clip({ ok: true, key, status });
+    if (provider === "clickup") {
+      const raw = await readIntegrationConfig(projectId, "clickup");
+      const parsed = ClickUpConfig.safeParse(raw ?? {});
+      if (!parsed.success) return "Error: Konfigurasi ClickUp tidak valid.";
+      await transitionClickUpTicket(parsed.data, key, status);
+    } else {
+      const raw = await readIntegrationConfig(projectId, "jira");
+      const parsed = JiraConfig.safeParse(raw ?? {});
+      if (!parsed.success) return "Error: Konfigurasi Jira tidak valid.";
+      await transitionTicket(parsed.data, key, status);
+    }
+    return clip({ ok: true, key, status, provider });
   } catch (error) {
     return `Error: ${(error as Error).message}`;
   }

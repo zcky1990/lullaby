@@ -47,10 +47,10 @@ webview (React)  ──HTTP──►  Deno main process
 
 | Area | Didukung | Belum / out of scope |
 | --- | --- | --- |
-| Dokumen lokal | Buat, edit, rename, sync ke Docmost | Sync ke Notion/Confluence |
+| Dokumen lokal | Buat, edit, rename, sync ke Docmost/Notion/Confluence | — |
 | Docmost | List, buka, buat, update | — |
-| Notion / Confluence | Browse + baca halaman | Create/update remote |
-| Tiket | Lokal CRUD, sync ke Jira, Kanban | Provider non-Jira (ClickUp, Linear) |
+| Notion / Confluence | Browse, baca, buat, update | — |
+| Tiket | Lokal CRUD, sync ke Jira/ClickUp, Kanban | Linear / provider lain |
 | Chat | Plan/Build, tools file + tiket lokal, Review, MCP tools | — |
 | Automation | Auto Build To Do → In Progress | Auto-accept Review, auto Done |
 | MCP | Config, list tools, eksekusi dari chat (`mcp_*`) | — |

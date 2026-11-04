@@ -5,7 +5,8 @@ export const DEFAULT_SYSTEM_PROMPT =
   "workspace using list_files/read_file/write_file. Keep edits minimal and focused. Never touch " +
   "files outside the workspace. You can also list/read/create/update documents " +
   "(list_documents/get_document/create_document/update_document/sync_document; sources: local, " +
-  "docmost; notion/confluence are read-only) and tickets (list_tickets/get_ticket/create_ticket/" +
+  "docmost, notion, confluence; sync_document target: docmost|notion|confluence) and tickets " +
+  "(list_tickets/get_ticket/create_ticket/" +
   "update_ticket/delete_ticket/sync_ticket/transition_ticket). Local tickets are NOT in Jira " +
   "until sync_ticket (or the user syncs). When MCP tools are listed (names start with mcp_), " +
   "you may call them for external systems configured in Global Settings → MCP. When the task " +

@@ -19,7 +19,7 @@ Project aktif pengguna.
 ### `project_integrations`
 
 Satu baris per `(project_id, kind)`.  
-`kind`: `docmost` | `notion` | `confluence` | `jira` | `github` (+ legacy).  
+`kind`: `docmost` | `notion` | `confluence` | `jira` | `clickup` | `github` (+ legacy).  
 `config` JSON (termasuk token). Mode `api` | `mcp`.
 
 **LLM tidak lagi di sini** — migrasi ke `llm_providers` saat startup.
@@ -39,17 +39,25 @@ Sesi per project. Message menyimpan `role`, `content`, opsional `changes` JSON (
 ### `local_tickets`
 
 Backlog lokal: title, description (HTML disanitasi), status Kanban, priority, type, labels,  
-`jira_key`, `sync_status`, `sync_error`.
+`jira_key` (remote key Jira/ClickUp), `sync_provider` (`jira` | `clickup`), `sync_status`,
+`sync_error`.
 
 ### `local_documents`
 
-Meta sync file lokal → Docmost: `path`, `page_id`, `sync_status`, …
+Meta sync file lokal → Docmost/Notion/Confluence: `path`, `page_id`, `sync_target`
+(`docmost`\|`notion`\|`confluence`), `sync_status`, …
 
 ### `workflow_runs`
 
 Snapshot YAML (`yaml`, `workflow_path`), `workflow_slug`, `workflow_name`, `status`
-(`running|success|failed|canceled|interrupted`), `trigger`, `error`, timestamp. Satu run aktif per
-workflow; run yang masih `running` saat startup ditandai `interrupted`.
+(`running|success|failed|canceled|interrupted`), `trigger` (`manual`|`cron`|`event:…`), `error`,
+timestamp. Satu run aktif per workflow; run yang masih `running` saat startup ditandai
+`interrupted`.
+
+### `workflow_schedules`
+
+Per `(project_id, workflow_slug)`: `cron`, `timezone`, `enabled`, `events` (JSON), `next_run_at`,
+`last_run_at`, `last_run_id`. Disinkron dari YAML `schedule` / `on` saat create/save.
 
 ### `workflow_sessions` / `workflow_session_messages`
 

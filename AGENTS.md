@@ -41,19 +41,20 @@ finishing a change.
   `projects.document_path`), **Docmost**, **Notion**, and **Confluence Cloud**. Remote sources use
   `GET /documents?source=` / `GET /documents/:pageId?source=` (`docmost` default). Notion auth is
   Internal Integration Token (+ optional `parentPageId`); Confluence is baseUrl + email + API token
-  (+ optional `spaceKey`). Create/update remote pages and local→Notion/Confluence sync are out of v1
-  (Create only for Local/Docmost; Notion/Confluence tabs are read-only). Local docs are
-  renamed/saved on disk; manual sync (`POST /local-documents/sync`) creates/updates the Docmost page
-  and stores `page_id` in `local_documents`. `Generate ticket` in the document tab calls
+  (+ optional `spaceKey`). Create/update remote pages are supported for Docmost, Notion, and
+  Confluence. Local docs are renamed/saved on disk; manual sync (`POST /local-documents/sync` with
+  `target` docmost|notion|confluence) creates/updates the remote page and stores `page_id` +
+  `sync_target` in `local_documents`. `Generate ticket` in the document tab calls
   `POST /generate-tickets` (`generateTicketsFromDocument`) which uses the first LLM provider and
   only the `create_ticket` tool.
 - **Tickets**: `local_tickets` (SQLite) are created locally (UI `TicketCreateDialog` + AI tool
-  `create_ticket`); `GET /tickets` merges unsynced local tickets with Jira. Local tickets are
-  editable from `TicketDetailDialog` (`PATCH /local-tickets/:id`, rich text description) and can be
-  deleted only while unsynced (`DELETE` rejects tickets with `jira_key`). Syncing is manual
-  (`POST /local-tickets/:id/sync` → Jira issue) and sets `jira_key`/`sync_status`. Global Automation
-  (`auto_build_on_in_progress`, default off) starts a new Build chat when a Kanban card moves To Do
-  → In Progress; see `docs/automation.md`.
+  `create_ticket`); `GET /tickets` merges unsynced local tickets with Jira and/or ClickUp.
+  Local tickets are editable from `TicketDetailDialog` (`PATCH /local-tickets/:id`, rich text
+  description) and can be deleted only while unsynced (`DELETE` rejects tickets with `jira_key`).
+  Syncing is manual (`POST /local-tickets/:id/sync` with optional `{ provider: "jira"|"clickup" }`)
+  and sets `jira_key` / `sync_provider` / `sync_status`. ClickUp needs `apiToken` + `listId` in
+  project integrations. Global Automation (`auto_build_on_in_progress`, default off) starts a new
+  Build chat when a Kanban card moves To Do → In Progress; see `docs/automation.md`.
 - **Skills**: `src/server/skills.ts` discovers `SKILL.md` folders (frontmatter `name`/`description`)
   from `<workspace>/.agents/skills` (highest), `appDataDir()/<project-slug>/skills` (auto from Build
   chats), `appDataDir()/skills` (global), and `src/skills/builtin` (bundled, lowest priority). On
@@ -115,8 +116,9 @@ finishing a change.
   retry/timeout/cancel, capped step logs). Agent steps use `src/server/chat/headless.ts` (tool loop,
   writes auto-applied). Runs live in `workflow_runs` / `workflow_run_steps`;
   `src/server/routes/workflows.ts` exposes CRUD + run/history/cancel. UI: `WorkflowPanel` (sidebar)
-  - `WorkflowTab` (Monaco YAML + React Flow + logs). Manual runs only (no scheduler in v1); AI must
-    not auto-run workflows.
+  - `WorkflowTab` (Monaco YAML + React Flow + logs). Runs: manual UI, optional YAML `schedule.cron`
+  (in-process ticker) and `on` event triggers (`src/server/workflow/scheduler.ts`); AI must not
+  auto-run workflows.
 - **MCP**: global server config (`McpSettings`) is stored in `app_settings` (`mcp_servers` JSON;
   stdio command/args/env or http url/headers) plus `mcp_enabled` and `mcp_disabled_tools`.
   `POST /api/settings/mcp/tools` connects with `initialize` + `tools/list` (`src/server/mcp.ts`,

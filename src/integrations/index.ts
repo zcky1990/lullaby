@@ -1,5 +1,6 @@
 import { z } from "zod";
 import {
+  ClickUpConfig,
   ConfluenceConfig,
   DocmostConfig,
   GithubConfig,
@@ -7,6 +8,7 @@ import {
   JiraConfig,
   NotionConfig,
 } from "../config/schema.ts";
+import { testClickUp } from "./clickup.ts";
 import { testConfluence } from "./confluence.ts";
 import { testDocmost } from "./docmost.ts";
 import { testGithub } from "./github.ts";
@@ -108,6 +110,11 @@ export async function testIntegration(input: IntegrationInput): Promise<TestResu
       const parsed = JiraConfig.safeParse(input.config);
       if (!parsed.success) return invalid(parsed.error);
       return await testJira(parsed.data);
+    }
+    case "clickup": {
+      const parsed = ClickUpConfig.safeParse(input.config);
+      if (!parsed.success) return invalid(parsed.error);
+      return await testClickUp(parsed.data);
     }
     case "github": {
       const parsed = GithubConfig.safeParse(input.config);

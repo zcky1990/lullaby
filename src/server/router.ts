@@ -23,12 +23,15 @@ import {
   LocalDocumentInput,
   LocalDocumentSyncInput,
   LocalDocumentUpdateInput,
+  ClickUpConfig,
   LocalTicketInput,
+  LocalTicketSyncInput,
   LocalTicketUpdateInput,
   NotionConfig,
   parseIntegrationConfig,
   ProjectInput,
   ProjectUpdateInput,
+  type TicketProvider,
   TicketTransitionInput,
   UpdateDocumentInput,
   CreateWorkspacePathInput,
@@ -57,8 +60,6 @@ import {
   listLocalTickets,
   listProjects,
   type LocalTicketRow,
-  markLocalDocumentSynced,
-  markLocalDocumentSyncError,
   markLocalTicketSynced,
   markLocalTicketSyncError,
   moveLocalDocumentMeta,
@@ -112,8 +113,10 @@ import {
   writeWorkspaceFile,
 } from "../fs/workspace.ts";
 import {
+  createDocument as createConfluenceDocument,
   getDocument as getConfluenceDocument,
   listDocuments as listConfluenceDocuments,
+  updateDocument as updateConfluenceDocument,
 } from "../integrations/confluence.ts";
 import {
   createDocument,
@@ -122,10 +125,27 @@ import {
   updateDocument,
 } from "../integrations/docmost.ts";
 import {
+  createDocument as createNotionDocument,
   getDocument as getNotionDocument,
   listDocuments as listNotionDocuments,
+  updateDocument as updateNotionDocument,
 } from "../integrations/notion.ts";
-import { createTicket, getTicket, listTickets, transitionTicket } from "../integrations/jira.ts";
+import {
+  localDocumentPayload,
+  syncLocalDocumentToTarget,
+} from "./chat/document-tools.ts";
+import {
+  createTicket as createClickUpTicket,
+  getTicket as getClickUpTicket,
+  listTickets as listClickUpTickets,
+  transitionTicket as transitionClickUpTicket,
+} from "../integrations/clickup.ts";
+import {
+  createTicket,
+  getTicket,
+  listTickets,
+  transitionTicket,
+} from "../integrations/jira.ts";
 import {
   decideAllChatChanges,
   decideChatChange,
@@ -165,6 +185,7 @@ import {
   getWorkflowRunHandler,
   listWorkflowRunsHandler,
   listWorkflowsHandler,
+  patchWorkflowScheduleHandler,
   runWorkflowHandler,
   saveWorkflowHandler,
 } from "./routes/workflows.ts";
@@ -628,20 +649,6 @@ async function deleteChatSessionHandler(projectId: string, sessionId: string): P
   return json({ ok: true });
 }
 
-function localDocumentPayload(
-  doc: { path: string; title: string },
-  meta?: { page_id: string | null; sync_status: string; sync_error: string | null },
-) {
-  return {
-    id: doc.path,
-    path: doc.path,
-    title: doc.title,
-    syncStatus: meta?.sync_status ?? "local",
-    pageId: meta?.page_id ?? undefined,
-    syncError: meta?.sync_error ?? undefined,
-  };
-}
-
 async function listLocalDocumentsHandler(projectId: string): Promise<Response> {
   const project = await getProject(projectId);
   if (!project) return json({ error: "project_not_found" }, 404);
@@ -729,50 +736,25 @@ async function updateLocalDocumentHandler(projectId: string, req: Request): Prom
 }
 
 async function syncLocalDocumentHandler(projectId: string, req: Request): Promise<Response> {
-  const project = await getProject(projectId);
-  if (!project) return json({ error: "project_not_found" }, 404);
-  const root = project.document_path?.trim();
-  if (!root) return json({ error: "Document workspace belum diatur." }, 400);
-
   const parsed = LocalDocumentSyncInput.safeParse(await readJson(req));
   if (!parsed.success) {
     return json({ error: "invalid_input", issues: parsed.error.issues }, 400);
   }
-
-  const ctx = await integrationContext(projectId, "docmost");
-  if (!ctx) return json({ error: "Integrasi Docmost belum dikonfigurasi." }, 400);
-  const parsedCfg = DocmostConfig.safeParse(ctx.config);
-  if (!parsedCfg.success) return json({ error: "Konfigurasi Docmost tidak valid." }, 400);
-  const spaceId = parsedCfg.data.spaceId?.trim() || project.docmost_space_id?.trim();
-  if (!spaceId) return json({ error: "Space ID Docmost belum diisi." }, 400);
-
-  let pageId = "";
   try {
-    const doc = await readLocalDocument(root, parsed.data.path);
-    const meta = await getLocalDocumentMeta(projectId, doc.path);
-    pageId = meta?.page_id ?? "";
-
-    if (!pageId) {
-      const created = await createDocument(parsedCfg.data, { spaceId, title: doc.title });
-      pageId = created.id;
-      await markLocalDocumentSynced(projectId, doc.path, pageId);
-    }
-
-    await updateDocument(parsedCfg.data, {
-      pageId,
-      title: doc.title,
-      content: doc.content,
+    const result = await syncLocalDocumentToTarget(
+      projectId,
+      parsed.data.path,
+      parsed.data.target,
+    );
+    await record("document.synced", {
+      projectId,
+      path: parsed.data.path,
+      target: parsed.data.target,
+      pageId: result.document.pageId,
     });
-
-    await markLocalDocumentSynced(projectId, doc.path, pageId);
-    await record("document.synced", { projectId, path: doc.path, pageId });
-    const updatedMeta = await getLocalDocumentMeta(projectId, doc.path);
-    return json({ document: { ...doc, ...localDocumentPayload(doc, updatedMeta ?? undefined) } });
+    return json(result);
   } catch (error) {
-    const message = (error as Error).message;
-    if (pageId) await markLocalDocumentSynced(projectId, parsed.data.path, pageId);
-    await markLocalDocumentSyncError(projectId, parsed.data.path, message);
-    return json({ error: message }, 502);
+    return json({ error: (error as Error).message }, 502);
   }
 }
 
@@ -1132,7 +1114,7 @@ async function testIntegrationHandler(req: Request): Promise<Response> {
 
 async function integrationContext(
   projectId: string,
-  kind: "docmost" | "notion" | "confluence" | "jira",
+  kind: "docmost" | "notion" | "confluence" | "jira" | "clickup",
 ) {
   const row = await getIntegration(projectId, kind);
   if (!row) return null;
@@ -1143,6 +1125,27 @@ async function integrationContext(
     config = {};
   }
   return { config };
+}
+
+function looksLikeJiraKey(key: string): boolean {
+  return /^[A-Z][A-Z0-9]+-\d+$/i.test(key);
+}
+
+async function resolveTicketProvider(
+  projectId: string,
+  preferred?: TicketProvider,
+  keyHint?: string,
+): Promise<TicketProvider | null> {
+  if (preferred) return preferred;
+  const jira = await integrationContext(projectId, "jira");
+  const clickup = await integrationContext(projectId, "clickup");
+  if (keyHint) {
+    if (looksLikeJiraKey(keyHint) && jira) return "jira";
+    if (!looksLikeJiraKey(keyHint) && clickup) return "clickup";
+  }
+  if (jira) return "jira";
+  if (clickup) return "clickup";
+  return null;
 }
 
 function parseDocumentSource(raw: string | null): DocumentSourceType {
@@ -1224,27 +1227,47 @@ async function createDocumentHandler(projectId: string, req: Request): Promise<R
   const project = await getProject(projectId);
   if (!project) return json({ error: "project_not_found" }, 404);
 
-  const ctx = await integrationContext(projectId, "docmost");
-  if (!ctx) return json({ error: "not_configured" }, 400);
-  const parsedCfg = DocmostConfig.safeParse(ctx.config);
-  if (!parsedCfg.success) return json({ error: "invalid_config" }, 400);
-
   const parsed = CreateDocumentInput.safeParse(await readJson(req));
   if (!parsed.success) {
     return json({ error: "invalid_input", issues: parsed.error.issues }, 400);
   }
-
-  const spaceId = parsedCfg.data.spaceId ?? project.docmost_space_id ?? undefined;
-  if (!spaceId) return json({ error: "space_required" }, 400);
+  const source = parsed.data.source;
+  const ctx = await integrationContext(projectId, source);
+  if (!ctx) return json({ error: "not_configured" }, 400);
 
   try {
+    if (source === "notion") {
+      const parsedCfg = NotionConfig.safeParse(ctx.config);
+      if (!parsedCfg.success) return json({ error: "invalid_config" }, 400);
+      const document = await createNotionDocument(parsedCfg.data, {
+        title: parsed.data.title,
+        parentPageId: parsed.data.parentPageId,
+      });
+      await record("document.created", { projectId, id: document.id, source });
+      return json({ document, source }, 201);
+    }
+    if (source === "confluence") {
+      const parsedCfg = ConfluenceConfig.safeParse(ctx.config);
+      if (!parsedCfg.success) return json({ error: "invalid_config" }, 400);
+      const document = await createConfluenceDocument(parsedCfg.data, {
+        title: parsed.data.title,
+        parentPageId: parsed.data.parentPageId,
+      });
+      await record("document.created", { projectId, id: document.id, source });
+      return json({ document, source }, 201);
+    }
+
+    const parsedCfg = DocmostConfig.safeParse(ctx.config);
+    if (!parsedCfg.success) return json({ error: "invalid_config" }, 400);
+    const spaceId = parsedCfg.data.spaceId ?? project.docmost_space_id ?? undefined;
+    if (!spaceId) return json({ error: "space_required" }, 400);
     const document = await createDocument(parsedCfg.data, {
       spaceId,
       title: parsed.data.title,
       parentPageId: parsed.data.parentPageId,
     });
-    await record("document.created", { projectId, id: document.id });
-    return json({ document }, 201);
+    await record("document.created", { projectId, id: document.id, source });
+    return json({ document, source }, 201);
   } catch (error) {
     return json({ error: (error as Error).message }, 502);
   }
@@ -1254,11 +1277,10 @@ async function updateDocumentHandler(
   projectId: string,
   pageId: string,
   req: Request,
+  source: DocumentSourceType,
 ): Promise<Response> {
-  const ctx = await integrationContext(projectId, "docmost");
+  const ctx = await integrationContext(projectId, source);
   if (!ctx) return json({ error: "not_configured" }, 400);
-  const parsedCfg = DocmostConfig.safeParse(ctx.config);
-  if (!parsedCfg.success) return json({ error: "invalid_config" }, 400);
 
   const parsed = UpdateDocumentInput.safeParse(await readJson(req));
   if (!parsed.success) {
@@ -1266,13 +1288,38 @@ async function updateDocumentHandler(
   }
 
   try {
+    if (source === "notion") {
+      const parsedCfg = NotionConfig.safeParse(ctx.config);
+      if (!parsedCfg.success) return json({ error: "invalid_config" }, 400);
+      const document = await updateNotionDocument(parsedCfg.data, {
+        pageId,
+        title: parsed.data.title,
+        content: parsed.data.content,
+      });
+      await record("document.updated", { projectId, id: pageId, source });
+      return json({ document, source });
+    }
+    if (source === "confluence") {
+      const parsedCfg = ConfluenceConfig.safeParse(ctx.config);
+      if (!parsedCfg.success) return json({ error: "invalid_config" }, 400);
+      const document = await updateConfluenceDocument(parsedCfg.data, {
+        pageId,
+        title: parsed.data.title,
+        content: parsed.data.content,
+      });
+      await record("document.updated", { projectId, id: pageId, source });
+      return json({ document, source });
+    }
+
+    const parsedCfg = DocmostConfig.safeParse(ctx.config);
+    if (!parsedCfg.success) return json({ error: "invalid_config" }, 400);
     const document = await updateDocument(parsedCfg.data, {
       pageId,
       title: parsed.data.title,
       content: parsed.data.content,
     });
-    await record("document.updated", { projectId, id: pageId });
-    return json({ document });
+    await record("document.updated", { projectId, id: pageId, source });
+    return json({ document, source });
   } catch (error) {
     return json({ error: (error as Error).message }, 502);
   }
@@ -1318,45 +1365,68 @@ function localTicketKey(row: LocalTicketRow): string {
   return row.jira_key ?? `LOCAL-${row.id.slice(0, 6).toUpperCase()}`;
 }
 
-function localTicketUrl(row: LocalTicketRow, baseUrl?: string): string {
-  if (!row.jira_key || !baseUrl) return "";
-  return `${baseUrl.replace(/\/+$/, "")}/browse/${row.jira_key}`;
+function localTicketUrl(
+  row: LocalTicketRow,
+  bases?: { jira?: string; clickup?: string },
+): string {
+  if (!row.jira_key) return "";
+  if (row.sync_provider === "clickup") {
+    const base = (bases?.clickup ?? "https://app.clickup.com").replace(/\/+$/, "");
+    return `${base}/t/${row.jira_key}`;
+  }
+  if (!bases?.jira) return "";
+  return `${bases.jira.replace(/\/+$/, "")}/browse/${row.jira_key}`;
 }
 
-function localTicketSummary(row: LocalTicketRow, baseUrl?: string) {
+function localTicketSummary(
+  row: LocalTicketRow,
+  bases?: { jira?: string; clickup?: string },
+) {
   return {
     key: localTicketKey(row),
     summary: row.title,
     status: row.status,
     assignee: row.assignee ?? undefined,
     priority: row.priority ?? undefined,
-    url: localTicketUrl(row, baseUrl),
+    url: localTicketUrl(row, bases),
     source: "local" as const,
     localId: row.id,
     syncStatus: row.sync_status,
+    syncProvider: row.sync_provider ?? undefined,
     syncError: row.sync_error ?? undefined,
   };
 }
 
-function localTicketDetail(row: LocalTicketRow, baseUrl?: string) {
+function localTicketDetail(
+  row: LocalTicketRow,
+  bases?: { jira?: string; clickup?: string },
+) {
   return {
-    key: localTicketKey(row),
-    summary: row.title,
-    status: row.status,
-    priority: row.priority ?? undefined,
-    assignee: row.assignee ?? undefined,
+    ...localTicketSummary(row, bases),
     reporter: undefined,
     type: row.type,
     created: row.created_at,
     updated: row.updated_at,
     labels: localLabels(row),
     description: row.description,
-    url: localTicketUrl(row, baseUrl),
-    source: "local" as const,
-    localId: row.id,
-    syncStatus: row.sync_status,
-    syncError: row.sync_error ?? undefined,
   };
+}
+
+async function ticketUrlBases(
+  projectId: string,
+): Promise<{ jira?: string; clickup?: string }> {
+  const bases: { jira?: string; clickup?: string } = {};
+  const jiraCtx = await integrationContext(projectId, "jira");
+  if (jiraCtx) {
+    const parsed = JiraConfig.safeParse(jiraCtx.config);
+    if (parsed.success) bases.jira = parsed.data.baseUrl;
+  }
+  const clickupCtx = await integrationContext(projectId, "clickup");
+  if (clickupCtx) {
+    const parsed = ClickUpConfig.safeParse(clickupCtx.config);
+    if (parsed.success) bases.clickup = parsed.data.baseUrl ?? "https://app.clickup.com";
+  }
+  return bases;
 }
 
 async function listTicketsHandler(projectId: string): Promise<Response> {
@@ -1364,34 +1434,61 @@ async function listTicketsHandler(projectId: string): Promise<Response> {
   if (!project) return json({ error: "project_not_found" }, 404);
 
   const locals = await listLocalTickets(projectId);
-  const ctx = await integrationContext(projectId, "jira");
-  if (!ctx) {
-    return json({ configured: false, tickets: locals.map((row) => localTicketSummary(row)) });
+  const bases = await ticketUrlBases(projectId);
+  const providers: TicketProvider[] = [];
+  const errors: Record<string, string> = {};
+  const remote: Array<Record<string, unknown>> = [];
+
+  const jiraCtx = await integrationContext(projectId, "jira");
+  if (jiraCtx) {
+    providers.push("jira");
+    const parsed = JiraConfig.safeParse(jiraCtx.config);
+    if (!parsed.success) {
+      errors.jira = "Konfigurasi Jira tidak valid.";
+    } else {
+      try {
+        const tickets = await listTickets(parsed.data);
+        remote.push(...tickets.map((ticket) => ({ ...ticket, source: "jira" as const })));
+      } catch (error) {
+        errors.jira = (error as Error).message;
+      }
+    }
   }
 
-  const parsed = JiraConfig.safeParse(ctx.config);
-  if (!parsed.success) {
-    return json({
-      configured: true,
-      error: "Konfigurasi Jira tidak valid.",
-      tickets: locals.map((row) => localTicketSummary(row)),
-    });
+  const clickupCtx = await integrationContext(projectId, "clickup");
+  if (clickupCtx) {
+    providers.push("clickup");
+    const parsed = ClickUpConfig.safeParse(clickupCtx.config);
+    if (!parsed.success) {
+      errors.clickup = "Konfigurasi ClickUp tidak valid.";
+    } else {
+      try {
+        remote.push(
+          ...await listClickUpTickets(parsed.data) as unknown as Array<Record<string, unknown>>,
+        );
+      } catch (error) {
+        errors.clickup = (error as Error).message;
+      }
+    }
   }
 
-  try {
-    const remote = await listTickets(parsed.data);
-    const remoteKeys = new Set(remote.map((ticket) => ticket.key));
-    const pending = locals
-      .filter((row) => !row.jira_key || !remoteKeys.has(row.jira_key))
-      .map((row) => localTicketSummary(row, parsed.data.baseUrl));
-    return json({ configured: true, tickets: [...pending, ...remote] });
-  } catch (error) {
-    return json({
-      configured: true,
-      error: (error as Error).message,
-      tickets: locals.map((row) => localTicketSummary(row, parsed.data.baseUrl)),
-    });
-  }
+  const remoteKeys = new Set(remote.map((ticket) => String(ticket.key ?? "")));
+  const pending = locals
+    .filter((row) => !row.jira_key || !remoteKeys.has(row.jira_key))
+    .map((row) => localTicketSummary(row, bases));
+
+  const configured = providers.length > 0;
+  return json({
+    configured,
+    providers,
+    error: Object.keys(errors).length
+      ? Object.entries(errors).map(([k, v]) => `${k}: ${v}`).join(" | ")
+      : undefined,
+    errors: Object.keys(errors).length ? errors : undefined,
+    tickets: configured || pending.length
+      ? [...pending, ...remote]
+      : locals.map((row) => localTicketSummary(row, bases)),
+  });
 }
 
 async function createLocalTicketHandler(projectId: string, req: Request): Promise<Response> {
@@ -1404,7 +1501,7 @@ async function createLocalTicketHandler(projectId: string, req: Request): Promis
   }
   const ticket = await createLocalTicket(projectId, parsed.data);
   await record("ticket.created_local", { projectId, id: ticket.id });
-  return json({ ticket: localTicketDetail(ticket) }, 201);
+  return json({ ticket: localTicketDetail(ticket, await ticketUrlBases(projectId)) }, 201);
 }
 
 async function getLocalTicketHandler(projectId: string, id: string): Promise<Response> {
@@ -1412,7 +1509,7 @@ async function getLocalTicketHandler(projectId: string, id: string): Promise<Res
   if (!ticket || ticket.project_id !== projectId) {
     return json({ error: "ticket_not_found" }, 404);
   }
-  return json({ ticket: localTicketDetail(ticket) });
+  return json({ ticket: localTicketDetail(ticket, await ticketUrlBases(projectId)) });
 }
 
 async function updateLocalTicketHandler(
@@ -1429,7 +1526,8 @@ async function updateLocalTicketHandler(
     return json({ error: "invalid_input", issues: parsed.error.issues }, 400);
   }
   const updated = await updateLocalTicket(id, parsed.data);
-  return json({ ticket: updated ? localTicketDetail(updated) : null });
+  const bases = await ticketUrlBases(projectId);
+  return json({ ticket: updated ? localTicketDetail(updated, bases) : null });
 }
 
 async function deleteLocalTicketHandler(projectId: string, id: string): Promise<Response> {
@@ -1445,32 +1543,65 @@ async function deleteLocalTicketHandler(projectId: string, id: string): Promise<
   return json({ ok: true });
 }
 
-async function syncLocalTicketHandler(projectId: string, id: string): Promise<Response> {
+async function syncLocalTicketHandler(
+  projectId: string,
+  id: string,
+  req: Request,
+): Promise<Response> {
   const ticket = await getLocalTicket(id);
   if (!ticket || ticket.project_id !== projectId) {
     return json({ error: "ticket_not_found" }, 404);
   }
+  const bases = await ticketUrlBases(projectId);
   if (ticket.jira_key) {
-    return json({ ticket: localTicketDetail(ticket) });
+    return json({ ticket: localTicketDetail(ticket, bases) });
   }
 
-  const ctx = await integrationContext(projectId, "jira");
-  if (!ctx) return json({ error: "Integrasi Jira belum dikonfigurasi." }, 400);
-  const parsed = JiraConfig.safeParse(ctx.config);
-  if (!parsed.success) return json({ error: "Konfigurasi Jira tidak valid." }, 400);
+  const body = LocalTicketSyncInput.safeParse(await readJson(req).catch(() => ({})));
+  if (!body.success) {
+    return json({ error: "invalid_input", issues: body.error.issues }, 400);
+  }
+  const provider = await resolveTicketProvider(projectId, body.data.provider);
+  if (!provider) {
+    return json({ error: "Integrasi Jira/ClickUp belum dikonfigurasi." }, 400);
+  }
 
   try {
-    const created = await createTicket(parsed.data, {
-      summary: ticket.title,
-      description: ticket.description,
-      type: ticket.type,
-      priority: ticket.priority ?? undefined,
-      labels: localLabels(ticket),
-    });
-    await markLocalTicketSynced(ticket.id, created.key);
+    if (provider === "clickup") {
+      const ctx = await integrationContext(projectId, "clickup");
+      if (!ctx) return json({ error: "Integrasi ClickUp belum dikonfigurasi." }, 400);
+      const parsed = ClickUpConfig.safeParse(ctx.config);
+      if (!parsed.success) return json({ error: "Konfigurasi ClickUp tidak valid." }, 400);
+      const created = await createClickUpTicket(parsed.data, {
+        summary: ticket.title,
+        description: ticket.description,
+        status: ticket.status,
+        priority: ticket.priority ?? undefined,
+        labels: localLabels(ticket),
+      });
+      await markLocalTicketSynced(ticket.id, created.key, "clickup");
+    } else {
+      const ctx = await integrationContext(projectId, "jira");
+      if (!ctx) return json({ error: "Integrasi Jira belum dikonfigurasi." }, 400);
+      const parsed = JiraConfig.safeParse(ctx.config);
+      if (!parsed.success) return json({ error: "Konfigurasi Jira tidak valid." }, 400);
+      const created = await createTicket(parsed.data, {
+        summary: ticket.title,
+        description: ticket.description,
+        type: ticket.type,
+        priority: ticket.priority ?? undefined,
+        labels: localLabels(ticket),
+      });
+      await markLocalTicketSynced(ticket.id, created.key, "jira");
+    }
     const updated = (await getLocalTicket(ticket.id))!;
-    await record("ticket.synced", { projectId, id, key: created.key });
-    return json({ ticket: localTicketDetail(updated, parsed.data.baseUrl) });
+    await record("ticket.synced", {
+      projectId,
+      id,
+      key: updated.jira_key,
+      provider,
+    });
+    return json({ ticket: localTicketDetail(updated, await ticketUrlBases(projectId)) });
   } catch (error) {
     const message = (error as Error).message;
     await markLocalTicketSyncError(ticket.id, message);
@@ -1478,13 +1609,29 @@ async function syncLocalTicketHandler(projectId: string, id: string): Promise<Re
   }
 }
 
-async function getTicketHandler(projectId: string, key: string): Promise<Response> {
-  const ctx = await integrationContext(projectId, "jira");
-  if (!ctx) return json({ error: "not_configured" }, 400);
-  const parsed = JiraConfig.safeParse(ctx.config);
-  if (!parsed.success) return json({ error: "invalid_config" }, 400);
+async function getTicketHandler(
+  projectId: string,
+  key: string,
+  source?: string | null,
+): Promise<Response> {
+  const preferred = source === "clickup" || source === "jira" ? source : undefined;
+  const provider = await resolveTicketProvider(projectId, preferred, key);
+  if (!provider) return json({ error: "not_configured" }, 400);
+
   try {
-    return json({ ticket: await getTicket(parsed.data, key) });
+    if (provider === "clickup") {
+      const ctx = await integrationContext(projectId, "clickup");
+      if (!ctx) return json({ error: "not_configured" }, 400);
+      const parsed = ClickUpConfig.safeParse(ctx.config);
+      if (!parsed.success) return json({ error: "invalid_config" }, 400);
+      return json({ ticket: await getClickUpTicket(parsed.data, key) });
+    }
+    const ctx = await integrationContext(projectId, "jira");
+    if (!ctx) return json({ error: "not_configured" }, 400);
+    const parsed = JiraConfig.safeParse(ctx.config);
+    if (!parsed.success) return json({ error: "invalid_config" }, 400);
+    const ticket = await getTicket(parsed.data, key);
+    return json({ ticket: { ...ticket, source: "jira" as const } });
   } catch (error) {
     return json({ error: (error as Error).message }, 502);
   }
@@ -1498,19 +1645,34 @@ async function transitionTicketHandler(
   const project = await getProject(projectId);
   if (!project) return json({ error: "project_not_found" }, 404);
 
-  const ctx = await integrationContext(projectId, "jira");
-  if (!ctx) return json({ error: "not_configured" }, 400);
-  const parsed = JiraConfig.safeParse(ctx.config);
-  if (!parsed.success) return json({ error: "invalid_config" }, 400);
-
   const body = TicketTransitionInput.safeParse(await readJson(req));
   if (!body.success) {
     return json({ error: "invalid_input", issues: body.error.issues }, 400);
   }
 
+  const provider = await resolveTicketProvider(projectId, body.data.source, key);
+  if (!provider) return json({ error: "not_configured" }, 400);
+
   try {
-    await transitionTicket(parsed.data, key, body.data.status);
-    await record("ticket.transitioned", { key, status: body.data.status });
+    if (provider === "clickup") {
+      const ctx = await integrationContext(projectId, "clickup");
+      if (!ctx) return json({ error: "not_configured" }, 400);
+      const parsed = ClickUpConfig.safeParse(ctx.config);
+      if (!parsed.success) return json({ error: "invalid_config" }, 400);
+      await transitionClickUpTicket(parsed.data, key, body.data.status);
+    } else {
+      const ctx = await integrationContext(projectId, "jira");
+      if (!ctx) return json({ error: "not_configured" }, 400);
+      const parsed = JiraConfig.safeParse(ctx.config);
+      if (!parsed.success) return json({ error: "invalid_config" }, 400);
+      await transitionTicket(parsed.data, key, body.data.status);
+    }
+    await record("ticket.transitioned", {
+      projectId,
+      key,
+      status: body.data.status,
+      provider,
+    });
     return json({ ok: true });
   } catch (error) {
     return json({ error: (error as Error).message }, 400);
@@ -1616,6 +1778,17 @@ export async function handleRequest(req: Request): Promise<Response> {
       return await runWorkflowHandler(
         workflowRun[1],
         decodeURIComponent(workflowRun[2]),
+        req,
+      );
+    }
+
+    const workflowSchedule = pathname.match(
+      /^\/api\/projects\/([^/]+)\/workflows\/([^/]+)\/schedule$/,
+    );
+    if (workflowSchedule && method === "PATCH") {
+      return await patchWorkflowScheduleHandler(
+        workflowSchedule[1],
+        decodeURIComponent(workflowSchedule[2]),
         req,
       );
     }
@@ -1800,7 +1973,12 @@ export async function handleRequest(req: Request): Promise<Response> {
         );
       }
       if (method === "PUT") {
-        return await updateDocumentHandler(documentItem[1], documentItem[2], req);
+        return await updateDocumentHandler(
+          documentItem[1],
+          decodeURIComponent(documentItem[2]),
+          req,
+          parseDocumentSource(url.searchParams.get("source")),
+        );
       }
     }
 
@@ -1813,7 +1991,7 @@ export async function handleRequest(req: Request): Promise<Response> {
       /^\/api\/projects\/([^/]+)\/local-tickets\/([^/]+)\/sync$/,
     );
     if (localTicketSync && method === "POST") {
-      return await syncLocalTicketHandler(localTicketSync[1], localTicketSync[2]);
+      return await syncLocalTicketHandler(localTicketSync[1], localTicketSync[2], req);
     }
 
     const localTickets = pathname.match(/^\/api\/projects\/([^/]+)\/local-tickets$/);
@@ -1839,7 +2017,7 @@ export async function handleRequest(req: Request): Promise<Response> {
 
     const ticketItem = pathname.match(/^\/api\/projects\/([^/]+)\/tickets\/([^/]+)$/);
     if (ticketItem && method === "GET") {
-      return await getTicketHandler(ticketItem[1], ticketItem[2]);
+      return await getTicketHandler(ticketItem[1], ticketItem[2], url.searchParams.get("source"));
     }
 
     const ticketTransition = pathname.match(
