@@ -126,7 +126,8 @@ Dua pola:
 - `${steps.<id>.output}` → stdout step tersebut (tersedia untuk step yang sudah sukses).
 - `${steps.<id>.outputs.<name>}` → named output dari `DAGU_OUTPUT_FILE`.
 - `${env.KEY}` → environment variable workflow/step.
-- Interpolasi berlaku di `run`, `prompt`, `system`, `messages`, dan nilai `env` step.
+- Interpolasi berlaku di `run`, `prompt`, `system`, `messages`, `message` (notification), dan nilai
+  `env` step.
 
 ```yaml
 steps:
@@ -197,6 +198,54 @@ Catatan:
 - Provider/role berasal dari **Global Settings**.
 - Jika provider/role/skill tidak ditemukan → step gagal dengan log jelas.
 - `output` menyimpan jawaban; stdout step shell juga tersedia sebagai `${steps.<id>.output}`.
+
+## Notification (`action: notification`)
+
+Kirim pesan ke channel yang didaftarkan di **Global Settings → Notifications** (Slack, Google Chat,
+Discord, atau webhook generik). Notifikasi **tidak** otomatis di akhir run — hanya jika ada step
+ini.
+
+### 1. Daftarkan channel
+
+1. Buka **Global Settings → Notifications**.
+2. **Tambah channel**: isi nama (mis. `team-slack`), tipe, dan Incoming Webhook URL.
+3. Opsional: **Test** untuk memastikan webhook aktif.
+
+Nama channel dipakai di YAML sebagai `with.channel` (id channel juga diterima).
+
+### 2. Step di workflow
+
+```yaml
+name: build-and-notify
+params:
+  - name: TASK
+    type: string
+    default: ship it
+steps:
+  - id: work
+    run: echo done
+    output: RESULT
+  - id: ping
+    depends: work
+    action: notification
+    with:
+      channel: team-slack
+      message: |
+        Workflow selesai.
+        Task: ${params.TASK}
+        Result: ${RESULT}
+```
+
+| Field `with` | Wajib | Keterangan |
+| --- | --- | --- |
+| `channel` | ya | Nama atau id channel di Global Settings. |
+| `message` | ya* | Isi pesan. Alias: `text` / `prompt`. Mendukung interpolasi `${...}`. |
+
+Catatan:
+- Step tidak boleh memakai `run`.
+- Channel tidak ditemukan / nonaktif → step **gagal** (log `[notify error] …`).
+- Payload Slack / Google Chat: `{ text }`; Discord: `{ content }`; webhook generik: JSON
+  `{ event: "workflow.notification", text, projectId, … }`.
 
 ## Sesi AI
 
@@ -270,5 +319,7 @@ steps:
 - **“Workspace belum diatur”** → set workspace di Project Settings → Workspace.
 - **Provider/role tidak ditemukan** → cek Global Settings → LLM Providers / Roles.
 - **Step AI gagal** → lihat log step; periksa baseUrl/apiKey/model provider.
+- **Channel notification tidak ditemukan** → cek Global Settings → Notifications (nama/id & aktif).
+- **Notify gagal HTTP** → Test channel di settings; periksa Incoming Webhook URL.
 - **Run 409** → masih ada run aktif; tunggu atau buka run lalu Cancel.
 - **Dependency cycle** → periksa `depends`.

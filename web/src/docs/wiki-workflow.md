@@ -168,6 +168,34 @@ Catatan:
 - Provider/role harus sudah ada di Global Settings; jika tidak ditemukan, step gagal dengan log jelas.
 - Gunakan `temperature` rendah untuk review/analisis dan lebih tinggi untuk eksplorasi ide.
 - Agent write tidak menunggu Review tab; file ditulis langsung ke workspace.
+
+## Notification
+
+Kirim pesan ke Slack / Google Chat / Discord / webhook lewat step workflow.
+
+1. Daftarkan channel di **Global Settings → Notifications** (nama + Incoming Webhook URL).
+2. Tambahkan step `action: notification` di YAML:
+
+```yaml
+steps:
+  - id: work
+    run: echo done
+    output: RESULT
+  - id: ping
+    depends: work
+    action: notification
+    with:
+      channel: team-slack
+      message: |
+        Selesai.
+        Result: ${RESULT}
+```
+
+- `with.channel` = nama (atau id) channel di Global Settings.
+- `with.message` wajib (alias: `text` / `prompt`); mendukung interpolasi `${...}`.
+- Notifikasi **tidak** otomatis di akhir run — hanya jika ada step ini.
+- Channel hilang/nonaktif → step gagal dengan log `[notify error]`.
+
 ## Tips
 
 - Gunakan `retry_policy` dan `timeout_sec` untuk perintah yang tidak stabil atau berjalan lama.
