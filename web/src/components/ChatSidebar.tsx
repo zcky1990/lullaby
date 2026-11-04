@@ -881,7 +881,7 @@ export function ChatSidebar({
         )
         : null}
 
-      <div className="flex items-center justify-between gap-3 border-b py-2 max-h-[35px] h-[35px]">
+      <div className="flex items-center justify-between gap-3 border-b py-2 max-h-[35px] h-[35px] px-2">
         <div className="flex items-center justify-between gap-1 w-full">
           <Select value={sessionId ?? "new"} onValueChange={selectSession} disabled={!!pending}>
             <SelectTrigger size="sm" className="h-7 min-w-0 flex-1 border-0 bg-transparent px-1 text-xs shadow-none focus-visible:ring-0 data-[size=sm]:h-7" aria-label="Sesi chat">
@@ -890,14 +890,14 @@ export function ChatSidebar({
             <SelectContent>
               <SelectGroup>
                 <SelectItem value="new">
-                  <div className="flex items-center gap-2 text-sm">
-                    <Plus />
+                  <div className="flex items-center gap-2 text-xs">
+                    <Plus size={12}/>
                     Chat baru
                   </div>
                 </SelectItem>
                 {sessions.map((session) => (
                   <SelectItem key={session.id} value={session.id}>
-                    <div className="flex min-w-0 items-center gap-2 text-sm">
+                    <div className="flex min-w-0 items-center gap-2 text-xs">
                       <span className="truncate">{session.title}</span>
                       {session.source === "cursor" ? (
                         <Badge variant="outline" className="shrink-0 text-[10px]">
@@ -1091,9 +1091,9 @@ export function ChatSidebar({
               </SelectTrigger>
               <SelectContent>
                 <SelectGroup>
-                  <SelectItem value="none">Tanpa role</SelectItem>
+                  <SelectItem value="none" className="text-xs">Tanpa role</SelectItem>
                   {roles.map((role) => (
-                    <SelectItem key={role.id} value={role.id}>
+                    <SelectItem key={role.id} value={role.id} className="text-xs">
                       {role.name}
                     </SelectItem>
                   ))}
@@ -1240,8 +1240,8 @@ export function ChatSidebar({
               </SelectTrigger>
               <SelectContent>
                 <SelectGroup>
-                  <SelectItem value="plan">Plan</SelectItem>
-                  <SelectItem value="build">Build</SelectItem>
+                  <SelectItem value="plan" className="text-xs">Plan</SelectItem>
+                  <SelectItem value="build" className="text-xs">Build</SelectItem>
                 </SelectGroup>
               </SelectContent>
             </Select>
@@ -1265,12 +1265,13 @@ export function ChatSidebar({
                       provider.models ?? [];
                     return (
                       <SelectGroup key={provider.id}>
-                        <SelectLabel>{provider.name}</SelectLabel>
+                        <SelectLabel className="text-xs">{provider.name}</SelectLabel>
                         {models.length > 0
                           ? models.map((model) => (
                             <SelectItem
                               key={`${provider.id}${CURSOR_VALUE_SEP}${model.id}`}
                               value={`${provider.id}${CURSOR_VALUE_SEP}${model.id}`}
+                              className="text-xs"
                             >
                               {model.name === model.id
                                 ? model.id
@@ -1278,7 +1279,7 @@ export function ChatSidebar({
                             </SelectItem>
                           ))
                           : (
-                            <SelectItem value={provider.id} disabled>
+                            <SelectItem value={provider.id} disabled className="text-xs">
                               Memuat model…
                             </SelectItem>
                           )}
@@ -1287,8 +1288,8 @@ export function ChatSidebar({
                   }
                   return (
                     <SelectGroup key={provider.id}>
-                      <SelectLabel>{provider.name}</SelectLabel>
-                      <SelectItem value={provider.id}>
+                      <SelectLabel className="text-xs">{provider.name}</SelectLabel>
+                      <SelectItem value={provider.id} className="text-xs">
                         {provider.model ? provider.model : provider.name}
                       </SelectItem>
                     </SelectGroup>
@@ -1307,7 +1308,7 @@ export function ChatSidebar({
               <SelectContent>
                 <SelectGroup>
                   {VARIANTS.map((item) => (
-                    <SelectItem key={item.id} value={item.id}>
+                    <SelectItem key={item.id} value={item.id} className="text-xs">
                       {item.label}
                     </SelectItem>
                   ))}

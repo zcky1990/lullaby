@@ -31,7 +31,7 @@ export function WindowToolbar({ projectName, workspace, chatOpen, onToggleChat }
         variant="ghost"
         onClick={onToggleChat}
         className={cn(
-          "size-9 rounded-full border border-transparent transition-all",
+          "size-9 rounded border border-transparent transition-all",
           chatOpen
             ? "border-primary/20 bg-primary/10 text-primary shadow-sm hover:bg-primary/15"
             : "text-muted-foreground hover:bg-accent hover:text-foreground",

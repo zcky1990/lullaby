@@ -64,17 +64,17 @@ export function TicketPanel({
 
       <div className="flex flex-col gap-3 px-3 pb-3">
         <div className="flex flex-col gap-1.5">
-          <span className="text-[11px] text-muted-foreground">Filter assignee</span>
+          <span className="text-xs text-muted-foreground">Filter assignee</span>
           <Select value={assigneeFilter} onValueChange={onFilter}>
-            <SelectTrigger size="sm" className="w-full" aria-label="Filter assignee">
-              <SelectValue placeholder="Semua user" />
+            <SelectTrigger size="sm" className="w-full text-xs" aria-label="Filter assignee">
+              <SelectValue placeholder="Semua user" className="text-xs"/>
             </SelectTrigger>
             <SelectContent>
               <SelectGroup>
-                <SelectItem value="all">Semua user</SelectItem>
-                {hasUnassigned ? <SelectItem value="none">Tanpa assignee</SelectItem> : null}
+                <SelectItem value="all" className="text-xs">Semua user</SelectItem>
+                {hasUnassigned ? <SelectItem value="none" className="text-xs">Tanpa assignee</SelectItem> : null}
                 {assignees.map((assignee) => (
-                  <SelectItem key={assignee} value={assignee}>
+                  <SelectItem className="text-xs" key={assignee} value={assignee}>
                     {assignee}
                   </SelectItem>
                 ))}
@@ -83,7 +83,7 @@ export function TicketPanel({
           </Select>
         </div>
 
-        <p className="text-[11px] leading-relaxed text-muted-foreground">
+        <p className="text-xs leading-relaxed text-muted-foreground">
           Tiket lokal dan Jira. Drag kartu antar kolom untuk mengubah status.
         </p>
       </div>
