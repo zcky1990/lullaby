@@ -12,11 +12,11 @@ import {
   Controls,
   type Edge,
   type Node,
+  type NodeTypes,
   ReactFlow,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import {
-  BookOpen,
   FileCode2,
   GitBranch,
   Network,
@@ -31,15 +31,18 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { useTheme } from "@/components/ThemeProvider";
-import { WikiTab } from "@/components/WikiTab";
+import { WorkflowParamsDialog } from "@/components/WorkflowParamsDialog";
+import { WorkflowRouterNode } from "@/components/WorkflowRouterNode";
 import {
   api,
+  type LlmProvider,
   type WorkflowDefinition,
   type WorkflowDefinitionStep,
   type WorkflowRunStep,
   type WorkflowRunSummary,
   type WorkflowSummary,
 } from "@/lib/api";
+import { formatApiError } from "@/lib/api-error";
 import {
   runBadgeVariant,
   stepBadgeVariant,
@@ -49,8 +52,18 @@ import { cn } from "@/lib/utils";
 
 const MonacoViewer = lazy(() => import("@/components/MonacoViewer"));
 
+const workflowNodeTypes: NodeTypes = {
+  router: WorkflowRouterNode,
+};
+
 function stepCommand(step: WorkflowDefinitionStep): string {
   if (step.run) return step.run;
+  if (step.kind === "router") {
+    return `[router] ${step.router?.value ?? step.action ?? "route"}`;
+  }
+  if (step.kind === "notify") {
+    return `[notify] ${step.notify?.channel ?? step.action ?? "channel"}`;
+  }
   const prompt = step.with?.prompt ?? step.with?.messages?.[0]?.content ??
     (step.kind === "agent" ? "agent" : "chat.completion");
   return step.kind === "agent" ? `[agent] ${prompt}` : `[llm] ${prompt}`;
@@ -68,11 +81,18 @@ const STATUS_BORDER: Record<string, string> = {
 interface Props {
   projectId: string | null;
   slug: string | null;
+  providers?: LlmProvider[];
   onSaved: () => void;
   onDeleted: () => void;
 }
 
-export function WorkflowTab({ projectId, slug, onSaved, onDeleted }: Props) {
+export function WorkflowTab({
+  projectId,
+  slug,
+  providers = [],
+  onSaved,
+  onDeleted,
+}: Props) {
   const { resolvedEditorTheme } = useTheme();
   const [yaml, setYaml] = useState("");
   const [definition, setDefinition] = useState<WorkflowDefinition | null>(null);
@@ -81,11 +101,12 @@ export function WorkflowTab({ projectId, slug, onSaved, onDeleted }: Props) {
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
   const [steps, setSteps] = useState<WorkflowRunStep[]>([]);
   const [selectedStep, setSelectedStep] = useState<string | null>(null);
-  const [view, setView] = useState<"editor" | "graph" | "wiki">("editor");
+  const [view, setView] = useState<"editor" | "graph">("editor");
   const [dirty, setDirty] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [running, setRunning] = useState(false);
+  const [paramsOpen, setParamsOpen] = useState(false);
   const [error, setError] = useState<string | undefined>();
 
   const refreshRuns = useCallback(async () => {
@@ -146,7 +167,7 @@ export function WorkflowTab({ projectId, slug, onSaved, onDeleted }: Props) {
         setSelectedStep(workflow.definition.steps[0]?.id ?? null);
       }
     } catch (e) {
-      setError((e as Error).message);
+      setError(formatApiError(e));
     } finally {
       setLoading(false);
     }
@@ -180,23 +201,39 @@ export function WorkflowTab({ projectId, slug, onSaved, onDeleted }: Props) {
     onSaved,
   ]);
 
-  const runNow = async () => {
+  const startRun = async (params?: Record<string, string>) => {
     if (!projectId || !slug || running || selectedRun?.status === "running") {
       return;
     }
     setRunning(true);
     setError(undefined);
     try {
-      const { runId } = await api.runWorkflow(projectId, slug);
+      const { runId } = await api.runWorkflow(
+        projectId,
+        slug,
+        params ? { params } : undefined,
+      );
+      setParamsOpen(false);
       setSelectedStep(null);
       await refreshRuns();
       await loadRun(runId);
       onSaved();
     } catch (e) {
-      setError((e as Error).message);
+      setError(formatApiError(e));
     } finally {
       setRunning(false);
     }
+  };
+
+  const runNow = () => {
+    if (!projectId || !slug || running || selectedRun?.status === "running") {
+      return;
+    }
+    if ((definition?.params.length ?? 0) > 0) {
+      setParamsOpen(true);
+      return;
+    }
+    void startRun();
   };
 
   const cancelRun = async () => {
@@ -206,12 +243,34 @@ export function WorkflowTab({ projectId, slug, onSaved, onDeleted }: Props) {
       await api.cancelWorkflowRun(projectId, selectedRunId);
       await loadRun(selectedRunId);
     } catch (e) {
-      setError((e as Error).message);
+      setError(formatApiError(e));
     }
   };
 
-  const save = async () => {
-    if (!projectId || !slug) return;
+  const removeRun = async (runId: string) => {
+    if (!projectId) return;
+    if (!confirm("Hapus run ini dari riwayat?")) return;
+    setError(undefined);
+    try {
+      await api.deleteWorkflowRun(projectId, runId);
+      const nextRuns = await refreshRuns();
+      if (selectedRunId === runId) {
+        const latest = nextRuns?.[0];
+        if (latest) await loadRun(latest.id);
+        else {
+          setSelectedRunId(null);
+          setSteps([]);
+          setSelectedStep(definition?.steps[0]?.id ?? null);
+        }
+      }
+      onSaved();
+    } catch (e) {
+      setError(formatApiError(e));
+    }
+  };
+
+  const save = useCallback(async () => {
+    if (!projectId || !slug || saving || !dirty) return;
     setSaving(true);
     setError(undefined);
     try {
@@ -219,11 +278,22 @@ export function WorkflowTab({ projectId, slug, onSaved, onDeleted }: Props) {
       await load();
       onSaved();
     } catch (e) {
-      setError((e as Error).message);
+      setError(formatApiError(e));
     } finally {
       setSaving(false);
     }
-  };
+  }, [projectId, slug, saving, dirty, yaml, load, onSaved]);
+
+  useEffect(() => {
+    const handler = (event: KeyboardEvent) => {
+      if (!(event.metaKey || event.ctrlKey) || event.shiftKey || event.altKey) return;
+      if (event.key.toLowerCase() !== "s") return;
+      event.preventDefault();
+      void save();
+    };
+    window.addEventListener("keydown", handler, { capture: true });
+    return () => window.removeEventListener("keydown", handler, { capture: true });
+  }, [save]);
 
   const remove = async () => {
     if (!projectId || !slug) return;
@@ -232,7 +302,7 @@ export function WorkflowTab({ projectId, slug, onSaved, onDeleted }: Props) {
       await api.deleteWorkflow(projectId, slug);
       onDeleted();
     } catch (e) {
-      setError((e as Error).message);
+      setError(formatApiError(e));
     }
   };
 
@@ -246,28 +316,69 @@ export function WorkflowTab({ projectId, slug, onSaved, onDeleted }: Props) {
     if (!definition) return { nodes: [] as Node[], edges: [] as Edge[] };
     const nodes: Node[] = [];
     const edges: Edge[] = [];
+    const routeEdgeKeys = new Set<string>();
+
     definition.layers.forEach((layer, layerIndex) => {
       layer.forEach((stepId, index) => {
+        const step = definition.steps.find((item) => item.id === stepId);
         const status = statusByStep.get(stepId) ?? "pending";
-        nodes.push({
-          id: stepId,
-          position: { x: layerIndex * 240, y: index * 110 },
-          data: { label: stepId },
-          style: {
-            width: 180,
-            padding: 10,
-            borderRadius: 6,
-            background: "var(--card)",
-            color: "var(--card-foreground)",
-            border: `2px solid ${STATUS_BORDER[status] ?? "var(--border)"}`,
-            fontFamily: "monospace",
-            fontSize: 12,
-          },
-        });
+        const border = STATUS_BORDER[status] ?? "var(--border)";
+        if (step?.kind === "router") {
+          nodes.push({
+            id: stepId,
+            type: "router",
+            position: { x: layerIndex * 240, y: index * 120 },
+            data: { label: stepId, borderColor: border },
+          });
+        } else {
+          nodes.push({
+            id: stepId,
+            position: { x: layerIndex * 240, y: index * 110 },
+            data: { label: stepId },
+            style: {
+              width: 180,
+              padding: 10,
+              borderRadius: 6,
+              background: "var(--card)",
+              color: "var(--card-foreground)",
+              border: `2px solid ${border}`,
+              fontFamily: "monospace",
+              fontSize: 12,
+            },
+          });
+        }
       });
     });
+
     for (const step of definition.steps) {
+      if (step.kind === "router" && step.router) {
+        const loopBacks = new Set(step.router.loopBacks ?? []);
+        for (const [key, targets] of Object.entries(step.router.routes)) {
+          for (const target of targets) {
+            const edgeId = `${step.id}-[${key}]->${target}`;
+            routeEdgeKeys.add(`${step.id}->${target}`);
+            const targetStatus = statusByStep.get(target);
+            edges.push({
+              id: edgeId,
+              source: step.id,
+              target,
+              label: key,
+              animated: targetStatus === "running" || loopBacks.has(target),
+              style: {
+                stroke: key === "failed" || key === "error"
+                  ? "#ef4444"
+                  : key === "success" || key === "ok"
+                  ? "#10b981"
+                  : "var(--border)",
+                strokeDasharray: loopBacks.has(target) ? "6 4" : undefined,
+              },
+              labelStyle: { fontSize: 10, fill: "var(--muted-foreground)" },
+            });
+          }
+        }
+      }
       for (const dependency of step.depends) {
+        if (routeEdgeKeys.has(`${dependency}->${step.id}`)) continue;
         const targetStatus = statusByStep.get(step.id);
         edges.push({
           id: `${dependency}->${step.id}`,
@@ -275,6 +386,17 @@ export function WorkflowTab({ projectId, slug, onSaved, onDeleted }: Props) {
           target: step.id,
           animated: targetStatus === "running",
           style: { stroke: "var(--border)" },
+        });
+      }
+      for (const nextId of step.next ?? []) {
+        edges.push({
+          id: `${step.id}-next->${nextId}`,
+          source: step.id,
+          target: nextId,
+          label: "next",
+          animated: true,
+          style: { stroke: "#f59e0b", strokeDasharray: "6 4" },
+          labelStyle: { fontSize: 10, fill: "var(--muted-foreground)" },
         });
       }
     }
@@ -294,7 +416,7 @@ export function WorkflowTab({ projectId, slug, onSaved, onDeleted }: Props) {
 
   if (!slug) {
     return (
-      <div className="flex h-full items-center justify-center p-8 text-sm text-muted-foreground">
+      <div className="flex h-full items-center justify-center p-8 text-xs text-muted-foreground">
         Pilih workflow di panel kiri atau buat workflow baru.
       </div>
     );
@@ -304,10 +426,18 @@ export function WorkflowTab({ projectId, slug, onSaved, onDeleted }: Props) {
 
   return (
     <div className="flex h-full flex-col">
+      <WorkflowParamsDialog
+        open={paramsOpen}
+        params={definition?.params ?? []}
+        providers={providers}
+        running={running}
+        onOpenChange={setParamsOpen}
+        onConfirm={(values) => void startRun(values)}
+      />
       <div className="flex h-[35px] shrink-0 items-center justify-between gap-2 border-b px-3">
         <div className="flex min-w-0 items-center gap-2">
           <GitBranch className="size-4 shrink-0 text-muted-foreground" />
-          <span className="truncate text-sm font-medium">
+          <span className="truncate text-xs font-medium">
             {summary?.name ?? slug}
           </span>
           <span className="truncate font-mono text-[10px] text-muted-foreground">
@@ -324,8 +454,7 @@ export function WorkflowTab({ projectId, slug, onSaved, onDeleted }: Props) {
                 onClick={cancelRun}
                 data-icon="inline-start"
               >
-                <Square />
-                Cancel
+                <Square color="red"/>
               </Button>
             )
             : null}
@@ -338,17 +467,16 @@ export function WorkflowTab({ projectId, slug, onSaved, onDeleted }: Props) {
             data-icon="inline-start"
           >
             {running ? <Spinner /> : <Play />}
-            Run
           </Button>
           <Button
             size="sm"
             variant="outline"
-            onClick={save}
+            onClick={() => void save()}
             disabled={saving || !dirty}
+            title="Cmd/Ctrl+S"
             data-icon="inline-start"
           >
             {saving ? <Spinner /> : <Save />}
-            Save
           </Button>
           <Button
             size="sm"
@@ -363,7 +491,11 @@ export function WorkflowTab({ projectId, slug, onSaved, onDeleted }: Props) {
       </div>
 
       {error
-        ? <p className="border-b px-3 py-2 text-xs text-destructive">{error}</p>
+        ? (
+          <pre className="border-b px-3 py-2 text-xs whitespace-pre-wrap text-destructive">
+            {error}
+          </pre>
+        )
         : null}
       {summary?.error
         ? (
@@ -396,22 +528,10 @@ export function WorkflowTab({ projectId, slug, onSaved, onDeleted }: Props) {
               <Network />
               Graph
             </Button>
-            <Button
-              size="sm"
-              variant={view === "wiki" ? "secondary" : "ghost"}
-              className="h-6 px-2 text-[11px]"
-              onClick={() => setView("wiki")}
-              data-icon="inline-start"
-            >
-              <BookOpen />
-              Wiki
-            </Button>
           </div>
 
           <div className="min-h-0 flex-1">
-            {view === "wiki"
-              ? <WikiTab />
-              : view === "editor"
+            {view === "editor"
               ? (
                 <Suspense
                   fallback={<Skeleton className="h-full w-full rounded-none" />}
@@ -434,6 +554,7 @@ export function WorkflowTab({ projectId, slug, onSaved, onDeleted }: Props) {
                   <ReactFlow
                     nodes={nodes}
                     edges={edges}
+                    nodeTypes={workflowNodeTypes}
                     fitView
                     nodesDraggable={false}
                     nodesConnectable={false}
@@ -447,41 +568,37 @@ export function WorkflowTab({ projectId, slug, onSaved, onDeleted }: Props) {
               )}
           </div>
 
-          {view !== "wiki"
-            ? (
-              <div className="h-[220px] shrink-0 overflow-auto border-t bg-background">
-                <div className="flex items-center justify-between gap-2 border-b px-3 py-1.5">
-                  <span className="truncate font-mono text-[11px]">
-                    {selectedStepData?.stepId ?? "Log"}
-                  </span>
-                  {selectedStepData
-                    ? (
-                      <div className="flex items-center gap-2">
-                        <Badge variant={stepBadgeVariant(selectedStepData.status)}>
-                          {selectedStepData.status}
-                        </Badge>
-                        {selectedStepData.exitCode !== undefined
-                          ? (
-                            <span className="text-[10px] text-muted-foreground">
-                              exit {selectedStepData.exitCode}
-                            </span>
-                          )
-                          : null}
-                      </div>
-                    )
-                    : null}
-                </div>
-                <div className="px-3 py-2">
-                  <p className="mb-1 font-mono text-[11px] text-muted-foreground">
-                    $ {selectedStepData?.command ?? ""}
-                  </p>
-                  <pre className="font-mono text-[11px] whitespace-pre-wrap">
-                    {selectedStepData?.log || "(belum ada log)"}
-                  </pre>
-                </div>
-              </div>
-            )
-            : null}
+          <div className="h-[220px] shrink-0 overflow-auto border-t bg-background">
+            <div className="flex items-center justify-between gap-2 border-b px-3 py-1.5">
+              <span className="truncate font-mono text-[11px]">
+                {selectedStepData?.stepId ?? "Log"}
+              </span>
+              {selectedStepData
+                ? (
+                  <div className="flex items-center gap-2">
+                    <Badge variant={stepBadgeVariant(selectedStepData.status)}>
+                      {selectedStepData.status}
+                    </Badge>
+                    {selectedStepData.exitCode !== undefined
+                      ? (
+                        <span className="text-[10px] text-muted-foreground">
+                          exit {selectedStepData.exitCode}
+                        </span>
+                      )
+                      : null}
+                  </div>
+                )
+                : null}
+            </div>
+            <div className="px-3 py-2">
+              <p className="mb-1 font-mono text-[11px] text-muted-foreground">
+                $ {selectedStepData?.command ?? ""}
+              </p>
+              <pre className="font-mono text-[11px] whitespace-pre-wrap">
+                {selectedStepData?.log || "(belum ada log)"}
+              </pre>
+            </div>
+          </div>
         </div>
 
         <aside className="flex w-72 shrink-0 flex-col overflow-y-auto border-l">
@@ -507,25 +624,42 @@ export function WorkflowTab({ projectId, slug, onSaved, onDeleted }: Props) {
             )
             : (
               runs.map((run) => (
-                <button
+                <div
                   key={run.id}
-                  type="button"
-                  onClick={() => void loadRun(run.id)}
                   className={cn(
-                    "flex items-center gap-2 border-b px-3 py-1.5 text-left text-[11px] hover:bg-accent",
+                    "flex items-center gap-1 border-b px-2 py-1 text-[11px] hover:bg-accent",
                     run.id === selectedRunId && "bg-accent",
                   )}
                 >
-                  <span className="min-w-0 flex-1 truncate font-mono">
-                    {run.id.slice(0, 8)}
-                  </span>
-                  <Badge
-                    variant={runBadgeVariant(run.status)}
-                    className="h-5 px-1.5 text-[10px]"
+                  <button
+                    type="button"
+                    onClick={() => void loadRun(run.id)}
+                    className="flex min-w-0 flex-1 items-center gap-2 px-1 py-0.5 text-left"
                   >
-                    {run.status}
-                  </Badge>
-                </button>
+                    <span className="min-w-0 flex-1 truncate font-mono">
+                      {run.id.slice(0, 8)}
+                    </span>
+                    <Badge
+                      variant={runBadgeVariant(run.status)}
+                      className="h-5 px-1.5 text-[10px]"
+                    >
+                      {run.status}
+                    </Badge>
+                  </button>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="size-6 shrink-0 text-muted-foreground hover:text-destructive"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      void removeRun(run.id);
+                    }}
+                    aria-label={`Hapus run ${run.id.slice(0, 8)}`}
+                    title="Hapus run"
+                  >
+                    <Trash2 className="size-3" />
+                  </Button>
+                </div>
               ))
             )}
 

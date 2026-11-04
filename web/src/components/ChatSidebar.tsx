@@ -1,4 +1,13 @@
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
 import { FileCode2, FileText, Paperclip, Plus, Send, Sparkles, Trash2, X } from "lucide-react";
 import { SkillMentionMenu, type SkillOption } from "@/components/SkillMentionMenu";
 import { Badge } from "@/components/ui/badge";
@@ -8,6 +17,7 @@ import {
   SelectContent,
   SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
@@ -20,6 +30,7 @@ import {
   type ChatPending,
   type ChatResponse,
   type ChatSession,
+  type CursorModel,
   type FileChange,
   type LlmProvider,
   type PendingFileChange,
@@ -85,6 +96,26 @@ const VARIANTS = [
 const MAX_IMAGE_BYTES = 3 * 1024 * 1024;
 const MAX_TEXT_BYTES = 200_000;
 const MAX_ATTACHMENTS = 6;
+const CHAT_WIDTH_KEY = "rnd.chatWidth:v1";
+const CHAT_MIN_WIDTH = 280;
+const CHAT_MAX_WIDTH = 720;
+const CHAT_DEFAULT_WIDTH = 384;
+const CURSOR_VALUE_SEP = "::";
+
+function readChatWidth(): number {
+  try {
+    const value = Number(localStorage.getItem(CHAT_WIDTH_KEY));
+    if (
+      Number.isFinite(value) && value >= CHAT_MIN_WIDTH && value <= CHAT_MAX_WIDTH
+    ) {
+      return value;
+    }
+  } catch {
+    // ignore
+  }
+  return CHAT_DEFAULT_WIDTH;
+}
+
 const TEXT_FILE =
   /\.(txt|md|markdown|json|jsonc|ts|tsx|js|jsx|mjs|cjs|css|scss|html|xml|yml|yaml|toml|ini|env|rb|py|go|rs|java|kt|swift|php|sh|bash|zsh|sql|csv|log|diff|patch)$/i;
 
@@ -151,6 +182,10 @@ export function ChatSidebar({
   hidden,
 }: Props) {
   const [providerId, setProviderId] = useState(providers[0]?.id ?? "");
+  const [cursorModelsByProvider, setCursorModelsByProvider] = useState<
+    Record<string, CursorModel[]>
+  >({});
+  const [cursorModelId, setCursorModelId] = useState("");
   const [variant, setVariant] = useState("medium");
   const [roleId, setRoleId] = useState<string | null>(() => {
     try {
@@ -171,6 +206,8 @@ export function ChatSidebar({
   const [entries, setEntries] = useState<Entry[]>([]);
   const [attachments, setAttachments] = useState<AttachmentDraft[]>([]);
   const [dragging, setDragging] = useState(false);
+  const [resizing, setResizing] = useState(false);
+  const [width, setWidth] = useState(readChatWidth);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | undefined>();
@@ -185,6 +222,39 @@ export function ChatSidebar({
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(CHAT_WIDTH_KEY, String(width));
+    } catch {
+      // ignore
+    }
+  }, [width]);
+
+  const startResize = (event: ReactPointerEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    const startX = event.clientX;
+    const startWidth = width;
+    setResizing(true);
+    const onMove = (moveEvent: PointerEvent) => {
+      const next = Math.min(
+        CHAT_MAX_WIDTH,
+        Math.max(CHAT_MIN_WIDTH, startWidth + (startX - moveEvent.clientX)),
+      );
+      setWidth(next);
+    };
+    const onUp = () => {
+      setResizing(false);
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      document.body.style.userSelect = "";
+      document.body.style.cursor = "";
+    };
+    document.body.style.userSelect = "none";
+    document.body.style.cursor = "col-resize";
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+  };
 
   const enabledSkills = useMemo(
     () => skills.filter((skill) => skill.enabled).map((skill) => ({
@@ -211,6 +281,86 @@ export function ChatSidebar({
   useEffect(() => {
     if (!providerId && providers[0]) setProviderId(providers[0].id);
   }, [providers, providerId]);
+
+  const activeProvider = providers.find((provider) => provider.id === providerId) ?? null;
+  const cursorModels = activeProvider?.provider === "cursor"
+    ? (cursorModelsByProvider[activeProvider.id] ?? activeProvider.models ?? [])
+    : [];
+
+  const providerSelectValue = activeProvider?.provider === "cursor" && cursorModelId
+    ? `${providerId}${CURSOR_VALUE_SEP}${cursorModelId}`
+    : providerId;
+
+  const selectProviderValue = (value: string) => {
+    const sep = value.indexOf(CURSOR_VALUE_SEP);
+    if (sep >= 0) {
+      setProviderId(value.slice(0, sep));
+      setCursorModelId(value.slice(sep + CURSOR_VALUE_SEP.length));
+      return;
+    }
+    setProviderId(value);
+    setCursorModelId("");
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+    const cursorProviders = providers.filter((provider) => provider.provider === "cursor");
+    if (cursorProviders.length === 0) {
+      setCursorModelsByProvider({});
+      setCursorModelId("");
+      return;
+    }
+
+    const next: Record<string, CursorModel[]> = {};
+    for (const provider of cursorProviders) {
+      if (provider.models?.length) next[provider.id] = provider.models;
+    }
+    setCursorModelsByProvider((current) => ({ ...current, ...next }));
+
+    void Promise.all(
+      cursorProviders
+        .filter((provider) => !provider.models?.length)
+        .map(async (provider) => {
+          try {
+            const res = await api.listCursorModels({ providerId: provider.id });
+            if (!cancelled) {
+              setCursorModelsByProvider((current) => ({
+                ...current,
+                [provider.id]: res.models,
+              }));
+            }
+          } catch {
+            if (!cancelled) {
+              setCursorModelsByProvider((current) => ({
+                ...current,
+                [provider.id]: current[provider.id] ?? [],
+              }));
+            }
+          }
+        }),
+    );
+
+    return () => {
+      cancelled = true;
+    };
+  }, [providers]);
+
+  useEffect(() => {
+    if (activeProvider?.provider !== "cursor") {
+      setCursorModelId("");
+      return;
+    }
+    setCursorModelId((current) => {
+      if (current && cursorModels.some((model) => model.id === current)) return current;
+      if (
+        activeProvider.model &&
+        cursorModels.some((model) => model.id === activeProvider.model)
+      ) {
+        return activeProvider.model;
+      }
+      return cursorModels[0]?.id ?? "";
+    });
+  }, [activeProvider, cursorModels]);
 
   const activeRole = roles.find((role) => role.id === roleId) ?? null;
   const roleProviderId =
@@ -622,6 +772,7 @@ export function ChatSidebar({
     try {
       const response = await api.chat(projectId, {
         providerId: providerId || undefined,
+        model: activeProvider?.provider === "cursor" ? cursorModelId || undefined : undefined,
         sessionId: sessionId ?? undefined,
         roleId: roleId ?? undefined,
         skillName,
@@ -686,9 +837,11 @@ export function ChatSidebar({
 
   return (
     <aside
+      style={{ width }}
       className={cn(
-        "relative flex w-96 shrink-0 flex-col border-l border-border/50 bg-[var(--sidebar)]/70 backdrop-blur-xl",
+        "relative flex shrink-0 flex-col border-l border-border/50 bg-[var(--sidebar)]/70 backdrop-blur-xl",
         hidden && "hidden",
+        resizing && "select-none",
       )}
       onDragOver={(event) => {
         const types = Array.from(event.dataTransfer.types);
@@ -712,31 +865,46 @@ export function ChatSidebar({
         if (event.dataTransfer.files.length) void handleFiles(Array.from(event.dataTransfer.files));
       }}
     >
+      <div
+        onPointerDown={startResize}
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Resize chat"
+        title="Drag to resize"
+        className="hover:bg-primary/40 absolute inset-y-0 left-0 z-20 w-1 cursor-col-resize transition-colors"
+      />
       {dragging
         ? (
           <div className="pointer-events-none absolute inset-2 z-10 flex items-center justify-center rounded-lg border-2 border-dashed border-primary/60 bg-background/85">
-            <p className="text-sm font-medium">Lepaskan file di sini</p>
+            <p className="text-xs font-medium">Lepaskan file di sini</p>
           </div>
         )
         : null}
 
-      <div className="flex items-center justify-between gap-3 border-b py-2 max-h-[35px] h-[35px]">
+      <div className="flex items-center justify-between gap-3 border-b py-2 max-h-[35px] h-[35px] px-2">
         <div className="flex items-center justify-between gap-1 w-full">
           <Select value={sessionId ?? "new"} onValueChange={selectSession} disabled={!!pending}>
-            <SelectTrigger size="sm" className="min-w-0 flex-1" aria-label="Sesi chat">
-              <SelectValue placeholder="Chat baru" className="text-sm"/>
+            <SelectTrigger size="sm" className="h-7 min-w-0 flex-1 border-0 bg-transparent px-1 text-xs shadow-none focus-visible:ring-0 data-[size=sm]:h-7" aria-label="Sesi chat">
+              <SelectValue placeholder="Chat baru" className="text-xs"/>
             </SelectTrigger>
             <SelectContent>
               <SelectGroup>
                 <SelectItem value="new">
-                  <div className="flex items-center gap-2 text-sm">
-                    <Plus />
+                  <div className="flex items-center gap-2 text-xs">
+                    <Plus size={12}/>
                     Chat baru
                   </div>
                 </SelectItem>
                 {sessions.map((session) => (
                   <SelectItem key={session.id} value={session.id}>
-                    {session.title}
+                    <div className="flex min-w-0 items-center gap-2 text-xs">
+                      <span className="truncate">{session.title}</span>
+                      {session.source === "cursor" ? (
+                        <Badge variant="outline" className="shrink-0 text-[10px]">
+                          Cursor
+                        </Badge>
+                      ) : null}
+                    </div>
                   </SelectItem>
                 ))}
               </SelectGroup>
@@ -834,7 +1002,7 @@ export function ChatSidebar({
               ))}
               {sending
                 ? (
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
                     <Spinner />
                     Bekerja…
                   </div>
@@ -923,9 +1091,9 @@ export function ChatSidebar({
               </SelectTrigger>
               <SelectContent>
                 <SelectGroup>
-                  <SelectItem value="none">Tanpa role</SelectItem>
+                  <SelectItem value="none" className="text-xs">Tanpa role</SelectItem>
                   {roles.map((role) => (
-                    <SelectItem key={role.id} value={role.id}>
+                    <SelectItem key={role.id} value={role.id} className="text-xs">
                       {role.name}
                     </SelectItem>
                   ))}
@@ -1072,32 +1240,61 @@ export function ChatSidebar({
               </SelectTrigger>
               <SelectContent>
                 <SelectGroup>
-                  <SelectItem value="plan">Plan</SelectItem>
-                  <SelectItem value="build">Build</SelectItem>
+                  <SelectItem value="plan" className="text-xs">Plan</SelectItem>
+                  <SelectItem value="build" className="text-xs">Build</SelectItem>
                 </SelectGroup>
               </SelectContent>
             </Select>
             <Select
-              value={providerId}
-              onValueChange={setProviderId}
+              value={providerSelectValue}
+              onValueChange={selectProviderValue}
               disabled={providers.length === 0 || !!pending || !!roleProviderId}
             >
               <SelectTrigger
                 size="sm"
                 className="h-7 min-w-0 flex-1 border-0 bg-transparent px-1 text-xs shadow-none focus-visible:ring-0 data-[size=sm]:h-7"
-                aria-label="Pilih model"
+                aria-label="Pilih provider / model"
                 title={roleProviderId ? "Provider ditentukan oleh role" : undefined}
               >
-                <SelectValue placeholder="Model" />
+                <SelectValue placeholder="Provider" />
               </SelectTrigger>
-              <SelectContent>
-                <SelectGroup>
-                  {providers.map((provider) => (
-                    <SelectItem key={provider.id} value={provider.id}>
-                      {provider.model ?? provider.name}
-                    </SelectItem>
-                  ))}
-                </SelectGroup>
+              <SelectContent className="min-w-[14rem]">
+                {providers.map((provider) => {
+                  if (provider.provider === "cursor") {
+                    const models = cursorModelsByProvider[provider.id] ??
+                      provider.models ?? [];
+                    return (
+                      <SelectGroup key={provider.id}>
+                        <SelectLabel className="text-xs">{provider.name}</SelectLabel>
+                        {models.length > 0
+                          ? models.map((model) => (
+                            <SelectItem
+                              key={`${provider.id}${CURSOR_VALUE_SEP}${model.id}`}
+                              value={`${provider.id}${CURSOR_VALUE_SEP}${model.id}`}
+                              className="text-xs"
+                            >
+                              {model.name === model.id
+                                ? model.id
+                                : `${model.name} (${model.id})`}
+                            </SelectItem>
+                          ))
+                          : (
+                            <SelectItem value={provider.id} disabled className="text-xs">
+                              Memuat model…
+                            </SelectItem>
+                          )}
+                      </SelectGroup>
+                    );
+                  }
+                  return (
+                    <SelectGroup key={provider.id}>
+                      <SelectLabel className="text-xs">{provider.name}</SelectLabel>
+                      <SelectItem value={provider.id} className="text-xs">
+                        {provider.model ? provider.model : provider.name}
+                      </SelectItem>
+                    </SelectGroup>
+                  );
+                })}
               </SelectContent>
             </Select>
             <Select value={variant} onValueChange={setVariant} disabled={!!pending}>
@@ -1111,7 +1308,7 @@ export function ChatSidebar({
               <SelectContent>
                 <SelectGroup>
                   {VARIANTS.map((item) => (
-                    <SelectItem key={item.id} value={item.id}>
+                    <SelectItem key={item.id} value={item.id} className="text-xs">
                       {item.label}
                     </SelectItem>
                   ))}

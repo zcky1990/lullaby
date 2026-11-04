@@ -44,7 +44,7 @@ export function ReviewTab({
 
   if (changes.length === 0) {
     return (
-      <div className="flex h-full items-center justify-center p-8 text-sm text-muted-foreground">
+      <div className="flex h-full items-center justify-center p-8 text-xs text-muted-foreground">
         Tidak ada perubahan yang menunggu review.
       </div>
     );
@@ -54,7 +54,7 @@ export function ReviewTab({
     <div className="flex h-full flex-col">
       <div className="flex flex-wrap items-center justify-between gap-2 border-b px-4 py-2">
         <div className="flex min-w-0 flex-col">
-          <h1 className="text-sm font-semibold">Review perubahan AI</h1>
+          <h1 className="text-xs font-semibold">Review perubahan AI</h1>
           <p className="text-xs text-muted-foreground">
             {changes.length} file · accept/reject per hunk
           </p>

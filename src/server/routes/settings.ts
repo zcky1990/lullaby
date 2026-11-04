@@ -5,6 +5,8 @@ import {
   LspSettingsInput,
   McpServerInput,
   McpSettingsInput,
+  NotificationSettingsInput,
+  NotificationTestInput,
   PromptsSettingsInput,
   SkillsSettingsInput,
   TerminalSettingsInput,
@@ -21,6 +23,11 @@ import { CHAT_TOOL_CATALOG } from "../chat/tools.ts";
 import { json, readJson, record } from "../http.ts";
 import { lspPresets, probeLspCommand, readLspSettings, writeLspSettings } from "../lsp.ts";
 import { listMcpTools } from "../mcp.ts";
+import { testNotificationChannels } from "../notifications/send.ts";
+import {
+  readNotificationSettings,
+  writeNotificationSettings,
+} from "../notifications/settings.ts";
 import {
   builtinSkillsDir,
   globalSkillsDir,
@@ -187,6 +194,43 @@ export async function saveAutomationSettingsHandler(req: Request): Promise<Respo
     autoBuildOnInProgress: parsed.data.autoBuildOnInProgress,
   });
   return json({ autoBuildOnInProgress: parsed.data.autoBuildOnInProgress });
+}
+
+export async function getNotificationSettingsHandler(): Promise<Response> {
+  return json({ settings: await readNotificationSettings() });
+}
+
+export async function saveNotificationSettingsHandler(req: Request): Promise<Response> {
+  const parsed = NotificationSettingsInput.safeParse(await readJson(req));
+  if (!parsed.success) {
+    return json({ error: "invalid_input", issues: parsed.error.issues }, 400);
+  }
+  const settings = await writeNotificationSettings(parsed.data);
+  await record("settings.notifications_updated", {
+    channels: settings.channels.length,
+  });
+  return json({ settings });
+}
+
+export async function testNotificationSettingsHandler(req: Request): Promise<Response> {
+  const parsed = NotificationTestInput.safeParse(await readJson(req).catch(() => ({})));
+  if (!parsed.success) {
+    return json({ error: "invalid_input", issues: parsed.error.issues }, 400);
+  }
+  const results = await testNotificationChannels(parsed.data.channelId);
+  if (!results.length) {
+    return json({
+      error: "no_channels",
+      message: parsed.data.channelId
+        ? "Channel tidak ditemukan atau nonaktif."
+        : "Belum ada channel notifikasi yang aktif.",
+    }, 400);
+  }
+  const failed = results.filter((result) => !result.ok);
+  return json({
+    ok: failed.length === 0,
+    results,
+  }, failed.length ? 502 : 200);
 }
 
 export async function getTerminalSettingsHandler(): Promise<Response> {

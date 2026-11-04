@@ -101,7 +101,7 @@ function CollapsibleSection({
           <CollapsibleTrigger asChild>
             <button
               type="button"
-              className="flex items-center gap-2 text-sm font-medium tracking-wider text-muted-foreground uppercase"
+              className="flex items-center gap-2 text-xs font-medium tracking-wider text-muted-foreground uppercase"
             >
               <ChevronRight className={cn("size-4 transition-transform", open && "rotate-90")} />
               {title}
@@ -137,7 +137,7 @@ export function SettingsView({
     <div className="flex w-full flex-col gap-8">
       <div>
         <h1 className="text-xl font-semibold">{project.name}</h1>
-        <p className="text-sm text-muted-foreground">
+        <p className="text-xs text-muted-foreground">
           Workspace: {project.workspace_path ?? "—"}
         </p>
       </div>
@@ -219,7 +219,7 @@ export function SettingsView({
                       return (
                         <div key={kind} className="flex flex-col gap-2">
                           {def.kinds.length > 1 ? (
-                            <p className="text-sm font-medium">{definition.label}</p>
+                            <p className="text-xs font-medium">{definition.label}</p>
                           ) : null}
                           <IntegrationForm
                             kind={kind}
@@ -234,7 +234,7 @@ export function SettingsView({
                     })}
                   </div>
                 ) : (
-                  <p className="text-sm text-muted-foreground">
+                  <p className="text-xs text-muted-foreground">
                     Belum ada {def.title.toLowerCase()}. Klik tombol <Plus className="inline size-3" />{" "}
                     untuk menambahkan.
                   </p>
@@ -287,7 +287,7 @@ function WorkspaceSection({
 
   return (
     <div className="flex flex-col gap-4">
-      <p className="text-sm text-muted-foreground">
+      <p className="text-xs text-muted-foreground">
         Folder repo/proyek di komputer ini. Menu <span className="font-medium">Explorer</span> muncul
         setelah workspace diset. <span className="font-medium">Document workspace</span> adalah
         folder markdown untuk dokumen lokal (bisa disync ke Docmost nanti).
@@ -387,16 +387,16 @@ function CloneSection({
 
   return (
     <div className="flex flex-col gap-4">
-      <p className="text-sm text-muted-foreground">
+      <p className="text-xs text-muted-foreground">
         Clone langsung ke path workspace di atas. Folder harus kosong. Auth memakai credential
         git di mesin (HTTPS credential helper / SSH key).
       </p>
       {!ready ? (
-        <p className="text-sm text-muted-foreground">
+        <p className="text-xs text-muted-foreground">
           Set dan simpan <span className="font-medium">Path workspace</span> dulu sebelum clone.
         </p>
       ) : (
-        <p className="text-sm">
+        <p className="text-xs">
           Tujuan: <span className="font-mono text-xs">{workspacePath}</span>
         </p>
       )}

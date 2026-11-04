@@ -1,16 +1,20 @@
 # Overview
 
-## Apa itu RND Workflow?
+## Apa itu Lullaby?
 
-**RND Workflow** adalah aplikasi desktop (Deno Desktop / webview) yang menggabungkan alur kerja
-produk–engineering dalam satu jendela:
+**Lullaby** (*Let Developers Dream, We'll Handle the Work.*) adalah companion AI untuk developer:
+mengurus pekerjaan repetitif dan kompleks dalam SDLC, supaya developer fokus membangun.
+
+Aplikasi desktop (Deno Desktop / webview) yang menggabungkan alur kerja produk–engineering dalam
+satu jendela:
 
 1. **Dokumen** — baca/kelola PRD dan catatan (lokal Markdown, Docmost, Notion, Confluence)
 2. **Tiket** — backlog lokal + board Jira (Kanban)
 3. **Kode** — explorer workspace, editor Monaco, Git, terminal
 4. **AI** — chat agent dengan tools file/tiket, review hunk sebelum write, opsional auto-build
+5. **Workflow** — otomasi YAML (shell, agent, notifikasi Slack/Chat, …)
 
-Nama jendela / app: **RND Workflow** (`com.klgroup.rndworkflow`).
+Nama jendela / app: **Lullaby** (`com.lullaby.app`).
 
 ## Alur kerja tipikal
 

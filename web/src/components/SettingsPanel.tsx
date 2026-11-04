@@ -27,7 +27,7 @@ export function SettingsPanel({ section, onSelect }: Props) {
               key={item.id}
               onClick={() => onSelect(item.id)}
               className={cn(
-                "mb-1 flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition-colors hover:bg-accent",
+                "mb-1 flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-xs transition-colors hover:bg-accent",
                 item.id === section && "bg-accent",
               )}
             >

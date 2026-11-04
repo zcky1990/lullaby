@@ -93,7 +93,7 @@ import {
 } from "@/lib/api";
 
 const MonacoViewer = lazy(() => import("@/components/MonacoViewer"));
-const MarkdownView = lazy(() => import("@/components/MarkdownView"));
+const SearchableMarkdown = lazy(() => import("@/components/SearchableMarkdown"));
 const WorkflowTabComponent = lazy(() =>
   import("@/components/WorkflowTab").then((module) => ({ default: module.WorkflowTab }))
 );
@@ -1112,6 +1112,7 @@ export default function App() {
             <WorkflowTabComponent
               projectId={currentId}
               slug={tab.ref ?? null}
+              providers={llmProviders}
               onSaved={() => currentId && loadWorkflows(currentId)}
               onDeleted={() => {
                 closeTab(tab.id);
@@ -1307,6 +1308,7 @@ export default function App() {
               activeTab?.kind === "workflow" ||
               activeTab?.kind === "workflow-docs" ||
               activeTab?.kind === "document" ||
+              activeTab?.kind === "ticket" ||
               activeTab?.kind === "settings" ||
               activeTab?.kind === "global"
               ? "overflow-hidden"
@@ -1395,8 +1397,8 @@ function WorkspaceOverview({
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="text-xl font-semibold">{project.name}</h1>
-        <p className="text-sm text-muted-foreground">
+        <h1 className="text-sm font-semibold">{project.name}</h1>
+        <p className="text-xs text-muted-foreground">
           Workspace: {project.workspace_path ?? "—"}
         </p>
       </div>
@@ -1408,7 +1410,7 @@ function WorkspaceOverview({
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Mulai dari sini</CardTitle>
+          <CardTitle className="text-xs">Mulai dari sini</CardTitle>
           <CardDescription>
             Set workspace folder di <span className="font-medium">Settings → Workspace</span> agar
             menu <span className="font-medium">Explorer</span> aktif.
@@ -1543,9 +1545,9 @@ function FileTab({
   }, [projectId, workspacePath, path, reportLspStatus]);
 
   if (tab.loading) return <Skeleton className="h-full w-full rounded-none" />;
-  if (tab.error) return <p className="p-6 text-sm text-destructive">{tab.error}</p>;
+  if (tab.error) return <p className="p-6 text-xs text-destructive">{tab.error}</p>;
   if (tab.binary) {
-    return <p className="p-6 text-sm text-muted-foreground">File biner (tidak ditampilkan).</p>;
+    return <p className="p-6 text-xs text-muted-foreground">File biner (tidak ditampilkan).</p>;
   }
 
   const save = async () => {
@@ -1615,20 +1617,16 @@ function FileTab({
       </div>
       <div className="min-h-0 flex-1">
         {tab.preview ? (
-          <div className="h-full overflow-y-auto">
-            <div className="px-8 py-6">
-              <Suspense
-                fallback={
-                  <div className="flex flex-col gap-2">
-                    <Skeleton className="h-4 w-2/3" />
-                    <Skeleton className="h-4 w-full" />
-                  </div>
-                }
-              >
-                <MarkdownView content={tab.content || "_(kosong)_"} />
-              </Suspense>
-            </div>
-          </div>
+          <Suspense
+            fallback={
+              <div className="flex flex-col gap-2 px-8 py-6">
+                <Skeleton className="h-4 w-2/3" />
+                <Skeleton className="h-4 w-full" />
+              </div>
+            }
+          >
+            <SearchableMarkdown content={tab.content || "_(kosong)_"} />
+          </Suspense>
         ) : (
           <Suspense fallback={<Skeleton className="h-full w-full rounded-none" />}>
             <MonacoViewer
@@ -1739,7 +1737,7 @@ function DocumentTab({
       </div>
     );
   }
-  if (tab.error) return <p className="p-8 text-sm text-destructive">{tab.error}</p>;
+  if (tab.error) return <p className="p-8 text-xs text-destructive">{tab.error}</p>;
 
   return (
     <div className="flex h-full flex-col">
@@ -1753,7 +1751,7 @@ function DocumentTab({
           />
         ) : (
           <div className="flex min-w-0 items-center gap-2">
-            <h1 className="truncate text-base font-semibold">{tab.title}</h1>
+            <h1 className="truncate text-xs font-semibold">{tab.title}</h1>
             {isLocal ? (
               <Badge
                 variant={
@@ -1859,20 +1857,16 @@ function DocumentTab({
             />
           </Suspense>
         ) : (
-          <div className="h-full overflow-y-auto">
-            <div className="px-8 py-6">
-              <Suspense
-                fallback={
-                  <div className="flex flex-col gap-2">
-                    <Skeleton className="h-4 w-2/3" />
-                    <Skeleton className="h-4 w-full" />
-                  </div>
-                }
-              >
-                <MarkdownView content={tab.content || "_(kosong)_"} />
-              </Suspense>
-            </div>
-          </div>
+          <Suspense
+            fallback={
+              <div className="flex flex-col gap-2 px-8 py-6">
+                <Skeleton className="h-4 w-2/3" />
+                <Skeleton className="h-4 w-full" />
+              </div>
+            }
+          >
+            <SearchableMarkdown content={tab.content || "_(kosong)_"} />
+          </Suspense>
         )}
       </div>
     </div>
@@ -1938,33 +1932,50 @@ function TicketTab({
   onOpenDetail: (ticket: TicketSummary) => void;
   onError: (message: string) => void;
 }) {
-  if (!hasProject) return <Empty text="Pilih project dulu di menu Workspace." />;
+  if (!hasProject) {
+    return (
+      <div className="p-6">
+        <Empty text="Pilih project dulu di menu Workspace." />
+      </div>
+    );
+  }
+
+  const showBoard = visibleTickets.length > 0;
+  const showInitialLoading = loading && tickets.length === 0;
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex h-full min-h-0 flex-col">
       {error && tickets.length > 0 ? (
-        <p className="text-xs text-destructive">Jira: {error}</p>
+        <p className="shrink-0 border-b px-4 py-2 text-xs text-destructive">Jira: {error}</p>
+      ) : null}
+      {loading && tickets.length > 0 ? (
+        <p className="text-muted-foreground flex shrink-0 items-center gap-2 border-b px-4 py-1.5 text-xs">
+          <Spinner className="size-3" />
+          Memuat ulang tiket…
+        </p>
       ) : null}
 
-      {loading ? (
-        <Empty text="Memuat tiket…" />
-      ) : error && tickets.length === 0 ? (
-        <Empty text={error} />
-      ) : tickets.length === 0 ? (
-        <Empty text="Belum ada tiket. Buat tiket lokal (bisa disync ke Jira nanti) atau periksa integrasi Jira." />
-      ) : visibleTickets.length === 0 ? (
-        <Empty
-          text={`Tidak ada tiket untuk "${assigneeFilter === "none" ? "tanpa assignee" : assigneeFilter}".`}
-        />
-      ) : (
-        <TicketKanban
-          key={boardKey}
-          tickets={visibleTickets}
-          onMove={onMove}
-          onOpenDetail={onOpenDetail}
-          onError={onError}
-        />
-      )}
+      <div className="min-h-0 flex-1 p-4">
+        {showInitialLoading ? (
+          <Empty text="Memuat tiket…" />
+        ) : error && tickets.length === 0 ? (
+          <Empty text={error} />
+        ) : tickets.length === 0 ? (
+          <Empty text="Belum ada tiket. Buat tiket lokal (bisa disync ke Jira nanti) atau periksa integrasi Jira." />
+        ) : visibleTickets.length === 0 ? (
+          <Empty
+            text={`Tidak ada tiket untuk "${assigneeFilter === "none" ? "tanpa assignee" : assigneeFilter}".`}
+          />
+        ) : showBoard ? (
+          <TicketKanban
+            key={boardKey}
+            tickets={visibleTickets}
+            onMove={onMove}
+            onOpenDetail={onOpenDetail}
+            onError={onError}
+          />
+        ) : null}
+      </div>
     </div>
   );
 }

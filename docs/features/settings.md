@@ -23,6 +23,7 @@ Section nav di aside (`GlobalSettingsPanel`):
 | Skills              | Enable global + toggle per skill                                                 |
 | Tools               | Auto-approve writes + enable/disable chat tools — [chat-agent.md](chat-agent.md) |
 | Automation          | Auto-build To Do → In Progress — [automation.md](../automation.md)               |
+| Notifications       | Daftar channel webhook; dipakai step `action: notification` — [notifications.md](notifications.md) |
 | Terminal            | Default shell (`zsh` / `bash`) untuk session baru                                |
 | About               | Info aplikasi                                                                    |
 

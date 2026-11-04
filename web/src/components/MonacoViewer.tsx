@@ -6,6 +6,7 @@ import "@/lib/monaco";
 import { Skeleton } from "@/components/ui/skeleton";
 import { languageForPath } from "@/lib/languages";
 import { EDITOR_FONT_STACKS, useTheme } from "@/components/ThemeProvider";
+import { registerFinder } from "@/lib/find";
 import { fileUri, type LspStatusEvent } from "@/lib/lsp";
 
 export interface MonacoLspConfig {
@@ -67,6 +68,21 @@ export default function MonacoViewer({
   useEffect(() => {
     if (!lsp) onLspStatusRef.current?.({ status: "off" });
   }, [lsp]);
+
+  useEffect(() => {
+    if (!editorReady) return;
+    return registerFinder((context) => {
+      if (context.preferTerminal) return false;
+      const editor = editorRef.current;
+      const dom = editor?.getDomNode();
+      if (!editor || !dom?.isConnected) return false;
+      const rect = dom.getBoundingClientRect();
+      if (rect.width < 8 || rect.height < 8) return false;
+      editor.focus();
+      void editor.getAction("actions.find")?.run();
+      return true;
+    });
+  }, [editorReady]);
 
   useEffect(() => {
     let disposed = false;

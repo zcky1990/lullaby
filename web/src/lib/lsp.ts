@@ -256,7 +256,7 @@ export async function connectLsp(
       rootUri,
       rootPath: workspacePath,
       workspaceFolders: [{ uri: rootUri, name: rootName(workspacePath) }],
-      clientInfo: { name: "rnd-workflow", version: "0.1.0" },
+      clientInfo: { name: "Lullaby", version: "0.1.0" },
       locale: navigator.language || "en-US",
       capabilities: clientCapabilities(),
       ...(initializationOptions ? { initializationOptions } : {}),

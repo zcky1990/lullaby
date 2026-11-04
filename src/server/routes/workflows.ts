@@ -1,5 +1,10 @@
-import { WorkflowCreateInput, WorkflowSaveInput } from "../../config/schema.ts";
 import {
+  WorkflowCreateInput,
+  WorkflowRunInput,
+  WorkflowSaveInput,
+} from "../../config/schema.ts";
+import {
+  deleteWorkflowRun,
   getProject,
   getWorkflowRun,
   listWorkflowRuns,
@@ -8,6 +13,7 @@ import {
   type WorkflowRunStepRow,
 } from "../../db/db.ts";
 import { json, readJson, record } from "../http.ts";
+import { isAllowedParamOverrideKey } from "../workflow/params.ts";
 import { parseWorkflow } from "../workflow/parse.ts";
 import { cancelWorkflowRun, startWorkflowRun } from "../workflow/runner.ts";
 import {
@@ -165,15 +171,34 @@ export async function deleteWorkflowHandler(
   }
 }
 
-export async function runWorkflowHandler(projectId: string, slug: string): Promise<Response> {
+export async function runWorkflowHandler(
+  projectId: string,
+  slug: string,
+  req: Request,
+): Promise<Response> {
   const project = await projectFor(projectId);
   if (!project) return json({ error: "project_not_found" }, 404);
   if (!project.workspace_path) {
     return json({ error: "workspace_required", message: "Workspace project belum diatur." }, 400);
   }
+  const parsed = WorkflowRunInput.safeParse(await readJson(req));
+  if (!parsed.success) {
+    return json({ error: "invalid_input", issues: parsed.error.issues }, 400);
+  }
+  const paramOverrides = Object.fromEntries(
+    Object.entries(parsed.data.params ?? {}).map(([key, value]) => [key, String(value)]),
+  );
   try {
     const { yaml, path } = await readWorkflow(project, slug);
     const definition = parseWorkflow(yaml, slug);
+    for (const key of Object.keys(paramOverrides)) {
+      if (!isAllowedParamOverrideKey(definition.params, key)) {
+        return json({
+          error: "invalid_params",
+          message: `Param tidak dikenal: ${key}`,
+        }, 400);
+      }
+    }
     const runId = await startWorkflowRun({
       project,
       projectId,
@@ -181,6 +206,7 @@ export async function runWorkflowHandler(projectId: string, slug: string): Promi
       definition,
       yaml,
       workflowPath: path,
+      params: paramOverrides,
     });
     return json({ runId }, 202);
   } catch (error) {
@@ -226,5 +252,22 @@ export async function cancelWorkflowRunHandler(
   const canceled = await cancelWorkflowRun(runId);
   if (!canceled) return json({ error: "run_not_active" }, 400);
   await record("workflow.run.cancel_requested", { projectId, runId });
+  return json({ ok: true });
+}
+
+export async function deleteWorkflowRunHandler(
+  projectId: string,
+  runId: string,
+): Promise<Response> {
+  const run = await getWorkflowRun(runId);
+  if (!run || run.project_id !== projectId) {
+    return json({ error: "run_not_found" }, 404);
+  }
+  if (run.status === "running") {
+    cancelWorkflowRun(runId);
+  }
+  const deleted = await deleteWorkflowRun(runId);
+  if (!deleted) return json({ error: "run_not_found" }, 404);
+  await record("workflow.run.deleted", { projectId, runId, slug: run.workflow_slug });
   return json({ ok: true });
 }

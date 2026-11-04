@@ -1,4 +1,5 @@
 import {
+  Bell,
   Cpu,
   Info,
   type LucideIcon,
@@ -25,6 +26,7 @@ export type GlobalSection =
   | "tools"
   | "lsp"
   | "automation"
+  | "notifications"
   | "terminal"
   | "about";
 
@@ -38,6 +40,7 @@ const SECTIONS: { id: GlobalSection; label: string; icon: LucideIcon }[] = [
   { id: "tools", label: "Tools", icon: ShieldCheck },
   { id: "lsp", label: "Language Servers", icon: ServerCog },
   { id: "automation", label: "Automation", icon: Zap },
+  { id: "notifications", label: "Notifications", icon: Bell },
   { id: "terminal", label: "Terminal", icon: SquareTerminal },
   { id: "about", label: "About", icon: Info },
 ];
@@ -59,7 +62,7 @@ export function GlobalSettingsPanel({ section, onSelect }: Props) {
               key={item.id}
               onClick={() => onSelect(item.id)}
               className={cn(
-                "mb-1 flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition-colors hover:bg-accent",
+                "mb-1 flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-xs transition-colors hover:bg-accent",
                 item.id === section && "bg-accent",
               )}
             >

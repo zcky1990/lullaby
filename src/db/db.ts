@@ -105,11 +105,13 @@ CREATE TABLE IF NOT EXISTS roles (
 );
 
 CREATE TABLE IF NOT EXISTS chat_sessions (
-  id         TEXT PRIMARY KEY,
-  project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
-  title      TEXT NOT NULL DEFAULT 'Chat',
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  id              TEXT PRIMARY KEY,
+  project_id      TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  title           TEXT NOT NULL DEFAULT 'Chat',
+  source          TEXT NOT NULL DEFAULT 'app',
+  cursor_agent_id TEXT,
+  created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
 CREATE TABLE IF NOT EXISTS chat_messages (
@@ -200,7 +202,12 @@ CREATE TABLE IF NOT EXISTS local_tickets (
 );
 `;
 
-const ENSURE_COLUMN_TABLES = new Set(["projects", "llm_providers", "chat_messages"]);
+const ENSURE_COLUMN_TABLES = new Set([
+  "projects",
+  "llm_providers",
+  "chat_messages",
+  "chat_sessions",
+]);
 
 function ensureColumn(db: DatabaseSync, table: string, column: string, ddl: string): void {
   if (!ENSURE_COLUMN_TABLES.has(table) || !/^[a-z_][a-z0-9_]*$/i.test(column)) {
@@ -232,6 +239,8 @@ function migrate(db: DatabaseSync): void {
   ensureColumn(db, "projects", "document_path", "document_path TEXT");
   ensureColumn(db, "llm_providers", "api_key", "api_key TEXT");
   ensureColumn(db, "chat_messages", "changes", "changes TEXT");
+  ensureColumn(db, "chat_sessions", "cursor_agent_id", "cursor_agent_id TEXT");
+  ensureColumn(db, "chat_sessions", "source", "source TEXT NOT NULL DEFAULT 'app'");
 
   try {
     db.exec(`
@@ -550,6 +559,16 @@ export async function updateLlmProvider(
   return await getLlmProvider(id);
 }
 
+export async function updateLlmProviderConfig(
+  id: string,
+  config: Record<string, unknown>,
+): Promise<void> {
+  const db = await getDb();
+  db.prepare(
+    "UPDATE llm_providers SET config = ?, updated_at = datetime('now') WHERE id = ?",
+  ).run(JSON.stringify(config), id);
+}
+
 export async function deleteLlmProvider(id: string): Promise<void> {
   const db = await getDb();
   withTransaction(db, () => {
@@ -562,6 +581,8 @@ export interface ChatSessionRow {
   id: string;
   project_id: string;
   title: string;
+  cursor_agent_id: string | null;
+  source: string;
   created_at: string;
   updated_at: string;
 }
@@ -586,13 +607,18 @@ export interface ChatMessageRow {
 export async function createChatSession(
   projectId: string,
   title: string,
+  options: { source?: string; cursorAgentId?: string | null } = {},
 ): Promise<ChatSessionRow> {
   const db = await getDb();
   const id = crypto.randomUUID();
-  db.prepare("INSERT INTO chat_sessions (id, project_id, title) VALUES (?, ?, ?)").run(
+  db.prepare(
+    "INSERT INTO chat_sessions (id, project_id, title, source, cursor_agent_id) VALUES (?, ?, ?, ?, ?)",
+  ).run(
     id,
     projectId,
     title,
+    options.source ?? "app",
+    options.cursorAgentId ?? null,
   );
   return (await getChatSession(id))!;
 }
@@ -610,6 +636,72 @@ export async function listChatSessions(projectId: string): Promise<ChatSessionRo
       .prepare("SELECT * FROM chat_sessions WHERE project_id = ? ORDER BY updated_at DESC")
       .all(projectId),
   );
+}
+
+export async function findChatSessionByCursorAgentId(
+  projectId: string,
+  cursorAgentId: string,
+): Promise<ChatSessionRow | null> {
+  const db = await getDb();
+  const row = db
+    .prepare(
+      "SELECT * FROM chat_sessions WHERE project_id = ? AND cursor_agent_id = ? LIMIT 1",
+    )
+    .get(projectId, cursorAgentId);
+  return (row as ChatSessionRow | undefined) ?? null;
+}
+
+export async function setChatSessionCursorAgentId(
+  sessionId: string,
+  cursorAgentId: string,
+): Promise<void> {
+  const db = await getDb();
+  db.prepare(
+    "UPDATE chat_sessions SET cursor_agent_id = ?, updated_at = datetime('now') WHERE id = ?",
+  ).run(cursorAgentId, sessionId);
+}
+
+export async function upsertImportedCursorSession(input: {
+  projectId: string;
+  cursorAgentId: string;
+  title: string;
+  updatedAtMs?: number;
+}): Promise<ChatSessionRow> {
+  const existing = await findChatSessionByCursorAgentId(input.projectId, input.cursorAgentId);
+  const db = await getDb();
+  const title = input.title.trim().slice(0, 120) || "Cursor chat";
+  const updatedAt = input.updatedAtMs
+    ? new Date(input.updatedAtMs).toISOString().replace("T", " ").slice(0, 19)
+    : undefined;
+
+  if (existing) {
+    if (updatedAt) {
+      db.prepare(
+        "UPDATE chat_sessions SET title = ?, source = 'cursor', updated_at = ?, cursor_agent_id = ? " +
+          "WHERE id = ?",
+      ).run(title, updatedAt, input.cursorAgentId, existing.id);
+    } else {
+      db.prepare(
+        "UPDATE chat_sessions SET title = ?, source = 'cursor', cursor_agent_id = ?, " +
+          "updated_at = datetime('now') WHERE id = ?",
+      ).run(title, input.cursorAgentId, existing.id);
+    }
+    return (await getChatSession(existing.id))!;
+  }
+
+  const id = crypto.randomUUID();
+  if (updatedAt) {
+    db.prepare(
+      "INSERT INTO chat_sessions (id, project_id, title, source, cursor_agent_id, updated_at) " +
+        "VALUES (?, ?, ?, 'cursor', ?, ?)",
+    ).run(id, input.projectId, title, input.cursorAgentId, updatedAt);
+  } else {
+    db.prepare(
+      "INSERT INTO chat_sessions (id, project_id, title, source, cursor_agent_id) " +
+        "VALUES (?, ?, ?, 'cursor', ?)",
+    ).run(id, input.projectId, title, input.cursorAgentId);
+  }
+  return (await getChatSession(id))!;
 }
 
 export async function listChatMessages(sessionId: string): Promise<ChatMessageRow[]> {
@@ -1066,6 +1158,12 @@ export async function listWorkflowRuns(
       )
       .all(projectId, capped),
   );
+}
+
+export async function deleteWorkflowRun(id: string): Promise<boolean> {
+  const db = await getDb();
+  const result = db.prepare("DELETE FROM workflow_runs WHERE id = ?").run(id);
+  return Number(result.changes ?? 0) > 0;
 }
 
 export async function createWorkflowRunStep(

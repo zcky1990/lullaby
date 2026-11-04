@@ -19,6 +19,8 @@ Implementasi: `src/server/router.ts`. Input divalidasi Zod (`src/config/schema.t
 | `GET`          | `/api/skills?projectId=`   | Daftar skills + path            |
 | `PUT`          | `/api/settings/skills`     | `{ enabled, disabled }`         |
 | `GET`/`PUT`    | `/api/settings/automation` | `{ autoBuildOnInProgress }`     |
+| `GET`/`PUT`    | `/api/settings/notifications` | `{ channels: [...] }`       |
+| `POST`         | `/api/settings/notifications/test` | `{ channelId? }`           |
 | `GET`/`PUT`    | `/api/settings/terminal`   | `{ shell: "zsh" \| "bash" }`    |
 | `GET`/`PUT`    | `/api/settings/mcp`        | servers, enabled, disabledTools |
 | `POST`         | `/api/settings/mcp/tools`  | Discover tools satu server      |
@@ -41,6 +43,7 @@ Implementasi: `src/server/router.ts`. Input divalidasi Zod (`src/config/schema.t
 | Method | Path                                           | Keterangan                                     |
 | ------ | ---------------------------------------------- | ---------------------------------------------- |
 | `GET`  | `/api/projects/:id/files?path=`                | List directory                                 |
+| `POST` | `/api/projects/:id/files`                      | Buat file/folder `{ type, parent?, name }`     |
 | `GET`  | `/api/projects/:id/files/index`                | Indeks semua file workspace (untuk Quick Open) |
 | `GET`  | `/api/projects/:id/files/find?q=&case=&regex=` | Cari teks di file workspace                    |
 | `GET`  | `/api/projects/:id/files/content?path=`        | Baca file                                      |

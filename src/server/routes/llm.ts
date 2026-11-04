@@ -1,4 +1,4 @@
-import { LlmProviderInput } from "../../config/schema.ts";
+import { CursorModelsInput, LlmProviderInput } from "../../config/schema.ts";
 import {
   createLlmProvider,
   deleteLlmProvider,
@@ -7,6 +7,8 @@ import {
   updateLlmProvider,
 } from "../../db/db.ts";
 import { isMaskedSecret, json, readJson, record } from "../http.ts";
+import { listCursorModels } from "../chat/cursor.ts";
+import { refreshCursorModels } from "../chat/cursor-models.ts";
 import { serializeLlm } from "../serializers.ts";
 
 export async function listLlmHandler(): Promise<Response> {
@@ -28,8 +30,15 @@ export async function createLlmHandler(req: Request): Promise<Response> {
     apiKey: parsed.data.apiKey,
     mode: parsed.data.mode,
   });
+  if (provider.provider === "cursor" && provider.api_key) {
+    try {
+      await refreshCursorModels(provider.id, provider.api_key);
+    } catch {
+      // keep the provider saved even if the model catalog cannot be loaded
+    }
+  }
   await record("llm.created", { name: provider.name });
-  return json({ provider: serializeLlm(provider) }, 201);
+  return json({ provider: serializeLlm((await getLlmProvider(provider.id)) ?? provider) }, 201);
 }
 
 export async function updateLlmHandler(providerId: string, req: Request): Promise<Response> {
@@ -51,8 +60,15 @@ export async function updateLlmHandler(providerId: string, req: Request): Promis
       : parsed.data.apiKey,
     mode: parsed.data.mode,
   });
+  if (provider?.provider === "cursor" && provider.api_key) {
+    try {
+      await refreshCursorModels(provider.id, provider.api_key);
+    } catch {
+      // keep the provider saved even if the model catalog cannot be loaded
+    }
+  }
   await record("llm.saved", { providerId });
-  return json({ provider: serializeLlm(provider!) });
+  return json({ provider: serializeLlm((await getLlmProvider(providerId)) ?? provider!) });
 }
 
 export async function deleteLlmHandler(providerId: string): Promise<Response> {
@@ -61,4 +77,28 @@ export async function deleteLlmHandler(providerId: string): Promise<Response> {
   await deleteLlmProvider(providerId);
   await record("llm.deleted", { providerId });
   return json({ ok: true });
+}
+
+export async function listCursorModelsHandler(req: Request): Promise<Response> {
+  const parsed = CursorModelsInput.safeParse(await readJson(req));
+  if (!parsed.success) {
+    return json({ error: "invalid_input", issues: parsed.error.issues }, 400);
+  }
+  let apiKey = parsed.data.apiKey;
+  const providerId = parsed.data.providerId;
+  if ((!apiKey || isMaskedSecret(apiKey)) && providerId) {
+    const existing = await getLlmProvider(providerId);
+    apiKey = existing?.api_key ?? undefined;
+  }
+  if (!apiKey) {
+    return json({ error: "api_key_required", message: "API key Cursor wajib diisi." }, 400);
+  }
+  try {
+    const models = providerId
+      ? await refreshCursorModels(providerId, apiKey)
+      : await listCursorModels(apiKey);
+    return json({ models });
+  } catch (error) {
+    return json({ error: (error as Error).message }, 502);
+  }
 }

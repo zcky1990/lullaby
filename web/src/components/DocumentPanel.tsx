@@ -116,6 +116,7 @@ export function DocumentPanel({
               }}
               disabled={!projectId || (source === "local" ? !localConfigured : !configured)}
               aria-label="Tambah dokumen"
+              className="text-xs"
             >
               <Plus />
             </Button>
@@ -126,6 +127,7 @@ export function DocumentPanel({
             onClick={source === "local" ? onRefreshLocal : onRefresh}
             disabled={!projectId || (source === "local" ? localLoading : loading)}
             aria-label="Refresh documents"
+            className="text-xs"
           >
             <RefreshCw />
           </Button>
@@ -194,12 +196,12 @@ export function DocumentPanel({
         </DialogContent>
       </Dialog>
 
-      <div className="flex-1 overflow-y-auto px-2 pb-2">
+      <div className="flex-1 overflow-y-auto px-2 pb-2 text-xs">
         {source === "local" ? (
           <>
             {!projectId && <Hint>Pilih project dulu di menu Workspace.</Hint>}
             {projectId && localLoading && (
-              <div className="flex items-center gap-2 px-2 py-4 text-sm text-muted-foreground">
+              <div className="flex items-center gap-2 px-2 py-4 text-xs text-muted-foreground">
                 <Spinner />
                 Memuat dokumen lokal…
               </div>
@@ -223,13 +225,13 @@ export function DocumentPanel({
                 type="button"
                 onClick={() => onSelectLocal(doc.path, doc.title)}
                 className={cn(
-                  "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors hover:bg-accent",
+                  "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs transition-colors hover:bg-accent",
                   selectedId === doc.path && "bg-accent",
                 )}
                 title={doc.path}
               >
                 <FileText className="size-4 shrink-0 text-muted-foreground" />
-                <span className="min-w-0 flex-1 truncate">{doc.title}</span>
+                <span className="min-w-0 flex-1 truncate text-xs">{doc.title}</span>
                 <Badge
                   variant={doc.syncStatus === "synced"
                     ? "secondary"
@@ -251,7 +253,7 @@ export function DocumentPanel({
           <>
             {!projectId && <Hint>Pilih project dulu di menu Workspace.</Hint>}
             {projectId && loading && (
-              <div className="flex items-center gap-2 px-2 py-4 text-sm text-muted-foreground">
+              <div className="flex items-center gap-2 px-2 py-4 text-xs text-muted-foreground">
                 <Spinner />
                 Memuat dokumen…
               </div>
@@ -365,7 +367,7 @@ function DocNode({
     <div>
       <div
         className={cn(
-          "flex items-center gap-1 rounded-md pr-2 text-sm transition-colors hover:bg-accent",
+          "flex items-center gap-1 rounded-md pr-2 text-xs transition-colors hover:bg-accent",
           active && "bg-accent",
         )}
         style={{ paddingLeft: depth * 12 + 4 }}
@@ -399,7 +401,7 @@ function DocNode({
           ) : (
             <FileText className="size-4 shrink-0 text-muted-foreground" />
           )}
-          <span className="truncate">{doc.title}</span>
+          <span className="truncate text-xs">{doc.title}</span>
         </button>
       </div>
 
@@ -439,7 +441,7 @@ function Hint({ children, tone }: { children: ReactNode; tone?: "error" }) {
   return (
     <p
       className={cn(
-        "px-2 py-4 text-sm",
+        "px-2 py-4 text-xs",
         tone === "error" ? "text-destructive" : "text-muted-foreground",
       )}
     >

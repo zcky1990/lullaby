@@ -10,9 +10,9 @@ export function ActivityFeed({ events }: { events: ActivityEvent[] }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base">Activity</CardTitle>
+        <CardTitle className="text-xs">Activity</CardTitle>
       </CardHeader>
-      <CardContent className="max-h-64 overflow-y-auto text-sm">
+      <CardContent className="max-h-64 overflow-y-auto text-xs">
         {events.length === 0 && <p className="text-muted-foreground">Belum ada aktivitas.</p>}
         {events.map((event, index) => (
           <div

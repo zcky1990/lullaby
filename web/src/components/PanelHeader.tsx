@@ -3,7 +3,7 @@ import { Badge } from "@/components/ui/badge";
 export function PanelHeader({ title, count }: { title: string; count?: number }) {
   return (
     <div className="flex h-[35px] items-center justify-between px-4">
-      <span className="text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">
+      <span className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
         {title}
       </span>
       {count !== undefined && (

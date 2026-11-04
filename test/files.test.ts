@@ -1,6 +1,12 @@
-import { deepEqual, equal } from "node:assert/strict";
+import { deepEqual, equal, rejects } from "node:assert/strict";
 import { join } from "node:path";
-import { findInWorkspace, listWorkspaceFiles } from "../src/fs/workspace.ts";
+import {
+  createWorkspaceDir,
+  createWorkspaceFile,
+  findInWorkspace,
+  joinWorkspacePath,
+  listWorkspaceFiles,
+} from "../src/fs/workspace.ts";
 
 const dir = await Deno.makeTempDir();
 await Deno.mkdir(join(dir, "src"), { recursive: true });
@@ -49,6 +55,30 @@ Deno.test("findInWorkspace reports invalid regex", async () => {
 Deno.test("findInWorkspace returns empty for blank query", async () => {
   const result = await findInWorkspace(dir, "   ");
   deepEqual(result, { matches: [], scanned: 0, truncated: false });
+});
+
+Deno.test("joinWorkspacePath rejects invalid names", () => {
+  equal(joinWorkspacePath("", "a.ts"), "a.ts");
+  equal(joinWorkspacePath("src", "a.ts"), "src/a.ts");
+  let threw = false;
+  try {
+    joinWorkspacePath("src", "../x");
+  } catch {
+    threw = true;
+  }
+  equal(threw, true);
+});
+
+Deno.test("createWorkspaceFile and createWorkspaceDir", async () => {
+  const createdFile = await createWorkspaceFile(dir, "src/new.ts", "export {};\n");
+  equal(createdFile, "src/new.ts");
+  equal(await Deno.readTextFile(join(dir, "src", "new.ts")), "export {};\n");
+  await rejects(() => createWorkspaceFile(dir, "src/new.ts"), /sudah ada/);
+
+  const createdDir = await createWorkspaceDir(dir, "src/feature");
+  equal(createdDir, "src/feature");
+  equal((await Deno.stat(join(dir, "src", "feature"))).isDirectory, true);
+  await rejects(() => createWorkspaceDir(dir, "src/feature"), /sudah ada/);
 });
 
 Deno.test("workspace search cleanup", async () => {

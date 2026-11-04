@@ -33,26 +33,60 @@ export interface WorkflowLlmWith {
   maxSteps?: number;
 }
 
+export interface WorkflowRouterWith {
+  value: string;
+  routes: Record<string, string[]>;
+  /** Targets that jump back to an earlier step (loop). */
+  loopBacks: string[];
+  maxLoops: number;
+}
+
+export interface WorkflowNotifyWith {
+  /** Channel id or name from Global Settings → Notifications. */
+  channel: string;
+  /** Message body (supports ${params.*} / ${steps.*} interpolation). */
+  message: string;
+}
+
+export type WorkflowParamType = "string" | "integer" | "number" | "boolean" | "agent";
+
+export interface WorkflowParam {
+  name: string;
+  type?: WorkflowParamType;
+  default?: string;
+  description?: string;
+}
+
 export interface WorkflowStep {
   id: string;
-  kind: "shell" | "llm" | "agent";
+  kind: "shell" | "llm" | "agent" | "router" | "notify";
   run?: string;
   action?: string;
   with?: WorkflowLlmWith;
+  router?: WorkflowRouterWith;
+  notify?: WorkflowNotifyWith;
   output?: string;
+  outputs: string[];
   depends: string[];
   env: Record<string, string>;
   workingDir?: string;
   retry: WorkflowRetryPolicy;
   timeoutSec?: number;
   continueOn?: string;
+  /** After success, reset and re-run these steps (loop). */
+  next: string[];
+  /** Step only runs when this router selected it. */
+  routeGate?: { routerId: string };
 }
 
 export interface WorkflowDefinition {
   name: string;
   description?: string;
+  type?: string;
+  params: WorkflowParam[];
   env: Record<string, string>;
   workingDir?: string;
+  timeoutSec?: number;
   llm?: WorkflowLlmSettings;
   steps: WorkflowStep[];
   layers: string[][];

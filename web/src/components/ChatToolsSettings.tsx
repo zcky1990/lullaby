@@ -71,10 +71,10 @@ export function ChatToolsSettings() {
   return (
     <section className="flex w-full flex-col gap-4">
       <div className="flex flex-col gap-2">
-        <h2 className="text-sm font-medium tracking-wider text-muted-foreground uppercase">
+        <h2 className="text-xs font-medium tracking-wider text-muted-foreground uppercase">
           Tools
         </h2>
-        <p className="text-sm text-muted-foreground">
+        <p className="text-xs text-muted-foreground">
           Atur auto-approve untuk write file di chat Build, dan enable/disable tool yang
           tersedia untuk agent. Perubahan hanya berlaku untuk chat interaktif (bukan workflow
           agent).
@@ -83,7 +83,7 @@ export function ChatToolsSettings() {
       </div>
 
       {loading ? (
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <Spinner />
           Memuat…
         </div>
@@ -91,7 +91,7 @@ export function ChatToolsSettings() {
         <>
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border p-4">
             <div className="flex min-w-0 flex-col gap-1">
-              <span className="text-sm font-medium">Auto-approve file writes</span>
+              <span className="text-xs font-medium">Auto-approve file writes</span>
               <span className="text-xs text-muted-foreground">
                 Jika aktif, <code className="text-xs">write_file</code> langsung ditulis ke
                 disk tanpa Review tab. Default nonaktif.
@@ -108,7 +108,7 @@ export function ChatToolsSettings() {
           <div className="flex flex-col gap-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex flex-col gap-1">
-                <span className="text-sm font-medium">Tool chat</span>
+                <span className="text-xs font-medium">Tool chat</span>
                 <span className="text-xs text-muted-foreground">
                   Tool yang dimatikan tidak dikirim ke model dan ditolak jika dipanggil.
                 </span>
@@ -134,7 +134,7 @@ export function ChatToolsSettings() {
                   >
                     <div className="flex min-w-0 flex-col gap-1">
                       <div className="flex flex-wrap items-center gap-2">
-                        <span className="font-mono text-sm">{tool.name}</span>
+                        <span className="font-mono text-xs">{tool.name}</span>
                         {tool.requiresApproval && (
                           <Badge variant="secondary" className="text-[10px]">
                             {autoApproveWrites ? "Auto-approve on" : "Needs approval"}
@@ -157,7 +157,7 @@ export function ChatToolsSettings() {
         </>
       )}
 
-      {error && <p className="text-sm text-destructive">{error}</p>}
+      {error && <p className="text-xs text-destructive">{error}</p>}
     </section>
   );
 }

@@ -38,10 +38,29 @@ steps:
     continue_on: failure
 ```
 
-Field yang didukung: `name`, `description`, `env`, `working_dir`, `llm`, `defaults` (`env`,
-`working_dir`, `retry_policy`, `timeout_sec`), dan per step: `id`, `run`, `action`, `with`,
-`output`, `depends`, `env`, `working_dir`, `retry_policy`, `timeout_sec`, `continue_on`.
-Field lain ditolak.
+Field yang didukung: `name`, `description`, `type`, `params`, `env`, `working_dir`,
+`timeout_sec`, `llm`, `defaults` (`env`, `working_dir`, `retry_policy`, `timeout_sec`), dan per
+step: `id`, `run`, `action`, `with`, `output` / `outputs`, `depends`, `env` (map atau list map),
+`working_dir`, `retry_policy`, `timeout_sec`, `continue_on`. Field lain ditolak.
+
+Step `action: notification` mengirim pesan ke channel yang didaftarkan di Global Settings →
+Notifications — lihat [notifications.md](notifications.md).
+
+Subset Dagu tambahan:
+- `params` → default masuk env / `${params.NAME}`; saat **Run**, UI menampilkan dialog isi param
+  (dikirim sebagai body `POST .../run` `{ params }`). Tipe: `string` | `integer` | `number` |
+  `boolean` | `agent`. Param `type: agent` membuka composer seperti chat (teks + lampiran file +
+  pilih provider/model); nilai prompt masuk `${params.NAME}`, plus companion
+  `${params.NAME__provider}` / `${params.NAME__model}` (dan lampiran gambar via payload internal).
+  Step `agent` / `chat.completion` yang tidak set `with.provider`/`with.model` memakai companion
+  itu otomatis jika param agent direferensikan di prompt (atau hanya ada satu param agent).
+- `outputs: [{ name }]` + `DAGU_OUTPUT_FILE` (key=value) → `${steps.<id>.outputs.<name>}`
+- `action: router.route` dengan `with.value` + `with.routes` (if/else; di graph berbentuk
+  belah ketupat). Target maju mendapat `routeGate`; target yang kembali ke step sebelumnya
+  dianggap **loop-back** (garis putus-putus). `with.max_loops` (default 10) membatasi berapa kali
+  entry loop boleh dijalankan.
+- `next: <step>` setelah sukses me-reset dan menjalankan ulang step tersebut (pola
+  failed→fix→`next: rubocop`).
 
 - Step **tanpa `depends`** berjalan paralel.
 - Step dengan dependency menunggu semua dependency `success` (atau `failed` yang `continue_on`
@@ -104,6 +123,24 @@ steps:
     run: echo "${RESULT}"
 ```
 
+Prompt + model dari dialog Run (param `agent`):
+
+```yaml
+name: agent-from-params
+params:
+  - name: TASK
+    type: agent
+    description: Prompt, lampiran, dan model untuk agent
+steps:
+  - id: run
+    action: agent
+    with:
+      mode: build
+      prompt: "${params.TASK}"
+      # provider/model opsional — diisi otomatis dari pilihan di dialog
+    output: RESULT
+```
+
 - `with`: sama seperti completion (`prompt`/`messages`, `system`, `provider`, `role`, `session`,
   `model`, `temperature`, `max_tokens`) plus `mode`, `skill`/`skill_name`, `variant`, `max_steps`.
 - Output step = teks assistant akhir; tool calls masuk log step (`[tool] …`).
@@ -144,7 +181,8 @@ steps:
 
 ## Eksekusi (`src/server/workflow/runner.ts`)
 
-- `Deno.Command` via shell (`$SHELL -lc`), cwd workspace/step, env proses + workflow + step.
+- `Deno.Command` via `/bin/sh -lc` (POSIX; bukan zsh login shell), cwd workspace/step, env proses +
+  workflow + step.
 - Layer topologis dijalankan paralel (maks 8 per batch); retry `limit`/`interval_sec`; timeout
   `SIGTERM` → `SIGKILL` (exit 124).
 - Log stdout/stderr disimpan per step (cap ±200 KB, penanda dipotong) dan di-poll UI tiap detik

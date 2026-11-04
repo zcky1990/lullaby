@@ -5,6 +5,7 @@ import {
   getChatSession,
   getProject,
   listChatMessages,
+  setChatSessionCursorAgentId,
 } from "../../db/db.ts";
 import { collectCodeReviewContext, defaultCodeReviewUserMessage } from "../code-review.ts";
 import { loadEnabledSkills, projectSlug, readSkillBody, type SkillInfo } from "../skills.ts";
@@ -15,19 +16,44 @@ import {
   readPromptSettings,
 } from "../prompts.ts";
 import { diffLines } from "../diff.ts";
-import { complete, VARIANT_TEMPERATURE } from "./llm.ts";
+import type { CursorConversationMessage } from "./cursor.ts";
+import { complete, type CompleteResult, VARIANT_TEMPERATURE } from "./llm.ts";
 import { approvalResponse, prepareWriteChange, setAdvance } from "./review.ts";
 import { readChatToolsSettings } from "./settings.ts";
 import { scheduleSkillLearn } from "./skill-learn.ts";
 import { deleteRun, pruneRuns, setRun } from "./state.ts";
-import {
-  applyWriteFile,
-  executeTool,
-  resolveAttachments,
-  toolsFor,
-  WRITE_TOOLS,
-} from "./tools.ts";
+import { applyWriteFile, executeTool, resolveAttachments, toolsFor, WRITE_TOOLS } from "./tools.ts";
 import type { ChatResponse, Run, VisibleMessage } from "./types.ts";
+
+export async function syncCursorConversation(
+  sessionId: string,
+  conversation: CursorConversationMessage[] | undefined,
+  excludeTexts: string[] = [],
+): Promise<void> {
+  if (!conversation?.length) return;
+  const stored = await listChatMessages(sessionId);
+  const existing = new Set(
+    stored.filter((message) => message.role === "assistant").map((message) => message.content.trim()),
+  );
+  for (const text of excludeTexts) {
+    if (text.trim()) existing.add(text.trim());
+  }
+  for (const message of conversation) {
+    if (message.role !== "assistant") continue;
+    const content = message.content.trim();
+    if (!content || existing.has(content)) continue;
+    await appendChatMessage(sessionId, "assistant", content, []);
+    existing.add(content);
+  }
+}
+
+async function rememberCursorResult(run: Run, response: CompleteResult): Promise<void> {
+  if (response.cursorAgentId && response.cursorAgentId !== run.cursorAgentId) {
+    run.cursorAgentId = response.cursorAgentId;
+    await setChatSessionCursorAgentId(run.sessionId, response.cursorAgentId);
+  }
+  await syncCursorConversation(run.sessionId, response.conversation, [response.text]);
+}
 
 const CODE_REVIEW_SKILL = "code-review";
 
@@ -85,7 +111,19 @@ export async function advance(run: Run): Promise<ChatResponse> {
     const disabledTools = new Set(settings.disabledTools);
     const tools = toolsFor(run.workspace, run.mode, run.skills.size > 0, disabledTools);
     for (let step = 0; step < MAX_STEPS; step++) {
-      const response = await complete(run.provider, run.turns, tools, run.temperature);
+      const response = await complete(
+        run.provider,
+        run.turns,
+        tools,
+        run.temperature,
+        undefined,
+        {
+          workspace: run.workspace,
+          cursorAgentId: run.cursorAgentId,
+          mode: run.mode,
+        },
+      );
+      await rememberCursorResult(run, response);
       if (run.mode === "plan") {
         if (response.toolCalls.length === 0) {
           const message = response.text ||
@@ -302,6 +340,7 @@ export async function startChat(
     provider,
     workspace,
     sessionId: session.id,
+    cursorAgentId: session.cursor_agent_id,
     temperature: VARIANT_TEMPERATURE[variant],
     turns: [
       {

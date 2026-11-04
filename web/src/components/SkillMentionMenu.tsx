@@ -36,7 +36,7 @@ export function SkillMentionMenu({ skills, activeIndex, onSelect, onHover }: Pro
           role="option"
           aria-selected={index === activeIndex}
           className={cn(
-            "flex w-full items-start gap-2 px-2.5 py-1.5 text-left text-sm",
+            "flex w-full items-start gap-2 px-2.5 py-1.5 text-left text-xs",
             index === activeIndex ? "bg-accent text-accent-foreground" : "hover:bg-accent/60",
           )}
           onMouseEnter={() => onHover(index)}

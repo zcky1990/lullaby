@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ApiError } from "./api-error";
+import { ApiError, formatApiError } from "./api-error";
 
 describe("ApiError", () => {
   it("carries status and optional body", () => {
@@ -9,5 +9,16 @@ describe("ApiError", () => {
     expect(err.status).toBe(404);
     expect(err.message).toBe("Not found");
     expect(err.body).toEqual({ error: "missing" });
+  });
+
+  it("formats message and issues from the API body", () => {
+    const err = new ApiError(400, "invalid_workflow", {
+      error: "invalid_workflow",
+      message: "Workflow tidak valid.",
+      issues: ["root: Unrecognized key(s) in object: 'params'", "steps.0.env: Expected object"],
+    });
+    expect(formatApiError(err)).toBe(
+      "Workflow tidak valid.\nroot: Unrecognized key(s) in object: 'params'\nsteps.0.env: Expected object",
+    );
   });
 });

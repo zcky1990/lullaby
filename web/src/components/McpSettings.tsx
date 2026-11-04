@@ -290,8 +290,8 @@ export function McpSettings() {
   return (
     <section className="flex w-full flex-col gap-4">
       <div className="flex flex-col gap-2">
-        <h2 className="text-sm font-medium tracking-wider text-muted-foreground uppercase">MCP</h2>
-        <p className="text-sm text-muted-foreground">
+        <h2 className="text-xs font-medium tracking-wider text-muted-foreground uppercase">MCP</h2>
+        <p className="text-xs text-muted-foreground">
           Konfigurasi server MCP global (Model Context Protocol). Server disimpan lokal di app dan
           dipakai oleh agent saat integrasi MCP diaktifkan.
         </p>
@@ -300,7 +300,7 @@ export function McpSettings() {
 
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-sm text-muted-foreground">{servers.length} server</span>
+          <span className="text-xs text-muted-foreground">{servers.length} server</span>
           <span className="text-xs text-muted-foreground">
             {enabled ? "MCP aktif" : "MCP nonaktif"}
           </span>
@@ -331,12 +331,12 @@ export function McpSettings() {
       {error ? <p className="text-xs text-destructive">{error}</p> : null}
 
       {loading ? (
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <Spinner />
           Memuat konfigurasi MCP…
         </div>
       ) : servers.length === 0 ? (
-        <p className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
+        <p className="rounded-md border border-dashed p-4 text-xs text-muted-foreground">
           Belum ada server MCP. Tambahkan server stdio (command) atau http (url).
         </p>
       ) : (

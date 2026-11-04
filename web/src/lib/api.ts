@@ -30,6 +30,7 @@ export interface LlmProvider {
   baseUrl: string | null;
   apiKey: string | null;
   hasApiKey?: boolean;
+  models?: CursorModel[];
   mode: string;
   updatedAt: string;
 }
@@ -205,26 +206,55 @@ export interface WorkflowLlmWith {
   maxSteps?: number;
 }
 
+export interface WorkflowRouterWith {
+  value: string;
+  routes: Record<string, string[]>;
+  loopBacks: string[];
+  maxLoops: number;
+}
+
+export type WorkflowParamType = "string" | "integer" | "number" | "boolean" | "agent";
+
+export interface WorkflowParam {
+  name: string;
+  type?: WorkflowParamType;
+  default?: string;
+  description?: string;
+}
+
+export interface WorkflowNotifyWith {
+  channel: string;
+  message: string;
+}
+
 export interface WorkflowDefinitionStep {
   id: string;
-  kind: "shell" | "llm" | "agent";
+  kind: "shell" | "llm" | "agent" | "router" | "notify";
   run?: string;
   action?: string;
   with?: WorkflowLlmWith;
+  router?: WorkflowRouterWith;
+  notify?: WorkflowNotifyWith;
   output?: string;
+  outputs: string[];
   depends: string[];
   env: Record<string, string>;
   workingDir?: string;
   retry: { limit: number; intervalSec: number };
   timeoutSec?: number;
   continueOn?: string;
+  next: string[];
+  routeGate?: { routerId: string };
 }
 
 export interface WorkflowDefinition {
   name: string;
   description?: string;
+  type?: string;
+  params: WorkflowParam[];
   env: Record<string, string>;
   workingDir?: string;
+  timeoutSec?: number;
   llm?: {
     provider?: string;
     model?: string;
@@ -235,6 +265,20 @@ export interface WorkflowDefinition {
   };
   steps: WorkflowDefinitionStep[];
   layers: string[][];
+}
+
+export type NotificationChannelType = "slack" | "google_chat" | "discord" | "webhook";
+
+export interface NotificationChannel {
+  id: string;
+  name: string;
+  type: NotificationChannelType;
+  enabled: boolean;
+  webhookUrl: string;
+}
+
+export interface NotificationSettings {
+  channels: NotificationChannel[];
 }
 
 export interface PromptsSettings {
@@ -390,7 +434,7 @@ export interface LspPreset {
 
 export interface UiPreferences {
   theme?: "light" | "dark" | "system";
-  colorTheme?: "vscode" | "shadcn" | "claude" | "supabase";
+  colorTheme?: "vscode" | "shadcn" | "claude" | "supabase" | "lullaby";
   appFont?: "system" | "inter" | "manrope" | "jetbrains";
   editorTheme?: "auto" | "vs" | "vs-dark" | "hc-black" | "hc-light";
   editorFont?: "jetbrains" | "fira" | "menlo" | "consolas" | "monospace";
@@ -483,6 +527,8 @@ export interface ChatSession {
   id: string;
   title: string;
   updatedAt: string;
+  source?: "app" | "cursor";
+  cursorAgentId?: string;
 }
 
 export interface ChatSessionDetail {
@@ -555,6 +601,12 @@ export interface IntegrationPayload {
   kind: string;
   mode: string;
   config: Record<string, string>;
+}
+
+export interface CursorModel {
+  id: string;
+  name: string;
+  description?: string;
 }
 
 export interface LlmProviderPayload {
@@ -644,6 +696,14 @@ export const api = {
     request<{ ok: boolean; path: string; size: number }>(
       `/api/projects/${projectId}/files/content`,
       jsonInit("PUT", { path, content }),
+    ),
+  createPath: (
+    projectId: string,
+    payload: { type: "file" | "dir"; parent?: string; name: string; content?: string },
+  ) =>
+    request<{ ok: boolean; type: "file" | "dir"; path: string }>(
+      `/api/projects/${projectId}/files`,
+      jsonInit("POST", payload),
     ),
   projectDetail: (id: string) => request<ProjectDetail>(`/api/projects/${id}`),
   listDocuments: (projectId: string, pageId?: string, source: DocumentSource = "docmost") => {
@@ -755,6 +815,8 @@ export const api = {
   ) => request<{ role: Role }>(`/api/roles/${id}`, jsonInit("PUT", payload)),
   deleteRole: (id: string) => request<{ ok: boolean }>(`/api/roles/${id}`, { method: "DELETE" }),
   listLlm: () => request<{ providers: LlmProvider[] }>("/api/llm"),
+  listCursorModels: (payload: { apiKey?: string; providerId?: string }) =>
+    request<{ models: CursorModel[] }>("/api/llm/cursor/models", jsonInit("POST", payload)),
   createLlm: (payload: LlmProviderPayload) =>
     request<{ provider: LlmProvider }>("/api/llm", jsonInit("POST", payload)),
   updateLlm: (id: string, payload: LlmProviderPayload) =>
@@ -765,6 +827,7 @@ export const api = {
     projectId: string,
     payload: {
       providerId?: string;
+      model?: string;
       sessionId?: string;
       roleId?: string;
       skillName?: string;
@@ -826,10 +889,14 @@ export const api = {
       `/api/projects/${projectId}/workflows/${encodeURIComponent(slug)}`,
       { method: "DELETE" },
     ),
-  runWorkflow: (projectId: string, slug: string) =>
+  runWorkflow: (
+    projectId: string,
+    slug: string,
+    payload?: { params?: Record<string, string> },
+  ) =>
     request<{ runId: string }>(
       `/api/projects/${projectId}/workflows/${encodeURIComponent(slug)}/run`,
-      { method: "POST" },
+      jsonInit("POST", payload ?? {}),
     ),
   listWorkflowRuns: (projectId: string, options?: { workflow?: string; limit?: number }) =>
     request<{ runs: WorkflowRunSummary[] }>(
@@ -848,6 +915,11 @@ export const api = {
     request<{ ok: boolean }>(
       `/api/projects/${projectId}/workflow-runs/${encodeURIComponent(runId)}/cancel`,
       { method: "POST" },
+    ),
+  deleteWorkflowRun: (projectId: string, runId: string) =>
+    request<{ ok: boolean }>(
+      `/api/projects/${projectId}/workflow-runs/${encodeURIComponent(runId)}`,
+      { method: "DELETE" },
     ),
   gitStatus: (projectId: string) =>
     request<{ status: GitStatus }>(`/api/projects/${projectId}/git/status`),
@@ -962,6 +1034,24 @@ export const api = {
       "/api/settings/automation",
       jsonInit("PUT", payload),
     ),
+  getNotificationSettings: () =>
+    request<{ settings: NotificationSettings }>("/api/settings/notifications"),
+  saveNotificationSettings: (payload: NotificationSettings) =>
+    request<{ settings: NotificationSettings }>(
+      "/api/settings/notifications",
+      jsonInit("PUT", payload),
+    ),
+  testNotificationSettings: (payload: { channelId?: string } = {}) =>
+    request<{
+      ok: boolean;
+      results: Array<{
+        channelId: string;
+        channelName: string;
+        ok: boolean;
+        status?: number;
+        error?: string;
+      }>;
+    }>("/api/settings/notifications/test", jsonInit("POST", payload)),
   getTerminalSettings: () =>
     request<{ shell: TerminalShell }>("/api/settings/terminal"),
   saveTerminalSettings: (payload: { shell: TerminalShell }) =>

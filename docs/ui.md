@@ -8,9 +8,9 @@ status bar.
 | Menu | Panel / perilaku |
 | --- | --- |
 | Workspace | `WorkspacePanel` — daftar & pilih project |
-| Explorer | `FileTreePanel` — butuh `workspace_path` |
+| Explorer | `FileTreePanel` — butuh `workspace_path`; tombol buat file/folder |
 | Document | `DocumentPanel` — Local / Docmost / Notion / Confluence |
-| Ticket | `TicketPanel` — filter, create, refresh |
+| Ticket | `TicketPanel` — filter + create/refresh; board full-height dengan scroll per kolom |
 | Workflows | `WorkflowPanel` — daftar YAML, recent runs, create/refresh |
 | Project Settings | `SettingsPanel` — section nav |
 | Terminal | Toggle **bottom panel** (bukan tab utama) |

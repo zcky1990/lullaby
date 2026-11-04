@@ -74,7 +74,7 @@ export function TabsBar({ tabs, activeId, onSelect, onClose }: Props) {
           <div
             key={tab.id}
             className={cn(
-              "group flex h-[35px] items-center gap-2 border-t border-r border-t-transparent px-3 text-[13px]",
+              "group flex h-[35px] items-center gap-2 border-t border-r border-t-transparent px-3 text-xs",
               active
                 ? "border-t-primary bg-background text-foreground"
                 : "text-muted-foreground hover:bg-accent",

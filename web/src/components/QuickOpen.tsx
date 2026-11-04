@@ -151,7 +151,7 @@ export function QuickOpen({ open, projectId, onOpenChange, onOpenFile }: Props) 
               }
             }}
             placeholder="Cari file berdasarkan nama…"
-            className="h-11 w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+            className="h-11 w-full bg-transparent text-xs outline-none placeholder:text-muted-foreground"
             aria-label="Cari file"
             autoComplete="off"
             spellCheck={false}
@@ -182,7 +182,7 @@ export function QuickOpen({ open, projectId, onOpenChange, onOpenFile }: Props) 
                 onMouseEnter={() => setActiveIndex(index)}
                 onClick={() => choose(path)}
                 className={cn(
-                  "flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm",
+                  "flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs",
                   index === activeIndex ? "bg-accent text-accent-foreground" : "hover:bg-accent/60",
                 )}
               >

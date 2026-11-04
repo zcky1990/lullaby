@@ -17,8 +17,11 @@ tombol **Workflow baru** atau ditulis langsung di folder tersebut.
 | --- | --- | --- |
 | `name` | string | Nama workflow (opsional; default slug). |
 | `description` | string | Deskripsi singkat. |
-| `env` | map | Environment variable untuk semua step (nilai diubah ke string). |
+| `type` | string | Opsional (mis. `graph`); disimpan, tidak mengubah eksekusi. |
+| `params` | array | Parameter Dagu-style (`name`, `type`, `default`, `description`); default ikut ke env. Saat Run, dialog meminta nilai param. |
+| `env` | map / list map | Environment variable untuk semua step (nilai diubah ke string). |
 | `working_dir` | string | Direktori kerja default, relatif terhadap workspace. |
+| `timeout_sec` | number | Timeout default semua step (bisa dioverride per step / `defaults`). |
 | `llm` | object | Konfigurasi default step AI (`provider`, `model`, `role`, `session`, `system`, `temperature`). |
 | `defaults` | object | Default semua step: `env`, `working_dir`, `retry_policy`, `timeout_sec`. |
 | `steps` | array | Daftar step (wajib, minimal 1). |
@@ -53,7 +56,58 @@ steps:
 | `retry_policy` | `{ limit, interval_sec }`; `limit` = jumlah percobaan ulang. |
 | `timeout_sec` | Batas waktu; proses di-`SIGTERM` lalu `SIGKILL` (exit 124). |
 | `continue_on` | `failure` / `exit_code`: kegagalan step tidak menggagalkan run & dependency tetap boleh lanjut. |
-| `output` | Nama variabel untuk stdout (opsional). |
+| `output` / `outputs` | Nama variabel stdout, atau list `{ name }` (isi lewat `DAGU_OUTPUT_FILE`). |
+
+## Router (`action: router.route`)
+
+```yaml
+steps:
+  - id: check
+    run: printf 'status=success\n' >> "$DAGU_OUTPUT_FILE"
+    outputs:
+      - name: status
+  - id: route
+    depends: check
+    action: router.route
+    with:
+      value: ${steps.check.outputs.status}
+      routes:
+        success: [ok]
+        failed: [bad]
+  - id: ok
+    run: echo ok
+  - id: bad
+    run: exit 1
+```
+
+Target di `routes` otomatis bergantung pada router dan hanya dijalankan jika value cocok.
+Di graph, router digambar **belah ketupat**; label edge = key route (`success` / `failed`).
+
+### Loop (retry body)
+
+Dua pola:
+
+1. **`next`** setelah fix — kembali ke step awal:
+```yaml
+  - id: route
+    depends: check
+    action: router.route
+    with:
+      value: ${steps.check.outputs.STATUS}
+      max_loops: 5
+      routes:
+        success: [done]
+        failed: [fix]
+  - id: fix
+    action: agent
+    with:
+      prompt: Fix issues in rubocop.log
+    next: rubocop
+  - id: done
+    run: echo ok
+```
+
+2. **Loop-back route** langsung ke step sebelumnya (`failed: [rubocop]`) — edge putus-putus di graph.
 
 ## Dependency & eksekusi
 
@@ -68,9 +122,12 @@ steps:
 ## Variabel & output
 
 - `${NAMA}` → nilai `output: NAMA`.
+- `${params.NAME}` → default param / env.
 - `${steps.<id>.output}` → stdout step tersebut (tersedia untuk step yang sudah sukses).
+- `${steps.<id>.outputs.<name>}` → named output dari `DAGU_OUTPUT_FILE`.
 - `${env.KEY}` → environment variable workflow/step.
-- Interpolasi berlaku di `run`, `prompt`, `system`, `messages`, dan nilai `env` step.
+- Interpolasi berlaku di `run`, `prompt`, `system`, `messages`, `message` (notification), dan nilai
+  `env` step.
 
 ```yaml
 steps:
@@ -141,6 +198,54 @@ Catatan:
 - Provider/role berasal dari **Global Settings**.
 - Jika provider/role/skill tidak ditemukan → step gagal dengan log jelas.
 - `output` menyimpan jawaban; stdout step shell juga tersedia sebagai `${steps.<id>.output}`.
+
+## Notification (`action: notification`)
+
+Kirim pesan ke channel yang didaftarkan di **Global Settings → Notifications** (Slack, Google Chat,
+Discord, atau webhook generik). Notifikasi **tidak** otomatis di akhir run — hanya jika ada step
+ini.
+
+### 1. Daftarkan channel
+
+1. Buka **Global Settings → Notifications**.
+2. **Tambah channel**: isi nama (mis. `team-slack`), tipe, dan Incoming Webhook URL.
+3. Opsional: **Test** untuk memastikan webhook aktif.
+
+Nama channel dipakai di YAML sebagai `with.channel` (id channel juga diterima).
+
+### 2. Step di workflow
+
+```yaml
+name: build-and-notify
+params:
+  - name: TASK
+    type: string
+    default: ship it
+steps:
+  - id: work
+    run: echo done
+    output: RESULT
+  - id: ping
+    depends: work
+    action: notification
+    with:
+      channel: team-slack
+      message: |
+        Workflow selesai.
+        Task: ${params.TASK}
+        Result: ${RESULT}
+```
+
+| Field `with` | Wajib | Keterangan |
+| --- | --- | --- |
+| `channel` | ya | Nama atau id channel di Global Settings. |
+| `message` | ya* | Isi pesan. Alias: `text` / `prompt`. Mendukung interpolasi `${...}`. |
+
+Catatan:
+- Step tidak boleh memakai `run`.
+- Channel tidak ditemukan / nonaktif → step **gagal** (log `[notify error] …`).
+- Payload Slack / Google Chat: `{ text }`; Discord: `{ content }`; webhook generik: JSON
+  `{ event: "workflow.notification", text, projectId, … }`.
 
 ## Sesi AI
 
@@ -214,5 +319,7 @@ steps:
 - **“Workspace belum diatur”** → set workspace di Project Settings → Workspace.
 - **Provider/role tidak ditemukan** → cek Global Settings → LLM Providers / Roles.
 - **Step AI gagal** → lihat log step; periksa baseUrl/apiKey/model provider.
+- **Channel notification tidak ditemukan** → cek Global Settings → Notifications (nama/id & aktif).
+- **Notify gagal HTTP** → Test channel di settings; periksa Incoming Webhook URL.
 - **Run 409** → masih ada run aktif; tunggu atau buka run lalu Cancel.
 - **Dependency cycle** → periksa `depends`.

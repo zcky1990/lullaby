@@ -15,6 +15,7 @@ import {
   RoleInput,
   TerminalSettingsInput,
   TicketTransitionInput,
+  CreateWorkspacePathInput,
   UpdateFileInput,
 } from "../src/config/schema.ts";
 import {
@@ -443,6 +444,15 @@ Deno.test("UpdateFileInput validates editor writes", () => {
   const parsed = UpdateFileInput.parse({ path: " src/a.ts ", content: "x" });
   equal(parsed.path, "src/a.ts");
   throws(() => UpdateFileInput.parse({ path: "", content: "x" }));
+});
+
+Deno.test("CreateWorkspacePathInput validates file and dir creates", () => {
+  const file = CreateWorkspacePathInput.parse({ type: "file", name: " a.ts ", parent: " src " });
+  equal(file.name, "a.ts");
+  equal(file.parent, "src");
+  const dir = CreateWorkspacePathInput.parse({ type: "dir", name: "feature" });
+  equal(dir.parent, "");
+  throws(() => CreateWorkspacePathInput.parse({ type: "file", name: "" }));
 });
 
 Deno.test("LocalTicketUpdateInput allows clearing priority", () => {

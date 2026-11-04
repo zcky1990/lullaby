@@ -99,6 +99,7 @@ export type RoleInput = z.infer<typeof RoleInput>;
 
 export const ChatInput = z.object({
   providerId: z.string().trim().optional(),
+  model: z.string().trim().max(200).optional(),
   sessionId: z.string().trim().optional(),
   roleId: z.string().trim().optional(),
   skillName: z
@@ -129,6 +130,16 @@ export const WorkflowCreateInput = z.object({
 export const WorkflowSaveInput = z.object({
   yaml: z.string().min(1).max(200_000),
 });
+
+export const WorkflowRunInput = z.object({
+  params: z
+    .record(
+      z.string().trim().min(1).max(120),
+      z.union([z.string().max(100_000), z.number(), z.boolean()]),
+    )
+    .optional(),
+});
+export type WorkflowRunInput = z.infer<typeof WorkflowRunInput>;
 
 export const GitPathsInput = z.object({
   paths: z.array(z.string().trim().min(1).max(1000)).min(1).max(200),
@@ -178,6 +189,14 @@ export const UpdateFileInput = z.object({
   path: z.string().trim().min(1).max(1000),
   content: z.string().max(2_000_000),
 });
+
+export const CreateWorkspacePathInput = z.object({
+  type: z.enum(["file", "dir"]),
+  parent: z.string().trim().max(1000).optional().default(""),
+  name: z.string().trim().min(1).max(255),
+  content: z.string().max(2_000_000).optional(),
+});
+export type CreateWorkspacePathInput = z.infer<typeof CreateWorkspacePathInput>;
 
 export const GenerateTicketsInput = z.object({
   title: z.string().trim().min(1).max(200),
@@ -251,10 +270,16 @@ export const SkillsSettingsInput = z.object({
 export type McpSettingsInput = z.infer<typeof McpSettingsInput>;
 export type SkillsSettingsInput = z.infer<typeof SkillsSettingsInput>;
 
+export const CursorModelsInput = z.object({
+  apiKey: z.string().max(400).optional(),
+  providerId: z.string().trim().max(80).optional(),
+});
+export type CursorModelsInput = z.infer<typeof CursorModelsInput>;
+
 export const UiPreferencesInput = z
   .object({
     theme: z.enum(["light", "dark", "system"]).optional(),
-    colorTheme: z.enum(["vscode", "shadcn", "claude", "supabase"]).optional(),
+    colorTheme: z.enum(["vscode", "shadcn", "claude", "supabase", "lullaby"]).optional(),
     appFont: z.enum(["system", "inter", "manrope", "jetbrains"]).optional(),
     editorTheme: z.enum(["auto", "vs", "vs-dark", "hc-black", "hc-light"]).optional(),
     editorFont: z.enum(["jetbrains", "fira", "menlo", "consolas", "monospace"]).optional(),
@@ -271,6 +296,39 @@ export const AutomationSettingsInput = z.object({
   autoBuildOnInProgress: z.boolean().default(false),
 });
 export type AutomationSettingsInput = z.infer<typeof AutomationSettingsInput>;
+
+export const NotificationChannelType = z.enum([
+  "slack",
+  "google_chat",
+  "discord",
+  "webhook",
+]);
+export type NotificationChannelType = z.infer<typeof NotificationChannelType>;
+
+export const NotificationChannelInput = z
+  .object({
+    id: z.string().trim().min(1).max(80).optional(),
+    name: z.string().trim().min(1).max(80),
+    type: NotificationChannelType,
+    enabled: z.boolean().default(true),
+    webhookUrl: z.string().trim().url().max(2000),
+  })
+  .strict();
+export type NotificationChannelInput = z.infer<typeof NotificationChannelInput>;
+
+export const NotificationSettingsInput = z
+  .object({
+    channels: z.array(NotificationChannelInput).max(20).default([]),
+  })
+  .strict();
+export type NotificationSettingsInput = z.infer<typeof NotificationSettingsInput>;
+
+export const NotificationTestInput = z
+  .object({
+    channelId: z.string().trim().min(1).max(80).optional(),
+  })
+  .strict();
+export type NotificationTestInput = z.infer<typeof NotificationTestInput>;
 
 export const ChatToolsSettingsInput = z.object({
   autoApproveWrites: z.boolean().default(false),

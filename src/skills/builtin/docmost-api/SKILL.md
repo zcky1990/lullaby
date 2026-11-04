@@ -15,7 +15,7 @@ Docmost dipakai untuk dokumen remote (PRD/notes) dan sync dokumen lokal → Docm
 - Token dimask (`••••`) saat dikirim ke renderer. Jangan pernah mencetak token ke log/chat.
 - Bukan setting global: satu project punya konfigurasi Docmost sendiri.
 - File DB: `{appDataDir}/data.db` (`RND_APP_DATA_DIR` bisa meng-override). Di macOS:
-  `~/Library/Application Support/RND Workflow/data.db`.
+  `~/Library/Application Support/Lullaby/data.db`.
 
 ## Autentikasi
 

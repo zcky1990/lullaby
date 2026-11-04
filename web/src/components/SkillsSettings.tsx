@@ -155,11 +155,11 @@ export function SkillsSettings({ projectId }: { projectId: string | null }) {
       <div className="flex flex-col gap-3">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="flex flex-col gap-1">
-            <h2 className="flex items-center gap-2 text-sm font-medium tracking-wider text-muted-foreground uppercase">
+            <h2 className="flex items-center gap-2 text-xs font-medium tracking-wider text-muted-foreground uppercase">
               <Sparkles className="size-4" />
               Skills
             </h2>
-            <p className="max-w-2xl text-sm text-muted-foreground">
+            <p className="max-w-2xl text-xs text-muted-foreground">
               Skill adalah folder <span className="font-mono">SKILL.md</span> berisi frontmatter{" "}
               <span className="font-mono">name</span>/<span className="font-mono">description</span>.
               AI memilih skill lewat tool <span className="font-mono">use_skill</span> saat
@@ -236,7 +236,7 @@ export function SkillsSettings({ projectId }: { projectId: string | null }) {
       {error ? <p className="text-xs text-destructive">{error}</p> : null}
 
       {loading ? (
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <Spinner />
           Memuat skills…
         </div>
@@ -276,12 +276,12 @@ export function SkillsSettings({ projectId }: { projectId: string | null }) {
           </div>
 
           {!data || data.skills.length === 0 ? (
-            <p className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
+            <p className="rounded-md border border-dashed p-4 text-xs text-muted-foreground">
               Belum ada skill. Jalankan chat Build, atau buat folder (mis.{" "}
               <span className="font-mono">my-skill/SKILL.md</span>) di salah satu folder di atas.
             </p>
           ) : filteredCount === 0 ? (
-            <p className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
+            <p className="rounded-md border border-dashed p-4 text-xs text-muted-foreground">
               Tidak ada skill yang cocok dengan filter.
             </p>
           ) : (
@@ -293,7 +293,7 @@ export function SkillsSettings({ projectId }: { projectId: string | null }) {
                   <div key={group.source} className="flex flex-col gap-2">
                     <div className="flex flex-wrap items-center gap-2">
                       <Icon className="size-4 text-muted-foreground" />
-                      <span className="text-sm font-medium">{meta.label}</span>
+                      <span className="text-xs font-medium">{meta.label}</span>
                       <Badge variant="outline" className="h-5 px-1.5 text-[10px]">
                         {group.skills.length}
                       </Badge>
@@ -338,7 +338,7 @@ export function SkillsSettings({ projectId }: { projectId: string | null }) {
                               />
                             </div>
                           </div>
-                          <p className="line-clamp-2 text-sm text-muted-foreground">
+                          <p className="line-clamp-2 text-xs text-muted-foreground">
                             {skill.description || "(tanpa deskripsi)"}
                           </p>
                           <p

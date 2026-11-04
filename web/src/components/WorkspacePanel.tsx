@@ -107,7 +107,7 @@ export function WorkspacePanel({
 
       <div className="flex-1 overflow-y-auto px-2 pb-2">
         {projects.length === 0 && (
-          <p className="px-2 py-4 text-sm text-muted-foreground">Belum ada project.</p>
+          <p className="px-2 py-4 text-xs text-muted-foreground">Belum ada project.</p>
         )}
         {projects.map((project) => (
           <div
@@ -120,7 +120,7 @@ export function WorkspacePanel({
             <button
               type="button"
               onClick={() => onSelect(project.id)}
-              className="flex min-w-0 flex-1 flex-col items-start gap-0.5 px-3 py-2 text-left text-sm"
+              className="flex min-w-0 flex-1 flex-col items-start gap-0.5 px-3 py-2 text-left text-xs"
             >
               <span className="flex w-full items-center justify-between gap-2">
                 <span className="truncate font-medium">{project.name}</span>

@@ -1,6 +1,8 @@
-# Dokumentasi RND Workflow
+# Dokumentasi Lullaby
 
-Dokumentasi produk dan teknis untuk aplikasi desktop **RND Workflow** (`rnd-workflow`).
+Dokumentasi produk dan teknis untuk aplikasi desktop **Lullaby** (`lullaby`).
+
+**Let Developers Dream, We'll Handle the Work.**
 
 Sumber kebenaran perilaku terkini untuk kontributor: [`AGENTS.md`](../AGENTS.md). Dokumen di folder
 ini menjelaskan **apa yang dilakukan aplikasi**, cara menjalankannya, dan peta fitur/API untuk
@@ -10,7 +12,7 @@ pengguna maupun developer.
 
 | Dokumen                                              | Isi                                                       |
 | ---------------------------------------------------- | --------------------------------------------------------- |
-| [overview.md](overview.md)                           | Apa itu RND Workflow, alur kerja utama, ruang lingkup v1  |
+| [overview.md](overview.md)                           | Apa itu Lullaby, alur kerja utama, ruang lingkup v1        |
 | [getting-started.md](getting-started.md)             | Instalasi, perintah dev/build, checklist kualitas         |
 | [architecture.md](architecture.md)                   | Arsitektur proses, modul backend/frontend, keamanan lokal |
 | [ui.md](ui.md)                                       | Shell UI (activity bar, panel, tab, chat, terminal)       |
@@ -25,6 +27,7 @@ pengguna maupun developer.
 | [features/search.md](features/search.md)             | Quick Open (Cmd+P) dan pencarian teks workspace           |
 | [features/lsp.md](features/lsp.md)                   | Language Server Protocol di editor workspace              |
 | [features/workflows.md](features/workflows.md)       | Workflow YAML (DAG), runner, history, UI graph            |
+| [features/notifications.md](features/notifications.md) | Channel global + step `action: notification` |
 | [features/integrations.md](features/integrations.md) | Konfigurasi & test integrasi                              |
 | [features/settings.md](features/settings.md)         | Project Settings vs Global Settings                       |
 | [automation.md](automation.md)                       | Auto-build saat To Do → In Progress                       |
@@ -35,5 +38,5 @@ Catatan desain/perencanaan (bukan runtime): folder [`feature/`](../feature/).
 
 ## Versi
 
-- Nama paket: `rnd-workflow` `0.1.0`
+- Nama paket: `lullaby` `0.1.0`
 - Runtime: Deno 2.9+ (desktop), Node/npm untuk build client Vite

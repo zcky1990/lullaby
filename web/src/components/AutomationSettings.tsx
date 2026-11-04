@@ -46,10 +46,10 @@ export function AutomationSettings() {
   return (
     <section className="flex w-full flex-col gap-4">
       <div className="flex flex-col gap-2">
-        <h2 className="text-sm font-medium tracking-wider text-muted-foreground uppercase">
+        <h2 className="text-xs font-medium tracking-wider text-muted-foreground uppercase">
           Automation
         </h2>
-        <p className="text-sm text-muted-foreground">
+        <p className="text-xs text-muted-foreground">
           Saat aktif, menggeser tiket dari <span className="font-medium">To Do</span> ke{" "}
           <span className="font-medium">In Progress</span> membuka Chat Build baru dan meminta
           agent mengerjakan tiket tersebut. Perubahan file tetap lewat Review tab.
@@ -58,14 +58,14 @@ export function AutomationSettings() {
       </div>
 
       {loading ? (
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <Spinner />
           Memuat…
         </div>
       ) : (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border p-4">
           <div className="flex min-w-0 flex-col gap-1">
-            <span className="text-sm font-medium">Auto-build on In Progress</span>
+            <span className="text-xs font-medium">Auto-build on In Progress</span>
             <span className="text-xs text-muted-foreground">
               Trigger hanya To Do → In Progress. Default nonaktif.
             </span>

@@ -77,90 +77,93 @@ export function TicketCreateDialog({ projectId, open, onOpenChange, onCreated }:
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
-        <DialogHeader>
-          <DialogTitle>Tiket baru (lokal)</DialogTitle>
+      <DialogContent className="flex max-h-[min(90vh,820px)] flex-col gap-0 overflow-hidden p-0 sm:max-w-xl">
+        <DialogHeader className="shrink-0 space-y-1.5 border-b px-6 pt-6 pr-12 pb-4 text-left">
+          <DialogTitle>Tiket baru</DialogTitle>
           <DialogDescription>
-            Disimpan di workspace lokal. Sync ke Jira dilakukan manual dari detail tiket.
+            Disimpan lokal dulu. Sync ke Jira bisa dilakukan dari detail tiket.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex flex-col gap-3">
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="ticket-title">Judul</Label>
-            <Input
-              id="ticket-title"
-              value={title}
-              onChange={(event) => setTitle(event.target.value)}
-              placeholder="Mis. Perbaiki dropdown chat"
-            />
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <Label>Deskripsi</Label>
-            <RichTextEditor
-              value={description}
-              onChange={setDescription}
-              placeholder="Konteks, langkah reproduksi, atau acceptance criteria…"
-            />
-          </div>
-          <div className="grid grid-cols-3 gap-2">
+        <div className="min-h-0 flex-1 overflow-y-auto px-6 py-4">
+          <div className="flex flex-col gap-4">
             <div className="flex flex-col gap-1.5">
-              <Label>Status</Label>
-              <Select value={status} onValueChange={setStatus}>
-                <SelectTrigger size="sm" className="w-full" aria-label="Status tiket">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectGroup>
-                    {STATUSES.map((item) => (
-                      <SelectItem key={item} value={item}>
-                        {item}
-                      </SelectItem>
-                    ))}
-                  </SelectGroup>
-                </SelectContent>
-              </Select>
+              <Label htmlFor="ticket-title">Judul</Label>
+              <Input
+                id="ticket-title"
+                value={title}
+                onChange={(event) => setTitle(event.target.value)}
+                placeholder="Mis. Perbaiki dropdown chat"
+                autoFocus
+              />
             </div>
             <div className="flex flex-col gap-1.5">
-              <Label>Prioritas</Label>
-              <Select value={priority} onValueChange={setPriority}>
-                <SelectTrigger size="sm" className="w-full" aria-label="Prioritas tiket">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectGroup>
-                    <SelectItem value="none">Tanpa</SelectItem>
-                    {PRIORITIES.map((item) => (
-                      <SelectItem key={item} value={item}>
-                        {item}
-                      </SelectItem>
-                    ))}
-                  </SelectGroup>
-                </SelectContent>
-              </Select>
+              <Label>Deskripsi</Label>
+              <RichTextEditor
+                value={description}
+                onChange={setDescription}
+                placeholder="Konteks, langkah reproduksi, atau acceptance criteria…"
+              />
             </div>
-            <div className="flex flex-col gap-1.5">
-              <Label>Tipe</Label>
-              <Select value={type} onValueChange={setType}>
-                <SelectTrigger size="sm" className="w-full" aria-label="Tipe tiket">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectGroup>
-                    {TYPES.map((item) => (
-                      <SelectItem key={item} value={item}>
-                        {item}
-                      </SelectItem>
-                    ))}
-                  </SelectGroup>
-                </SelectContent>
-              </Select>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <div className="flex flex-col gap-1.5">
+                <Label>Status</Label>
+                <Select value={status} onValueChange={setStatus}>
+                  <SelectTrigger size="sm" className="w-full" aria-label="Status tiket">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      {STATUSES.map((item) => (
+                        <SelectItem key={item} value={item}>
+                          {item}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label>Prioritas</Label>
+                <Select value={priority} onValueChange={setPriority}>
+                  <SelectTrigger size="sm" className="w-full" aria-label="Prioritas tiket">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      <SelectItem value="none">Tanpa</SelectItem>
+                      {PRIORITIES.map((item) => (
+                        <SelectItem key={item} value={item}>
+                          {item}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label>Tipe</Label>
+                <Select value={type} onValueChange={setType}>
+                  <SelectTrigger size="sm" className="w-full" aria-label="Tipe tiket">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      {TYPES.map((item) => (
+                        <SelectItem key={item} value={item}>
+                          {item}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
+            {error ? <p className="text-xs text-destructive">{error}</p> : null}
           </div>
-          {error ? <p className="text-xs text-destructive">{error}</p> : null}
         </div>
 
-        <DialogFooter>
+        <DialogFooter className="shrink-0 border-t px-6 py-4">
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
             Batal
           </Button>

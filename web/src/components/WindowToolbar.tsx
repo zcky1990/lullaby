@@ -17,8 +17,8 @@ export function WindowToolbar({ projectName, workspace, chatOpen, onToggleChat }
           <Sparkles className="size-4" />
         </div>
         <div className="flex min-w-0 flex-col">
-          <span className="truncate text-[13px] font-semibold tracking-tight">
-            {projectName ?? "Lullaby IDE"}
+          <span className="truncate text-xs font-semibold tracking-tight">
+            {projectName ?? "Lullaby"}
           </span>
           <span className="truncate text-[10px] text-muted-foreground">
             {workspace ?? "No workspace"}
@@ -31,7 +31,7 @@ export function WindowToolbar({ projectName, workspace, chatOpen, onToggleChat }
         variant="ghost"
         onClick={onToggleChat}
         className={cn(
-          "size-9 rounded-full border border-transparent transition-all",
+          "size-9 rounded border border-transparent transition-all",
           chatOpen
             ? "border-primary/20 bg-primary/10 text-primary shadow-sm hover:bg-primary/15"
             : "text-muted-foreground hover:bg-accent hover:text-foreground",
