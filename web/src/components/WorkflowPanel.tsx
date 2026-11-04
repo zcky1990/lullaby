@@ -49,14 +49,14 @@ export function WorkflowPanel({
             Workflow baru
           </Button>
           <Button
-            size="icon"
-            variant="ghost"
-            className="size-8 shrink-0"
+            size="sm"
+            variant="outline"
             onClick={onOpenDocs}
-            aria-label="Dokumentasi workflow"
+            data-icon="inline-start"
             title="Dokumentasi workflow"
           >
             <BookOpen />
+            Wiki
           </Button>
           <Button
             size="icon"

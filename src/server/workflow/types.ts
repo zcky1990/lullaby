@@ -36,6 +36,9 @@ export interface WorkflowLlmWith {
 export interface WorkflowRouterWith {
   value: string;
   routes: Record<string, string[]>;
+  /** Targets that jump back to an earlier step (loop). */
+  loopBacks: string[];
+  maxLoops: number;
 }
 
 export interface WorkflowParam {
@@ -60,6 +63,8 @@ export interface WorkflowStep {
   retry: WorkflowRetryPolicy;
   timeoutSec?: number;
   continueOn?: string;
+  /** After success, reset and re-run these steps (loop). */
+  next: string[];
   /** Step only runs when this router selected it. */
   routeGate?: { routerId: string };
 }

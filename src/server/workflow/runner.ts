@@ -183,12 +183,15 @@ async function execute(
   const outputs = new Map<string, string>();
   const namedByStep = new Map<string, Record<string, string>>();
   const routeSelections = new Map<string, string[]>();
+  const runCounts = new Map<string, number>();
   const params = buildParams(definition, paramOverrides);
   const effectiveDefinition: WorkflowDefinition = {
     ...definition,
     env: { ...definition.env, ...params },
   };
+  const stepById = new Map(definition.steps.map((step) => [step.id, step]));
   let failedWithoutContinue = false;
+  let loopError: string | undefined;
 
   const setStatus = async (
     step: WorkflowStep,
@@ -212,116 +215,233 @@ async function execute(
     });
   };
 
-  for (const layer of definition.layers) {
-    if (active.canceled) break;
-    const tasks = layer.map(async (stepId) => {
-      const step = definition.steps.find((item) => item.id === stepId)!;
-      const dependencyStatuses = step.depends.map((dependency) =>
-        statuses.get(dependency) ?? "pending"
-      );
-      const blocked = step.depends.some((dependency, index) => {
-        const depStep = definition.steps.find((item) => item.id === dependency)!;
-        return !stepSatisfied(depStep, dependencyStatuses[index]);
-      });
-      const log = logs.get(step.id) ?? "";
-      if (blocked) {
-        await setStatus(step, "skipped", null, `${log}[skipped: dependency tidak sukses]\n`);
-        return;
+  const depsSatisfied = (step: WorkflowStep): boolean =>
+    step.depends.every((dependency) => {
+      const depStep = stepById.get(dependency);
+      const status = statuses.get(dependency);
+      if (!depStep || status === undefined) return false;
+      return stepSatisfied(depStep, status);
+    });
+
+  const isRouteActive = (step: WorkflowStep): boolean => {
+    if (!step.routeGate) return true;
+    const selected = routeSelections.get(step.routeGate.routerId) ?? [];
+    return selected.includes(step.id);
+  };
+
+  const isRunnable = (step: WorkflowStep): boolean => {
+    if (active.canceled || loopError) return false;
+    const status = statuses.get(step.id);
+    if (
+      status === "running" || status === "success" || status === "failed" ||
+      status === "skipped" || status === "canceled"
+    ) {
+      return false;
+    }
+    if (!isRouteActive(step)) return false;
+    return depsSatisfied(step);
+  };
+
+  const descendantsOf = (startId: string): Set<string> => {
+    const found = new Set<string>();
+    const queue = [startId];
+    while (queue.length > 0) {
+      const id = queue.shift()!;
+      if (found.has(id)) continue;
+      found.add(id);
+      for (const step of definition.steps) {
+        if (step.depends.includes(id)) queue.push(step.id);
       }
-      if (step.routeGate) {
-        const selected = routeSelections.get(step.routeGate.routerId) ?? [];
-        if (!selected.includes(step.id)) {
+    }
+    return found;
+  };
+
+  const resetFrom = async (
+    startId: string,
+    reason: string,
+    maxLoops: number,
+  ): Promise<boolean> => {
+    const runs = runCounts.get(startId) ?? 0;
+    if (runs >= maxLoops) {
+      loopError =
+        `Loop pada "${startId}" melebihi max_loops=${maxLoops} (${reason}).`;
+      return false;
+    }
+    const toReset = descendantsOf(startId);
+    for (const id of toReset) {
+      const step = stepById.get(id)!;
+      const note =
+        `\n[loop reset ← ${reason} · next attempt ${runs + 1}/${maxLoops}]\n`;
+      logs.set(id, `${logs.get(id) ?? ""}${note}`);
+      statuses.delete(id);
+      outputs.delete(id);
+      namedByStep.delete(id);
+      if (step.kind === "router") routeSelections.delete(id);
+      const rowId = active.stepIds.get(id);
+      if (rowId) {
+        await updateWorkflowRunStep(rowId, {
+          status: "pending",
+          exitCode: null,
+          log: applyLogLimit(logs.get(id) ?? ""),
+        });
+      }
+      publish({
+        type: "workflow.step.status",
+        payload: { runId, stepId: id, status: "pending" },
+      });
+    }
+    return true;
+  };
+
+  const runOne = async (step: WorkflowStep): Promise<void> => {
+    runCounts.set(step.id, (runCounts.get(step.id) ?? 0) + 1);
+    const log = logs.get(step.id) ?? "";
+    if (active.canceled) {
+      await setStatus(step, "canceled", null, log);
+      return;
+    }
+    const rowId = active.stepIds.get(step.id);
+    if (rowId) {
+      await updateWorkflowRunStep(rowId, {
+        status: "running",
+        startedAt: true,
+        log: applyLogLimit(log),
+      });
+      publish({
+        type: "workflow.step.status",
+        payload: { runId, stepId: step.id, status: "running" },
+      });
+    }
+    statuses.set(step.id, "running");
+
+    let result: StepResult = { code: -1, log };
+    for (let attempt = 0; attempt <= step.retry.limit; attempt++) {
+      if (active.canceled) break;
+      if (attempt > 0) {
+        result.log += `\n[retry ${attempt}/${step.retry.limit}]\n`;
+        await sleep(step.retry.intervalSec * 1000);
+        if (active.canceled) break;
+      }
+      result = await runStep(
+        runId,
+        active,
+        project,
+        effectiveDefinition,
+        step,
+        result.log,
+        rowId,
+        outputs,
+        namedByStep,
+        params,
+      );
+      if (result.code === 0 || active.canceled) break;
+    }
+
+    logs.set(step.id, result.log);
+    if (active.canceled) {
+      await setStatus(step, "canceled", result.code, result.log);
+      return;
+    }
+    if (result.code !== 0) {
+      await setStatus(step, "failed", result.code, result.log);
+      return;
+    }
+
+    const value = result.output ?? result.log;
+    outputs.set(step.id, value);
+    if (step.output) outputs.set(step.output, value);
+    if (result.namedOutputs) {
+      namedByStep.set(step.id, {
+        ...(namedByStep.get(step.id) ?? {}),
+        ...result.namedOutputs,
+      });
+      for (const [name, namedValue] of Object.entries(result.namedOutputs)) {
+        outputs.set(name, namedValue);
+      }
+    }
+    if (result.selectedRoutes) {
+      routeSelections.set(step.id, result.selectedRoutes);
+    }
+    await setStatus(step, "success", 0, result.log);
+
+    if (step.kind === "router" && step.router && result.selectedRoutes) {
+      for (const targetId of result.selectedRoutes) {
+        if (!step.router.loopBacks.includes(targetId)) continue;
+        const ok = await resetFrom(
+          targetId,
+          `router ${step.id}`,
+          step.router.maxLoops,
+        );
+        if (!ok) {
           await setStatus(
             step,
-            "skipped",
-            null,
-            `${log}[skipped: router tidak memilih step ini]\n`,
+            "failed",
+            1,
+            `${result.log}\n[loop error] ${loopError}\n`,
           );
           return;
         }
       }
-      if (active.canceled) {
-        await setStatus(step, "canceled", null, log);
+    }
+
+    for (const nextId of step.next) {
+      const gateRouter = step.routeGate
+        ? stepById.get(step.routeGate.routerId)
+        : undefined;
+      const maxLoops = gateRouter?.router?.maxLoops ??
+        (step.kind === "router" ? (step.router?.maxLoops ?? 10) : 10);
+      const ok = await resetFrom(
+        nextId,
+        `next dari ${step.id}`,
+        maxLoops,
+      );
+      if (!ok) {
+        await setStatus(
+          step,
+          "failed",
+          1,
+          `${logs.get(step.id) ?? ""}\n[loop error] ${loopError}\n`,
+        );
         return;
       }
-      const rowId = active.stepIds.get(step.id);
-      if (rowId) {
-        await updateWorkflowRunStep(rowId, {
-          status: "running",
-          startedAt: true,
-          log: applyLogLimit(log),
-        });
-        publish({
-          type: "workflow.step.status",
-          payload: { runId, stepId: step.id, status: "running" },
-        });
-      }
+    }
+  };
 
-      let result: StepResult = { code: -1, log };
-      for (let attempt = 0; attempt <= step.retry.limit; attempt++) {
-        if (active.canceled) break;
-        if (attempt > 0) {
-          result.log += `\n[retry ${attempt}/${step.retry.limit}]\n`;
-          await sleep(step.retry.intervalSec * 1000);
-          if (active.canceled) break;
-        }
-        result = await runStep(
-          runId,
-          active,
-          project,
-          effectiveDefinition,
-          step,
-          result.log,
-          rowId,
-          outputs,
-          namedByStep,
-          params,
-        );
-        if (result.code === 0 || active.canceled) break;
-      }
-
-      logs.set(step.id, result.log);
-      if (active.canceled) {
-        await setStatus(step, "canceled", result.code, result.log);
-      } else if (result.code === 0) {
-        const value = result.output ?? result.log;
-        outputs.set(step.id, value);
-        if (step.output) outputs.set(step.output, value);
-        if (result.namedOutputs) {
-          namedByStep.set(step.id, {
-            ...(namedByStep.get(step.id) ?? {}),
-            ...result.namedOutputs,
-          });
-          for (const [name, namedValue] of Object.entries(result.namedOutputs)) {
-            outputs.set(name, namedValue);
-          }
-        }
-        if (result.selectedRoutes) {
-          routeSelections.set(step.id, result.selectedRoutes);
-        }
-        await setStatus(step, "success", 0, result.log);
-      } else {
-        await setStatus(step, "failed", result.code, result.log);
-      }
-    });
-
-    for (let index = 0; index < tasks.length; index += MAX_PARALLEL) {
-      await Promise.all(tasks.slice(index, index + MAX_PARALLEL));
-      if (active.canceled) break;
+  while (!active.canceled && !loopError) {
+    const batch = definition.steps.filter((step) => isRunnable(step));
+    if (batch.length === 0) break;
+    for (let index = 0; index < batch.length; index += MAX_PARALLEL) {
+      const chunk = batch.slice(index, index + MAX_PARALLEL);
+      await Promise.all(chunk.map((step) => runOne(step)));
+      if (active.canceled || loopError) break;
     }
   }
 
-  if (active.canceled) {
-    for (const step of definition.steps) {
-      if (!statuses.has(step.id)) {
-        await setStatus(step, "canceled", null, logs.get(step.id) ?? "");
-      }
+  for (const step of definition.steps) {
+    if (statuses.has(step.id)) continue;
+    const log = logs.get(step.id) ?? "";
+    if (active.canceled) {
+      await setStatus(step, "canceled", null, log);
+    } else if (step.routeGate && !isRouteActive(step)) {
+      await setStatus(step, "skipped", null, `${log}[skipped: router tidak memilih step ini]\n`);
+    } else if (!depsSatisfied(step)) {
+      await setStatus(step, "skipped", null, `${log}[skipped: dependency tidak sukses]\n`);
+    } else {
+      await setStatus(step, "skipped", null, `${log}[skipped]\n`);
     }
   }
 
   activeRuns.delete(runId);
-  const status = active.canceled ? "canceled" : failedWithoutContinue ? "failed" : "success";
-  const error = status === "failed" ? "Satu atau lebih step gagal." : undefined;
+  const status = active.canceled
+    ? "canceled"
+    : loopError || failedWithoutContinue
+    ? "failed"
+    : "success";
+  const error = loopError
+    ? loopError
+    : status === "failed"
+    ? "Satu atau lebih step gagal."
+    : undefined;
   await updateWorkflowRun(runId, status, error);
   await record(`workflow.run.${status}`, {
     projectId: active.projectId,

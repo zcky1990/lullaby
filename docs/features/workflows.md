@@ -47,8 +47,12 @@ Subset Dagu tambahan:
 - `params` → default masuk env / `${params.NAME}`; saat **Run**, UI menampilkan dialog isi param
   (dikirim sebagai body `POST .../run` `{ params }`)
 - `outputs: [{ name }]` + `DAGU_OUTPUT_FILE` (key=value) → `${steps.<id>.outputs.<name>}`
-- `action: router.route` dengan `with.value` + `with.routes` (target otomatis bergantung pada
-  router dan hanya jalan jika dipilih)
+- `action: router.route` dengan `with.value` + `with.routes` (if/else; di graph berbentuk
+  belah ketupat). Target maju mendapat `routeGate`; target yang kembali ke step sebelumnya
+  dianggap **loop-back** (garis putus-putus). `with.max_loops` (default 10) membatasi berapa kali
+  entry loop boleh dijalankan.
+- `next: <step>` setelah sukses me-reset dan menjalankan ulang step tersebut (pola
+  failed→fix→`next: rubocop`).
 
 - Step **tanpa `depends`** berjalan paralel.
 - Step dengan dependency menunggu semua dependency `success` (atau `failed` yang `continue_on`

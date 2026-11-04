@@ -12,11 +12,11 @@ import {
   Controls,
   type Edge,
   type Node,
+  type NodeTypes,
   ReactFlow,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import {
-  BookOpen,
   FileCode2,
   GitBranch,
   Network,
@@ -31,8 +31,8 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { useTheme } from "@/components/ThemeProvider";
-import { WikiTab } from "@/components/WikiTab";
 import { WorkflowParamsDialog } from "@/components/WorkflowParamsDialog";
+import { WorkflowRouterNode } from "@/components/WorkflowRouterNode";
 import {
   api,
   type WorkflowDefinition,
@@ -50,6 +50,10 @@ import {
 import { cn } from "@/lib/utils";
 
 const MonacoViewer = lazy(() => import("@/components/MonacoViewer"));
+
+const workflowNodeTypes: NodeTypes = {
+  router: WorkflowRouterNode,
+};
 
 function stepCommand(step: WorkflowDefinitionStep): string {
   if (step.run) return step.run;
@@ -86,7 +90,7 @@ export function WorkflowTab({ projectId, slug, onSaved, onDeleted }: Props) {
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
   const [steps, setSteps] = useState<WorkflowRunStep[]>([]);
   const [selectedStep, setSelectedStep] = useState<string | null>(null);
-  const [view, setView] = useState<"editor" | "graph" | "wiki">("editor");
+  const [view, setView] = useState<"editor" | "graph">("editor");
   const [dirty, setDirty] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -279,28 +283,69 @@ export function WorkflowTab({ projectId, slug, onSaved, onDeleted }: Props) {
     if (!definition) return { nodes: [] as Node[], edges: [] as Edge[] };
     const nodes: Node[] = [];
     const edges: Edge[] = [];
+    const routeEdgeKeys = new Set<string>();
+
     definition.layers.forEach((layer, layerIndex) => {
       layer.forEach((stepId, index) => {
+        const step = definition.steps.find((item) => item.id === stepId);
         const status = statusByStep.get(stepId) ?? "pending";
-        nodes.push({
-          id: stepId,
-          position: { x: layerIndex * 240, y: index * 110 },
-          data: { label: stepId },
-          style: {
-            width: 180,
-            padding: 10,
-            borderRadius: 6,
-            background: "var(--card)",
-            color: "var(--card-foreground)",
-            border: `2px solid ${STATUS_BORDER[status] ?? "var(--border)"}`,
-            fontFamily: "monospace",
-            fontSize: 12,
-          },
-        });
+        const border = STATUS_BORDER[status] ?? "var(--border)";
+        if (step?.kind === "router") {
+          nodes.push({
+            id: stepId,
+            type: "router",
+            position: { x: layerIndex * 240, y: index * 120 },
+            data: { label: stepId, borderColor: border },
+          });
+        } else {
+          nodes.push({
+            id: stepId,
+            position: { x: layerIndex * 240, y: index * 110 },
+            data: { label: stepId },
+            style: {
+              width: 180,
+              padding: 10,
+              borderRadius: 6,
+              background: "var(--card)",
+              color: "var(--card-foreground)",
+              border: `2px solid ${border}`,
+              fontFamily: "monospace",
+              fontSize: 12,
+            },
+          });
+        }
       });
     });
+
     for (const step of definition.steps) {
+      if (step.kind === "router" && step.router) {
+        const loopBacks = new Set(step.router.loopBacks ?? []);
+        for (const [key, targets] of Object.entries(step.router.routes)) {
+          for (const target of targets) {
+            const edgeId = `${step.id}-[${key}]->${target}`;
+            routeEdgeKeys.add(`${step.id}->${target}`);
+            const targetStatus = statusByStep.get(target);
+            edges.push({
+              id: edgeId,
+              source: step.id,
+              target,
+              label: key,
+              animated: targetStatus === "running" || loopBacks.has(target),
+              style: {
+                stroke: key === "failed" || key === "error"
+                  ? "#ef4444"
+                  : key === "success" || key === "ok"
+                  ? "#10b981"
+                  : "var(--border)",
+                strokeDasharray: loopBacks.has(target) ? "6 4" : undefined,
+              },
+              labelStyle: { fontSize: 10, fill: "var(--muted-foreground)" },
+            });
+          }
+        }
+      }
       for (const dependency of step.depends) {
+        if (routeEdgeKeys.has(`${dependency}->${step.id}`)) continue;
         const targetStatus = statusByStep.get(step.id);
         edges.push({
           id: `${dependency}->${step.id}`,
@@ -308,6 +353,17 @@ export function WorkflowTab({ projectId, slug, onSaved, onDeleted }: Props) {
           target: step.id,
           animated: targetStatus === "running",
           style: { stroke: "var(--border)" },
+        });
+      }
+      for (const nextId of step.next ?? []) {
+        edges.push({
+          id: `${step.id}-next->${nextId}`,
+          source: step.id,
+          target: nextId,
+          label: "next",
+          animated: true,
+          style: { stroke: "#f59e0b", strokeDasharray: "6 4" },
+          labelStyle: { fontSize: 10, fill: "var(--muted-foreground)" },
         });
       }
     }
@@ -441,22 +497,10 @@ export function WorkflowTab({ projectId, slug, onSaved, onDeleted }: Props) {
               <Network />
               Graph
             </Button>
-            <Button
-              size="sm"
-              variant={view === "wiki" ? "secondary" : "ghost"}
-              className="h-6 px-2 text-[11px]"
-              onClick={() => setView("wiki")}
-              data-icon="inline-start"
-            >
-              <BookOpen />
-              Wiki
-            </Button>
           </div>
 
           <div className="min-h-0 flex-1">
-            {view === "wiki"
-              ? <WikiTab />
-              : view === "editor"
+            {view === "editor"
               ? (
                 <Suspense
                   fallback={<Skeleton className="h-full w-full rounded-none" />}
@@ -479,6 +523,7 @@ export function WorkflowTab({ projectId, slug, onSaved, onDeleted }: Props) {
                   <ReactFlow
                     nodes={nodes}
                     edges={edges}
+                    nodeTypes={workflowNodeTypes}
                     fitView
                     nodesDraggable={false}
                     nodesConnectable={false}
@@ -492,41 +537,37 @@ export function WorkflowTab({ projectId, slug, onSaved, onDeleted }: Props) {
               )}
           </div>
 
-          {view !== "wiki"
-            ? (
-              <div className="h-[220px] shrink-0 overflow-auto border-t bg-background">
-                <div className="flex items-center justify-between gap-2 border-b px-3 py-1.5">
-                  <span className="truncate font-mono text-[11px]">
-                    {selectedStepData?.stepId ?? "Log"}
-                  </span>
-                  {selectedStepData
-                    ? (
-                      <div className="flex items-center gap-2">
-                        <Badge variant={stepBadgeVariant(selectedStepData.status)}>
-                          {selectedStepData.status}
-                        </Badge>
-                        {selectedStepData.exitCode !== undefined
-                          ? (
-                            <span className="text-[10px] text-muted-foreground">
-                              exit {selectedStepData.exitCode}
-                            </span>
-                          )
-                          : null}
-                      </div>
-                    )
-                    : null}
-                </div>
-                <div className="px-3 py-2">
-                  <p className="mb-1 font-mono text-[11px] text-muted-foreground">
-                    $ {selectedStepData?.command ?? ""}
-                  </p>
-                  <pre className="font-mono text-[11px] whitespace-pre-wrap">
-                    {selectedStepData?.log || "(belum ada log)"}
-                  </pre>
-                </div>
-              </div>
-            )
-            : null}
+          <div className="h-[220px] shrink-0 overflow-auto border-t bg-background">
+            <div className="flex items-center justify-between gap-2 border-b px-3 py-1.5">
+              <span className="truncate font-mono text-[11px]">
+                {selectedStepData?.stepId ?? "Log"}
+              </span>
+              {selectedStepData
+                ? (
+                  <div className="flex items-center gap-2">
+                    <Badge variant={stepBadgeVariant(selectedStepData.status)}>
+                      {selectedStepData.status}
+                    </Badge>
+                    {selectedStepData.exitCode !== undefined
+                      ? (
+                        <span className="text-[10px] text-muted-foreground">
+                          exit {selectedStepData.exitCode}
+                        </span>
+                      )
+                      : null}
+                  </div>
+                )
+                : null}
+            </div>
+            <div className="px-3 py-2">
+              <p className="mb-1 font-mono text-[11px] text-muted-foreground">
+                $ {selectedStepData?.command ?? ""}
+              </p>
+              <pre className="font-mono text-[11px] whitespace-pre-wrap">
+                {selectedStepData?.log || "(belum ada log)"}
+              </pre>
+            </div>
+          </div>
         </div>
 
         <aside className="flex w-72 shrink-0 flex-col overflow-y-auto border-l">

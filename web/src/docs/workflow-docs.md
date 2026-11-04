@@ -81,6 +81,33 @@ steps:
 ```
 
 Target di `routes` otomatis bergantung pada router dan hanya dijalankan jika value cocok.
+Di graph, router digambar **belah ketupat**; label edge = key route (`success` / `failed`).
+
+### Loop (retry body)
+
+Dua pola:
+
+1. **`next`** setelah fix — kembali ke step awal:
+```yaml
+  - id: route
+    depends: check
+    action: router.route
+    with:
+      value: ${steps.check.outputs.STATUS}
+      max_loops: 5
+      routes:
+        success: [done]
+        failed: [fix]
+  - id: fix
+    action: agent
+    with:
+      prompt: Fix issues in rubocop.log
+    next: rubocop
+  - id: done
+    run: echo ok
+```
+
+2. **Loop-back route** langsung ke step sebelumnya (`failed: [rubocop]`) — edge putus-putus di graph.
 
 ## Dependency & eksekusi
 

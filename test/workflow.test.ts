@@ -271,3 +271,74 @@ steps:
   equal(lintFailed.routeGate?.routerId, "rubocop_router");
   equal(definition.steps.find((step) => step.id === "workflow_success")?.routeGate?.routerId, "rspec_router");
 });
+
+Deno.test("parseWorkflow supports loop-back routes and next", () => {
+  const definition = parseWorkflow(
+    `
+name: rubocop-loop
+steps:
+  - id: rubocop
+    run: echo rubocop
+  - id: check
+    depends: rubocop
+    run: |
+      printf 'STATUS=failed\\n' >> "$DAGU_OUTPUT_FILE"
+    outputs:
+      - name: STATUS
+  - id: route
+    depends: check
+    action: router.route
+    with:
+      value: \${steps.check.outputs.STATUS}
+      max_loops: 5
+      routes:
+        success: [done]
+        failed: [fix]
+  - id: fix
+    action: agent
+    with:
+      prompt: fix it
+    next: rubocop
+  - id: done
+    run: echo done
+`,
+    "rubocop-loop",
+  );
+  const route = definition.steps.find((step) => step.id === "route")!;
+  equal(route.kind, "router");
+  equal(route.router?.maxLoops, 5);
+  equal(route.router?.loopBacks.join(","), "");
+  const fix = definition.steps.find((step) => step.id === "fix")!;
+  equal(fix.next.join(","), "rubocop");
+  equal(fix.routeGate?.routerId, "route");
+  const done = definition.steps.find((step) => step.id === "done")!;
+  equal(done.routeGate?.routerId, "route");
+
+  const withLoopBack = parseWorkflow(
+    `
+name: direct-loop
+steps:
+  - id: work
+    run: echo work
+  - id: check
+    depends: work
+    run: printf 'STATUS=failed\\n' >> "$DAGU_OUTPUT_FILE"
+    outputs:
+      - name: STATUS
+  - id: route
+    depends: check
+    action: router.route
+    with:
+      value: \${steps.check.outputs.STATUS}
+      routes:
+        success: [done]
+        failed: [work]
+  - id: done
+    run: echo done
+`,
+    "direct-loop",
+  );
+  const loopRoute = withLoopBack.steps.find((step) => step.id === "route")!;
+  equal(loopRoute.router?.loopBacks.join(","), "work");
+  equal(withLoopBack.steps.find((step) => step.id === "work")?.routeGate, undefined);
+});

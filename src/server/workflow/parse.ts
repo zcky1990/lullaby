@@ -57,6 +57,7 @@ const stepWithSchema = z
         z.union([z.string().max(60), z.array(z.string().max(60)).max(50)]),
       )
       .optional(),
+    max_loops: z.number().int().min(1).max(100).optional(),
   })
   .strict()
   .optional();
@@ -129,6 +130,7 @@ const stepSchema = z
     with: stepWithSchema,
     output: outputNameSchema.optional(),
     outputs: outputsSchema,
+    next: z.union([z.string().max(60), z.array(z.string().max(60)).max(20)]).optional(),
   })
   .strict()
   .superRefine((step, ctx) => {
@@ -249,6 +251,25 @@ function topoLayers(steps: WorkflowStep[]): string[][] {
   return layers;
 }
 
+/** True if `ancestorId` is reachable by walking `depends` backward from `fromId`. */
+function isDependsAncestor(
+  steps: WorkflowStep[],
+  ancestorId: string,
+  fromId: string,
+): boolean {
+  const byId = new Map(steps.map((step) => [step.id, step]));
+  const seen = new Set<string>();
+  const stack = [...(byId.get(fromId)?.depends ?? [])];
+  while (stack.length > 0) {
+    const id = stack.pop()!;
+    if (id === ancestorId) return true;
+    if (seen.has(id)) continue;
+    seen.add(id);
+    for (const dependency of byId.get(id)?.depends ?? []) stack.push(dependency);
+  }
+  return false;
+}
+
 function paramDefaults(params: WorkflowParam[]): Record<string, string> {
   const out: Record<string, string> = {};
   for (const param of params) {
@@ -330,11 +351,17 @@ export function parseWorkflow(yaml: string, fallbackName: string): WorkflowDefin
         }
         : undefined,
       router: kind === "router" && step.with?.value !== undefined && routes
-        ? { value: String(step.with.value), routes }
+        ? {
+          value: String(step.with.value),
+          routes,
+          loopBacks: [],
+          maxLoops: step.with?.max_loops ?? 10,
+        }
         : undefined,
       output: namedOutputs[0],
       outputs: namedOutputs,
       depends: [...new Set(dependsList(step.depends))],
+      next: [...new Set(dependsList(step.next).map((item) => slugName(item)))],
       env: {
         ...paramEnv,
         ...stringEnv(doc.env),
@@ -353,6 +380,7 @@ export function parseWorkflow(yaml: string, fallbackName: string): WorkflowDefin
 
   for (const step of steps) {
     if (step.kind !== "router" || !step.router) continue;
+    const loopBacks: string[] = [];
     for (const targets of Object.values(step.router.routes)) {
       for (const targetId of targets) {
         const cleanTarget = slugName(targetId);
@@ -362,10 +390,18 @@ export function parseWorkflow(yaml: string, fallbackName: string): WorkflowDefin
             `Router "${step.id}" merujuk step yang tidak ada: ${targetId}`,
           );
         }
+        if (cleanTarget === step.id) {
+          throw new WorkflowError(`Router "${step.id}" tidak boleh merujuk dirinya sendiri.`);
+        }
+        if (isDependsAncestor(steps, cleanTarget, step.id)) {
+          loopBacks.push(cleanTarget);
+          continue;
+        }
         if (!target.depends.includes(step.id)) target.depends.push(step.id);
         target.routeGate = { routerId: step.id };
       }
     }
+    step.router.loopBacks = [...new Set(loopBacks)];
   }
 
   for (const step of steps) {
@@ -377,6 +413,16 @@ export function parseWorkflow(yaml: string, fallbackName: string): WorkflowDefin
       }
       if (dependency === step.id) {
         throw new WorkflowError(`Step "${step.id}" tidak boleh bergantung pada dirinya sendiri.`);
+      }
+    }
+    for (const nextId of step.next) {
+      if (!ids.has(nextId)) {
+        throw new WorkflowError(
+          `Step "${step.id}" next merujuk step yang tidak ada: ${nextId}`,
+        );
+      }
+      if (nextId === step.id) {
+        throw new WorkflowError(`Step "${step.id}" next tidak boleh merujuk dirinya sendiri.`);
       }
     }
   }

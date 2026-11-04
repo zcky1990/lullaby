@@ -209,6 +209,8 @@ export interface WorkflowLlmWith {
 export interface WorkflowRouterWith {
   value: string;
   routes: Record<string, string[]>;
+  loopBacks: string[];
+  maxLoops: number;
 }
 
 export interface WorkflowParam {
@@ -233,6 +235,7 @@ export interface WorkflowDefinitionStep {
   retry: { limit: number; intervalSec: number };
   timeoutSec?: number;
   continueOn?: string;
+  next: string[];
   routeGate?: { routerId: string };
 }
 
