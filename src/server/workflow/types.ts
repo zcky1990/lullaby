@@ -41,20 +41,30 @@ export interface WorkflowRouterWith {
   maxLoops: number;
 }
 
+export interface WorkflowNotifyWith {
+  /** Channel id or name from Global Settings → Notifications. */
+  channel: string;
+  /** Message body (supports ${params.*} / ${steps.*} interpolation). */
+  message: string;
+}
+
+export type WorkflowParamType = "string" | "integer" | "number" | "boolean" | "agent";
+
 export interface WorkflowParam {
   name: string;
-  type?: "string" | "integer" | "number" | "boolean";
+  type?: WorkflowParamType;
   default?: string;
   description?: string;
 }
 
 export interface WorkflowStep {
   id: string;
-  kind: "shell" | "llm" | "agent" | "router";
+  kind: "shell" | "llm" | "agent" | "router" | "notify";
   run?: string;
   action?: string;
   with?: WorkflowLlmWith;
   router?: WorkflowRouterWith;
+  notify?: WorkflowNotifyWith;
   output?: string;
   outputs: string[];
   depends: string[];

@@ -78,6 +78,7 @@ Key-value global.
 | `auto_approve_writes` | `"true"` / `"false"` (chat Build skip Review) |
 | `chat_disabled_tools` | JSON tool name[] (deny-list chat tools) |
 | `auto_build_on_in_progress` | `"true"` / `"false"` |
+| `notifications` | JSON: `{ channels: [{ id, name, type, enabled, webhookUrl }] }` |
 | `terminal_shell` | `"zsh"` / `"bash"` |
 
 ## Workflow di disk (bukan tabel)

@@ -297,6 +297,39 @@ export const AutomationSettingsInput = z.object({
 });
 export type AutomationSettingsInput = z.infer<typeof AutomationSettingsInput>;
 
+export const NotificationChannelType = z.enum([
+  "slack",
+  "google_chat",
+  "discord",
+  "webhook",
+]);
+export type NotificationChannelType = z.infer<typeof NotificationChannelType>;
+
+export const NotificationChannelInput = z
+  .object({
+    id: z.string().trim().min(1).max(80).optional(),
+    name: z.string().trim().min(1).max(80),
+    type: NotificationChannelType,
+    enabled: z.boolean().default(true),
+    webhookUrl: z.string().trim().url().max(2000),
+  })
+  .strict();
+export type NotificationChannelInput = z.infer<typeof NotificationChannelInput>;
+
+export const NotificationSettingsInput = z
+  .object({
+    channels: z.array(NotificationChannelInput).max(20).default([]),
+  })
+  .strict();
+export type NotificationSettingsInput = z.infer<typeof NotificationSettingsInput>;
+
+export const NotificationTestInput = z
+  .object({
+    channelId: z.string().trim().min(1).max(80).optional(),
+  })
+  .strict();
+export type NotificationTestInput = z.infer<typeof NotificationTestInput>;
+
 export const ChatToolsSettingsInput = z.object({
   autoApproveWrites: z.boolean().default(false),
   disabledTools: z.array(z.string().trim().min(1).max(80)).max(50).default([]),

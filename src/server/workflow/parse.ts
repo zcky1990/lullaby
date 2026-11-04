@@ -58,6 +58,9 @@ const stepWithSchema = z
       )
       .optional(),
     max_loops: z.number().int().min(1).max(100).optional(),
+    channel: z.string().trim().min(1).max(120).optional(),
+    message: z.string().min(1).max(20_000).optional(),
+    text: z.string().min(1).max(20_000).optional(),
   })
   .strict()
   .optional();
@@ -110,7 +113,7 @@ const paramSchema = z
       .trim()
       .regex(/^[A-Za-z_][A-Za-z0-9_]*$/, "Nama param tidak valid.")
       .max(120),
-    type: z.enum(["string", "integer", "number", "boolean"]).optional(),
+    type: z.enum(["string", "integer", "number", "boolean", "agent"]).optional(),
     default: z.union([z.string(), z.number(), z.boolean()]).optional(),
     description: z.string().max(500).optional(),
   })
@@ -136,14 +139,15 @@ const stepSchema = z
   .superRefine((step, ctx) => {
     const isAi = step.action === "chat.completion" || step.action === "agent";
     const isRouter = step.action === "router.route";
-    if (!step.run && !isAi && !isRouter) {
+    const isNotify = step.action === "notification";
+    if (!step.run && !isAi && !isRouter && !isNotify) {
       ctx.addIssue({ code: "custom", message: "Step shell wajib punya `run`." });
     }
-    if (step.action && !isAi && !isRouter) {
+    if (step.action && !isAi && !isRouter && !isNotify) {
       ctx.addIssue({
         code: "custom",
         message:
-          `Action "${step.action}" belum didukung (hanya chat.completion / agent / router.route).`,
+          `Action "${step.action}" belum didukung (hanya chat.completion / agent / router.route / notification).`,
       });
     }
     if (isAi) {
@@ -166,6 +170,23 @@ const stepSchema = z
       }
       if (!step.with?.routes || Object.keys(step.with.routes).length === 0) {
         ctx.addIssue({ code: "custom", message: "Step router butuh `with.routes`." });
+      }
+    }
+    if (isNotify) {
+      if (step.run) {
+        ctx.addIssue({ code: "custom", message: "Step notification tidak boleh memakai `run`." });
+      }
+      if (!step.with?.channel?.trim()) {
+        ctx.addIssue({
+          code: "custom",
+          message: "Step notification butuh `with.channel` (nama/id channel global).",
+        });
+      }
+      if (!step.with?.message?.trim() && !step.with?.text?.trim() && !step.with?.prompt?.trim()) {
+        ctx.addIssue({
+          code: "custom",
+          message: "Step notification butuh `with.message` (atau `text` / `prompt`).",
+        });
       }
     }
   });
@@ -316,6 +337,8 @@ export function parseWorkflow(yaml: string, fallbackName: string): WorkflowDefin
       ? "llm"
       : step.action === "router.route"
       ? "router"
+      : step.action === "notification"
+      ? "notify"
       : "shell";
     const namedOutputs = [
       ...new Set([
@@ -328,6 +351,7 @@ export function parseWorkflow(yaml: string, fallbackName: string): WorkflowDefin
         Object.entries(step.with.routes).map(([key, value]) => [key, routeList(value)]),
       )
       : undefined;
+    const notifyMessage = step.with?.message ?? step.with?.text ?? step.with?.prompt;
     return {
       id,
       kind,
@@ -356,6 +380,12 @@ export function parseWorkflow(yaml: string, fallbackName: string): WorkflowDefin
           routes,
           loopBacks: [],
           maxLoops: step.with?.max_loops ?? 10,
+        }
+        : undefined,
+      notify: kind === "notify" && step.with?.channel && notifyMessage
+        ? {
+          channel: step.with.channel.trim(),
+          message: notifyMessage,
         }
         : undefined,
       output: namedOutputs[0],

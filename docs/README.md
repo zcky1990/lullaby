@@ -25,6 +25,7 @@ pengguna maupun developer.
 | [features/search.md](features/search.md)             | Quick Open (Cmd+P) dan pencarian teks workspace           |
 | [features/lsp.md](features/lsp.md)                   | Language Server Protocol di editor workspace              |
 | [features/workflows.md](features/workflows.md)       | Workflow YAML (DAG), runner, history, UI graph            |
+| [features/notifications.md](features/notifications.md) | Channel global + step `action: notification` |
 | [features/integrations.md](features/integrations.md) | Konfigurasi & test integrasi                              |
 | [features/settings.md](features/settings.md)         | Project Settings vs Global Settings                       |
 | [automation.md](automation.md)                       | Auto-build saat To Do → In Progress                       |

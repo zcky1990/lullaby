@@ -213,20 +213,28 @@ export interface WorkflowRouterWith {
   maxLoops: number;
 }
 
+export type WorkflowParamType = "string" | "integer" | "number" | "boolean" | "agent";
+
 export interface WorkflowParam {
   name: string;
-  type?: "string" | "integer" | "number" | "boolean";
+  type?: WorkflowParamType;
   default?: string;
   description?: string;
 }
 
+export interface WorkflowNotifyWith {
+  channel: string;
+  message: string;
+}
+
 export interface WorkflowDefinitionStep {
   id: string;
-  kind: "shell" | "llm" | "agent" | "router";
+  kind: "shell" | "llm" | "agent" | "router" | "notify";
   run?: string;
   action?: string;
   with?: WorkflowLlmWith;
   router?: WorkflowRouterWith;
+  notify?: WorkflowNotifyWith;
   output?: string;
   outputs: string[];
   depends: string[];
@@ -257,6 +265,20 @@ export interface WorkflowDefinition {
   };
   steps: WorkflowDefinitionStep[];
   layers: string[][];
+}
+
+export type NotificationChannelType = "slack" | "google_chat" | "discord" | "webhook";
+
+export interface NotificationChannel {
+  id: string;
+  name: string;
+  type: NotificationChannelType;
+  enabled: boolean;
+  webhookUrl: string;
+}
+
+export interface NotificationSettings {
+  channels: NotificationChannel[];
 }
 
 export interface PromptsSettings {
@@ -1012,6 +1034,24 @@ export const api = {
       "/api/settings/automation",
       jsonInit("PUT", payload),
     ),
+  getNotificationSettings: () =>
+    request<{ settings: NotificationSettings }>("/api/settings/notifications"),
+  saveNotificationSettings: (payload: NotificationSettings) =>
+    request<{ settings: NotificationSettings }>(
+      "/api/settings/notifications",
+      jsonInit("PUT", payload),
+    ),
+  testNotificationSettings: (payload: { channelId?: string } = {}) =>
+    request<{
+      ok: boolean;
+      results: Array<{
+        channelId: string;
+        channelName: string;
+        ok: boolean;
+        status?: number;
+        error?: string;
+      }>;
+    }>("/api/settings/notifications/test", jsonInit("POST", payload)),
   getTerminalSettings: () =>
     request<{ shell: TerminalShell }>("/api/settings/terminal"),
   saveTerminalSettings: (payload: { shell: TerminalShell }) =>

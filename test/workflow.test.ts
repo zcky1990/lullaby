@@ -1,4 +1,8 @@
 import { equal, throws } from "node:assert/strict";
+import {
+  collectAgentParamAttachments,
+  resolveWorkflowLlmSelection,
+} from "../src/server/workflow/params.ts";
 import { parseWorkflow, slugName, workflowTemplate } from "../src/server/workflow/parse.ts";
 
 Deno.test("parseWorkflow builds dependencies, defaults and parallel layers", () => {
@@ -341,4 +345,51 @@ steps:
   const loopRoute = withLoopBack.steps.find((step) => step.id === "route")!;
   equal(loopRoute.router?.loopBacks.join(","), "work");
   equal(withLoopBack.steps.find((step) => step.id === "work")?.routeGate, undefined);
+});
+
+Deno.test("parseWorkflow accepts agent param type and resolves provider/model companions", () => {
+  const definition = parseWorkflow(
+    `
+name: agent-param
+params:
+  - name: TASK
+    type: agent
+    description: Prompt + model
+steps:
+  - id: run
+    action: agent
+    with:
+      prompt: "\${params.TASK}"
+`,
+    "agent-param",
+  );
+  equal(definition.params[0]?.type, "agent");
+  const step = definition.steps[0]!;
+  const selection = resolveWorkflowLlmSelection(
+    definition,
+    step.with ?? {},
+    {
+      TASK: "do the thing",
+      TASK__provider: "prov-1",
+      TASK__model: "composer-2",
+      TASK__attachments: JSON.stringify([
+        { type: "image", name: "a.png", mime: "image/png", data: "data:image/png;base64,xx" },
+      ]),
+    },
+    (value) =>
+      value.replace(/\$\{params\.TASK\}/g, "do the thing"),
+  );
+  equal(selection.providerKey, "prov-1");
+  equal(selection.model, "composer-2");
+  const attachments = collectAgentParamAttachments(
+    definition,
+    step.with ?? {},
+    {
+      TASK__attachments: JSON.stringify([
+        { type: "image", name: "a.png", mime: "image/png", data: "data:image/png;base64,xx" },
+      ]),
+    },
+  );
+  equal(attachments.length, 1);
+  equal(attachments[0]?.name, "a.png");
 });

@@ -13,6 +13,7 @@ import {
   type WorkflowRunStepRow,
 } from "../../db/db.ts";
 import { json, readJson, record } from "../http.ts";
+import { isAllowedParamOverrideKey } from "../workflow/params.ts";
 import { parseWorkflow } from "../workflow/parse.ts";
 import { cancelWorkflowRun, startWorkflowRun } from "../workflow/runner.ts";
 import {
@@ -190,9 +191,8 @@ export async function runWorkflowHandler(
   try {
     const { yaml, path } = await readWorkflow(project, slug);
     const definition = parseWorkflow(yaml, slug);
-    const known = new Set(definition.params.map((param) => param.name));
     for (const key of Object.keys(paramOverrides)) {
-      if (!known.has(key)) {
+      if (!isAllowedParamOverrideKey(definition.params, key)) {
         return json({
           error: "invalid_params",
           message: `Param tidak dikenal: ${key}`,

@@ -172,6 +172,7 @@ import {
   getChatToolsSettingsHandler,
   getLspSettingsHandler,
   getMcpSettingsHandler,
+  getNotificationSettingsHandler,
   getPromptsHandler,
   getTerminalSettingsHandler,
   getUiPreferencesHandler,
@@ -181,11 +182,13 @@ import {
   saveChatToolsSettingsHandler,
   saveLspSettingsHandler,
   saveMcpSettingsHandler,
+  saveNotificationSettingsHandler,
   savePromptsHandler,
   saveSkillsSettingsHandler,
   saveTerminalSettingsHandler,
   saveUiPreferencesHandler,
   skillsHandler,
+  testNotificationSettingsHandler,
 } from "./routes/settings.ts";
 import { runAutoskills } from "./autoskills.ts";
 import { handleLsp, matchLspServer, readLspSettings, resolveExecutable } from "./lsp.ts";
@@ -1516,6 +1519,13 @@ export async function handleRequest(req: Request): Promise<Response> {
     if (pathname === "/api/settings/automation") {
       if (method === "GET") return await getAutomationSettingsHandler();
       if (method === "PUT" || method === "POST") return await saveAutomationSettingsHandler(req);
+    }
+    if (pathname === "/api/settings/notifications/test" && method === "POST") {
+      return await testNotificationSettingsHandler(req);
+    }
+    if (pathname === "/api/settings/notifications") {
+      if (method === "GET") return await getNotificationSettingsHandler();
+      if (method === "PUT" || method === "POST") return await saveNotificationSettingsHandler(req);
     }
     if (pathname === "/api/settings/terminal") {
       if (method === "GET") return await getTerminalSettingsHandler();

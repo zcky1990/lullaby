@@ -16,6 +16,12 @@ import { runHeadlessAgent } from "../chat/headless.ts";
 import { complete } from "../chat/llm.ts";
 import type { ChatTurn } from "../chat/types.ts";
 import { record } from "../http.ts";
+import { sendNotificationByChannelRef } from "../notifications/send.ts";
+import {
+  collectAgentParamAttachments,
+  isAllowedParamOverrideKey,
+  resolveWorkflowLlmSelection,
+} from "./params.ts";
 import { resolveWorkflowDir, type WorkflowProject } from "./store.ts";
 import type { WorkflowDefinition, WorkflowStep } from "./types.ts";
 
@@ -64,6 +70,8 @@ export async function startWorkflowRun(input: {
     const command = step.run ??
       (step.kind === "router"
         ? `[router] ${step.router?.value ?? "route"}`
+        : step.kind === "notify"
+        ? `[notify] ${step.notify?.channel ?? "channel"}`
         : step.kind === "agent"
         ? `[agent] ${prompt}`
         : `[llm] ${prompt || "chat.completion"}`);
@@ -162,9 +170,9 @@ function buildParams(
     if (param.default !== undefined) params[param.name] = param.default;
   }
   if (overrides) {
-    for (const param of definition.params) {
-      if (Object.prototype.hasOwnProperty.call(overrides, param.name)) {
-        params[param.name] = overrides[param.name];
+    for (const [key, value] of Object.entries(overrides)) {
+      if (isAllowedParamOverrideKey(definition.params, key)) {
+        params[key] = value;
       }
     }
   }
@@ -564,6 +572,20 @@ async function runStep(
       params,
     );
   }
+  if (step.kind === "notify") {
+    return await runNotifyStep(
+      runId,
+      project,
+      definition,
+      step,
+      logPrefix,
+      stepRowId,
+      outputs,
+      namedByStep,
+      params,
+      active.slug,
+    );
+  }
   return await runShellStep(
     runId,
     active,
@@ -576,6 +598,49 @@ async function runStep(
     namedByStep,
     params,
   );
+}
+
+async function runNotifyStep(
+  runId: string,
+  project: WorkflowProject,
+  definition: WorkflowDefinition,
+  step: WorkflowStep,
+  logPrefix: string,
+  stepRowId: string | undefined,
+  outputs: Map<string, string>,
+  namedByStep: Map<string, Record<string, string>>,
+  params: Record<string, string>,
+  slug: string,
+): Promise<StepResult> {
+  const writer = createLogWriter(runId, step.id, logPrefix, stepRowId);
+  try {
+    const config = step.notify;
+    if (!config) throw new Error("Konfigurasi notification tidak lengkap.");
+    const channel = interpolate(config.channel, outputs, definition.env, namedByStep, params);
+    const message = interpolate(config.message, outputs, definition.env, namedByStep, params);
+    writer.append(`[notify] channel=${channel}\n`);
+    const result = await sendNotificationByChannelRef(channel, {
+      text: message,
+      projectId: project.id,
+      projectName: project.name,
+      slug,
+      workflowName: definition.name,
+      runId,
+      stepId: step.id,
+    });
+    if (!result.ok) {
+      writer.append(`[notify error] ${result.error ?? "gagal mengirim"}\n`);
+      await writer.flush();
+      return { code: 1, log: writer.get(), output: message };
+    }
+    writer.append(`[notify] terkirim ke ${result.channelName}\n`);
+    await writer.flush();
+    return { code: 0, log: writer.get(), output: message };
+  } catch (error) {
+    writer.append(`[notify error] ${(error as Error).message}\n`);
+    await writer.flush();
+    return { code: -1, log: writer.get() };
+  }
 }
 
 async function runRouterStep(
@@ -792,7 +857,8 @@ async function runLlmStep(
       : undefined;
     if (roleKey && !role) throw new Error(`Role "${roleKey}" tidak ditemukan.`);
 
-    const providerKey = config.provider ?? definition.llm?.provider;
+    const selection = resolveWorkflowLlmSelection(definition, config, params, ix);
+    const providerKey = selection.providerKey;
     const matchProvider = (key: string) =>
       providers.find(
         (provider) => provider.id === key || provider.name.toLowerCase() === key.toLowerCase(),
@@ -807,9 +873,10 @@ async function runLlmStep(
     provider ??= providers[0];
     if (!provider) throw new Error("Belum ada provider LLM global.");
 
-    const model = config.model ?? definition.llm?.model;
+    const model = selection.model;
     const effective = model ? { ...provider, model } : provider;
     const system = config.system ?? definition.llm?.system ?? role?.persona?.trim() ?? "";
+    const attachments = collectAgentParamAttachments(definition, config, params);
     const turns: ChatTurn[] = [];
     const hasSystem = config.messages?.some((message) => message.role === "system") ?? false;
     if (system && !hasSystem) {
@@ -825,12 +892,14 @@ async function runLlmStep(
         turns.push({
           role: message.role,
           content: ix(message.content),
+          ...(message.role === "user" && attachments.length ? { attachments } : {}),
         });
       }
     } else {
       turns.push({
         role: "user",
         content: ix(config.prompt ?? ""),
+        ...(attachments.length ? { attachments } : {}),
       });
     }
 
@@ -895,7 +964,8 @@ async function runAgentStep(
       : undefined;
     if (roleKey && !role) throw new Error(`Role "${roleKey}" tidak ditemukan.`);
 
-    const providerKey = config.provider ?? definition.llm?.provider;
+    const selection = resolveWorkflowLlmSelection(definition, config, params, ix);
+    const providerKey = selection.providerKey;
     const matchProvider = (key: string) =>
       providers.find(
         (provider) => provider.id === key || provider.name.toLowerCase() === key.toLowerCase(),
@@ -910,8 +980,9 @@ async function runAgentStep(
     provider ??= providers[0];
     if (!provider) throw new Error("Belum ada provider LLM global.");
 
-    const model = config.model ?? definition.llm?.model;
+    const model = selection.model;
     const effective = model ? { ...provider, model } : provider;
+    const attachments = collectAgentParamAttachments(definition, config, params);
 
     const turns: ChatTurn[] = [];
     for (const message of history) {
@@ -925,12 +996,14 @@ async function runAgentStep(
         turns.push({
           role: message.role,
           content: ix(message.content),
+          ...(message.role === "user" && attachments.length ? { attachments } : {}),
         });
       }
     } else {
       turns.push({
         role: "user",
         content: ix(config.prompt ?? ""),
+        ...(attachments.length ? { attachments } : {}),
       });
     }
 

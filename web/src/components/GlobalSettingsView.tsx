@@ -27,6 +27,7 @@ import { ChatToolsSettings } from "@/components/ChatToolsSettings";
 import { LlmProvidersSettings } from "@/components/LlmProvidersSettings";
 import { LspSettingsPanel } from "@/components/LspSettings";
 import { McpSettings } from "@/components/McpSettings";
+import { NotificationSettings } from "@/components/NotificationSettings";
 import { PromptsSettings } from "@/components/PromptsSettings";
 import { RolesSettings } from "@/components/RolesSettings";
 import { SkillsSettings } from "@/components/SkillsSettings";
@@ -164,6 +165,7 @@ export function GlobalSettingsView({
   if (section === "tools") return <ChatToolsSettings />;
   if (section === "lsp") return <LspSettingsPanel />;
   if (section === "automation") return <AutomationSettings />;
+  if (section === "notifications") return <NotificationSettings />;
   if (section === "terminal") return <TerminalSettings />;
   return <About />;
 }

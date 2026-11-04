@@ -124,6 +124,12 @@ finishing a change.
 - **Automation**: global `auto_build_on_in_progress` in `app_settings` (GET/PUT
   `/api/settings/automation`). UI: Global Settings → Automation. When on, Kanban To Do → In Progress
   opens Chat Build with a ticket prompt (`docs/automation.md`).
+- **Notifications**: global channel registry in `app_settings.notifications` (`{ channels }` —
+  Slack / Google Chat / Discord / webhook URL). GET/PUT `/api/settings/notifications`, test via
+  `POST .../notifications/test`. Workflows send via step `action: notification` with
+  `with.channel` + `with.message` (`src/server/workflow/runner.ts` →
+  `src/server/notifications/send.ts`). UI: Global Settings → Notifications
+  (`docs/features/notifications.md`).
 - **List/menus**: `ActivityBar` (left rail) opens tabs in the main area (`TabsBar`).
   Workspace/Explorer/Document/Project Settings/Ticket keep a **separate** side panel in `<aside>`
   (`WorkspacePanel`, `FileTreePanel`, `DocumentPanel`, `SettingsPanel`, `TicketPanel`);

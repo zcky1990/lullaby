@@ -35,6 +35,7 @@ import { WorkflowParamsDialog } from "@/components/WorkflowParamsDialog";
 import { WorkflowRouterNode } from "@/components/WorkflowRouterNode";
 import {
   api,
+  type LlmProvider,
   type WorkflowDefinition,
   type WorkflowDefinitionStep,
   type WorkflowRunStep,
@@ -60,6 +61,9 @@ function stepCommand(step: WorkflowDefinitionStep): string {
   if (step.kind === "router") {
     return `[router] ${step.router?.value ?? step.action ?? "route"}`;
   }
+  if (step.kind === "notify") {
+    return `[notify] ${step.notify?.channel ?? step.action ?? "channel"}`;
+  }
   const prompt = step.with?.prompt ?? step.with?.messages?.[0]?.content ??
     (step.kind === "agent" ? "agent" : "chat.completion");
   return step.kind === "agent" ? `[agent] ${prompt}` : `[llm] ${prompt}`;
@@ -77,11 +81,18 @@ const STATUS_BORDER: Record<string, string> = {
 interface Props {
   projectId: string | null;
   slug: string | null;
+  providers?: LlmProvider[];
   onSaved: () => void;
   onDeleted: () => void;
 }
 
-export function WorkflowTab({ projectId, slug, onSaved, onDeleted }: Props) {
+export function WorkflowTab({
+  projectId,
+  slug,
+  providers = [],
+  onSaved,
+  onDeleted,
+}: Props) {
   const { resolvedEditorTheme } = useTheme();
   const [yaml, setYaml] = useState("");
   const [definition, setDefinition] = useState<WorkflowDefinition | null>(null);
@@ -418,6 +429,7 @@ export function WorkflowTab({ projectId, slug, onSaved, onDeleted }: Props) {
       <WorkflowParamsDialog
         open={paramsOpen}
         params={definition?.params ?? []}
+        providers={providers}
         running={running}
         onOpenChange={setParamsOpen}
         onConfirm={(values) => void startRun(values)}

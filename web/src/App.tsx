@@ -1112,6 +1112,7 @@ export default function App() {
             <WorkflowTabComponent
               projectId={currentId}
               slug={tab.ref ?? null}
+              providers={llmProviders}
               onSaved={() => currentId && loadWorkflows(currentId)}
               onDeleted={() => {
                 closeTab(tab.id);

@@ -43,9 +43,17 @@ Field yang didukung: `name`, `description`, `type`, `params`, `env`, `working_di
 step: `id`, `run`, `action`, `with`, `output` / `outputs`, `depends`, `env` (map atau list map),
 `working_dir`, `retry_policy`, `timeout_sec`, `continue_on`. Field lain ditolak.
 
+Step `action: notification` mengirim pesan ke channel yang didaftarkan di Global Settings →
+Notifications — lihat [notifications.md](notifications.md).
+
 Subset Dagu tambahan:
 - `params` → default masuk env / `${params.NAME}`; saat **Run**, UI menampilkan dialog isi param
-  (dikirim sebagai body `POST .../run` `{ params }`)
+  (dikirim sebagai body `POST .../run` `{ params }`). Tipe: `string` | `integer` | `number` |
+  `boolean` | `agent`. Param `type: agent` membuka composer seperti chat (teks + lampiran file +
+  pilih provider/model); nilai prompt masuk `${params.NAME}`, plus companion
+  `${params.NAME__provider}` / `${params.NAME__model}` (dan lampiran gambar via payload internal).
+  Step `agent` / `chat.completion` yang tidak set `with.provider`/`with.model` memakai companion
+  itu otomatis jika param agent direferensikan di prompt (atau hanya ada satu param agent).
 - `outputs: [{ name }]` + `DAGU_OUTPUT_FILE` (key=value) → `${steps.<id>.outputs.<name>}`
 - `action: router.route` dengan `with.value` + `with.routes` (if/else; di graph berbentuk
   belah ketupat). Target maju mendapat `routeGate`; target yang kembali ke step sebelumnya
@@ -113,6 +121,24 @@ steps:
   - id: done
     depends: implement
     run: echo "${RESULT}"
+```
+
+Prompt + model dari dialog Run (param `agent`):
+
+```yaml
+name: agent-from-params
+params:
+  - name: TASK
+    type: agent
+    description: Prompt, lampiran, dan model untuk agent
+steps:
+  - id: run
+    action: agent
+    with:
+      mode: build
+      prompt: "${params.TASK}"
+      # provider/model opsional — diisi otomatis dari pilihan di dialog
+    output: RESULT
 ```
 
 - `with`: sama seperti completion (`prompt`/`messages`, `system`, `provider`, `role`, `session`,
