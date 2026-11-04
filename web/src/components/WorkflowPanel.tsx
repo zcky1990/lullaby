@@ -56,7 +56,6 @@ export function WorkflowPanel({
             title="Dokumentasi workflow"
           >
             <BookOpen />
-            Wiki
           </Button>
           <Button
             size="icon"

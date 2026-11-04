@@ -420,8 +420,7 @@ export function WorkflowTab({ projectId, slug, onSaved, onDeleted }: Props) {
                 onClick={cancelRun}
                 data-icon="inline-start"
               >
-                <Square />
-                Cancel
+                <Square color="red"/>
               </Button>
             )
             : null}
@@ -434,7 +433,6 @@ export function WorkflowTab({ projectId, slug, onSaved, onDeleted }: Props) {
             data-icon="inline-start"
           >
             {running ? <Spinner /> : <Play />}
-            Run
           </Button>
           <Button
             size="sm"
@@ -445,7 +443,6 @@ export function WorkflowTab({ projectId, slug, onSaved, onDeleted }: Props) {
             data-icon="inline-start"
           >
             {saving ? <Spinner /> : <Save />}
-            Save
           </Button>
           <Button
             size="sm"
