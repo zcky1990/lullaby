@@ -6,8 +6,10 @@ export interface McpTool {
   inputSchema?: unknown;
 }
 
-const TIMEOUT_MS = 15_000;
+const LIST_TIMEOUT_MS = 15_000;
+const CALL_TIMEOUT_MS = 60_000;
 const MAX_TOOLS = 200;
+const MAX_RESULT_CHARS = 60_000;
 
 const CLIENT_INFO = { name: "Lullaby", version: "0.1.0" };
 const PROTOCOL_VERSION = "2024-11-05";
@@ -46,7 +48,37 @@ function assertResult(response: JsonRpcResponse, method: string): unknown {
   return response.result;
 }
 
-async function listStdioTools(server: McpServerInput): Promise<McpTool[]> {
+export function formatMcpToolResult(result: unknown): string {
+  if (result == null) return "(empty)";
+  if (typeof result === "string") return result.slice(0, MAX_RESULT_CHARS);
+  if (typeof result !== "object") return String(result).slice(0, MAX_RESULT_CHARS);
+  const record = result as Record<string, unknown>;
+  if (Array.isArray(record.content)) {
+    const parts: string[] = [];
+    for (const item of record.content) {
+      if (!item || typeof item !== "object") continue;
+      const block = item as Record<string, unknown>;
+      if (block.type === "text" && typeof block.text === "string") {
+        parts.push(block.text);
+      } else if (typeof block.text === "string") {
+        parts.push(block.text);
+      } else {
+        parts.push(JSON.stringify(block));
+      }
+    }
+    const text = parts.join("\n").trim();
+    const prefix = record.isError === true ? "[MCP error]\n" : "";
+    return `${prefix}${text || JSON.stringify(result)}`.slice(0, MAX_RESULT_CHARS);
+  }
+  return JSON.stringify(result).slice(0, MAX_RESULT_CHARS);
+}
+
+type RpcFn = (method: string, params: unknown, timeoutMs?: number) => Promise<unknown>;
+
+async function withStdioSession<T>(
+  server: McpServerInput,
+  fn: (rpc: RpcFn) => Promise<T>,
+): Promise<T> {
   if (!server.command) throw new Error("Command MCP belum diisi.");
   const command = new Deno.Command(server.command, {
     args: server.args ?? [],
@@ -92,16 +124,20 @@ async function listStdioTools(server: McpServerInput): Promise<McpTool[]> {
   })();
 
   let nextId = 1;
-  const request = (method: string, params: unknown): Promise<JsonRpcResponse> => {
+  const rpc: RpcFn = (method, params, timeoutMs = LIST_TIMEOUT_MS) => {
     const id = nextId++;
-    return new Promise<JsonRpcResponse>((resolve, reject) => {
+    return new Promise<unknown>((resolve, reject) => {
       const timer = setTimeout(() => {
         pending.delete(id);
-        reject(new Error(`${method}: timeout ${TIMEOUT_MS}ms`));
-      }, TIMEOUT_MS);
+        reject(new Error(`${method}: timeout ${timeoutMs}ms`));
+      }, timeoutMs);
       pending.set(id, (message) => {
         clearTimeout(timer);
-        resolve(message);
+        try {
+          resolve(assertResult(message, method));
+        } catch (error) {
+          reject(error);
+        }
       });
       const payload = JSON.stringify({ jsonrpc: "2.0", id, method, params }) + "\n";
       writer.write(encoder.encode(payload)).catch((error) => {
@@ -113,20 +149,17 @@ async function listStdioTools(server: McpServerInput): Promise<McpTool[]> {
   };
 
   try {
-    const init = await request("initialize", {
+    await rpc("initialize", {
       protocolVersion: PROTOCOL_VERSION,
       capabilities: {},
       clientInfo: CLIENT_INFO,
     });
-    assertResult(init, "initialize");
     await writer.write(
       encoder.encode(
         JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized" }) + "\n",
       ),
     );
-    const listed = await request("tools/list", {});
-    const result = assertResult(listed, "tools/list") as { tools?: unknown };
-    return normalizeTools(result);
+    return await fn(rpc);
   } finally {
     await writer.close().catch(() => {});
     await reader.cancel().catch(() => {});
@@ -162,11 +195,14 @@ async function readRpcResponse(res: Response): Promise<JsonRpcResponse> {
   }
 }
 
-async function listHttpTools(server: McpServerInput): Promise<McpTool[]> {
+async function withHttpSession<T>(
+  server: McpServerInput,
+  fn: (rpc: RpcFn) => Promise<T>,
+): Promise<T> {
   if (!server.url) throw new Error("URL MCP belum diisi.");
   let sessionId = "";
 
-  const send = async (payload: unknown): Promise<JsonRpcResponse> => {
+  const send = async (payload: unknown, timeoutMs: number): Promise<JsonRpcResponse> => {
     const headers: Record<string, string> = {
       "content-type": "application/json",
       accept: "application/json, text/event-stream",
@@ -177,7 +213,7 @@ async function listHttpTools(server: McpServerInput): Promise<McpTool[]> {
       method: "POST",
       headers,
       body: JSON.stringify(payload),
-      signal: AbortSignal.timeout(TIMEOUT_MS),
+      signal: AbortSignal.timeout(timeoutMs),
     });
     const nextSession = res.headers.get("mcp-session-id");
     if (nextSession) sessionId = nextSession;
@@ -185,23 +221,72 @@ async function listHttpTools(server: McpServerInput): Promise<McpTool[]> {
     return await readRpcResponse(res);
   };
 
-  const init = await send({
-    jsonrpc: "2.0",
-    id: 1,
-    method: "initialize",
-    params: {
-      protocolVersion: PROTOCOL_VERSION,
-      capabilities: {},
-      clientInfo: CLIENT_INFO,
-    },
+  let nextId = 1;
+  const rpc: RpcFn = async (method, params, timeoutMs = LIST_TIMEOUT_MS) => {
+    const id = nextId++;
+    const response = await send({ jsonrpc: "2.0", id, method, params }, timeoutMs);
+    return assertResult(response, method);
+  };
+
+  await rpc("initialize", {
+    protocolVersion: PROTOCOL_VERSION,
+    capabilities: {},
+    clientInfo: CLIENT_INFO,
   });
-  assertResult(init, "initialize");
-  await send({ jsonrpc: "2.0", method: "notifications/initialized" }).catch(() => {});
-  const listed = await send({ jsonrpc: "2.0", id: 2, method: "tools/list", params: {} });
-  const result = assertResult(listed, "tools/list") as { tools?: unknown };
-  return normalizeTools(result);
+  await send({ jsonrpc: "2.0", method: "notifications/initialized" }, LIST_TIMEOUT_MS).catch(
+    () => {},
+  );
+  return await fn(rpc);
 }
 
-export function listMcpTools(server: McpServerInput): Promise<McpTool[]> {
-  return server.transport === "http" ? listHttpTools(server) : listStdioTools(server);
+function withMcpSession<T>(
+  server: McpServerInput,
+  fn: (rpc: RpcFn) => Promise<T>,
+): Promise<T> {
+  return server.transport === "http" ? withHttpSession(server, fn) : withStdioSession(server, fn);
+}
+
+const toolsCache = new Map<string, { at: number; tools: McpTool[] }>();
+const TOOLS_CACHE_MS = 60_000;
+
+function toolsCacheKey(server: McpServerInput): string {
+  return JSON.stringify({
+    id: server.id ?? "",
+    transport: server.transport,
+    command: server.command ?? "",
+    args: server.args ?? [],
+    url: server.url ?? "",
+    env: server.env ?? {},
+    headers: server.headers ?? {},
+  });
+}
+
+export async function listMcpTools(server: McpServerInput): Promise<McpTool[]> {
+  const key = toolsCacheKey(server);
+  const cached = toolsCache.get(key);
+  if (cached && Date.now() - cached.at < TOOLS_CACHE_MS) return cached.tools;
+
+  const tools = await withMcpSession(server, async (rpc) => {
+    const result = await rpc("tools/list", {});
+    return normalizeTools(result);
+  });
+  toolsCache.set(key, { at: Date.now(), tools });
+  return tools;
+}
+
+export async function callMcpTool(
+  server: McpServerInput,
+  name: string,
+  args: Record<string, unknown>,
+): Promise<string> {
+  if (!name.trim()) throw new Error("Nama tool MCP kosong.");
+  const result = await withMcpSession(server, async (rpc) => {
+    return await rpc("tools/call", { name, arguments: args }, CALL_TIMEOUT_MS);
+  });
+  return formatMcpToolResult(result);
+}
+
+/** Test helper: clear list cache. */
+export function clearMcpToolsCache(): void {
+  toolsCache.clear();
 }

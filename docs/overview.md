@@ -51,9 +51,9 @@ webview (React)  ──HTTP──►  Deno main process
 | Docmost | List, buka, buat, update | — |
 | Notion / Confluence | Browse + baca halaman | Create/update remote |
 | Tiket | Lokal CRUD, sync ke Jira, Kanban | Provider non-Jira (ClickUp, Linear) |
-| Chat | Plan/Build, tools file + tiket lokal, Review | Eksekusi tool MCP dari chat |
+| Chat | Plan/Build, tools file + tiket lokal, Review, MCP tools | — |
 | Automation | Auto Build To Do → In Progress | Auto-accept Review, auto Done |
-| MCP | Simpan config + list tools | Tool execution di agent |
+| MCP | Config, list tools, eksekusi dari chat (`mcp_*`) | — |
 
 ## Audiens dokumen
 

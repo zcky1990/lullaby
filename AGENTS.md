@@ -101,9 +101,10 @@ finishing a change.
   and a role selector in the chat composer (model select locks when the role has a provider).
 - **LLM providers are global**: `llm_providers` has no `project_id` (existing per-project rows are
   migrated into the global table at startup). Provider type `cursor` uses `@cursor/sdk`
-  (`src/server/chat/cursor.ts`): the agent edits a temporary workspace copy with
-  read/grep/glob/ls/edit/task (shell/delete disabled), then changed files become synthetic
-  `write_file` calls so they still go through Review. API key lives in `llm_providers.api_key`;
+  (`src/server/chat/cursor.ts`): local agents run in `projects.workspace_path` (same cwd as the
+  Cursor IDE) with read/grep/glob/ls/edit/task (shell/delete disabled); a pre-run file snapshot is
+  diffed then reverted so changes become synthetic `write_file` Review hunks. Cloud agents (`bc-…`)
+  are imported/resumed for chat history (no local Review). API key lives in `llm_providers.api_key`;
   model e.g. `composer-2`. Project Settings no longer manages them; Global Settings → LLM Providers
   does, via `GET/POST /api/llm` and `PUT/DELETE /api/llm/:id`. Chat and
   `generateTicketsFromDocument` resolve providers from the global list.
@@ -119,8 +120,9 @@ finishing a change.
 - **MCP**: global server config (`McpSettings`) is stored in `app_settings` (`mcp_servers` JSON;
   stdio command/args/env or http url/headers) plus `mcp_enabled` and `mcp_disabled_tools`.
   `POST /api/settings/mcp/tools` connects with `initialize` + `tools/list` (`src/server/mcp.ts`,
-  stdio or http) so each server's tools can be discovered and enabled/disabled. Tool execution from
-  chat is not wired yet.
+  stdio or http) so each server's tools can be discovered and enabled/disabled. Enabled tools are
+  injected into chat/workflow agent as `mcp_<server>_<tool>` (`src/server/chat/mcp-tools.ts`) and
+  executed via `tools/call` (Cursor SDK provider uses its own tools instead).
 - **Automation**: global `auto_build_on_in_progress` in `app_settings` (GET/PUT
   `/api/settings/automation`). UI: Global Settings → Automation. When on, Kanban To Do → In Progress
   opens Chat Build with a ticket prompt (`docs/automation.md`).

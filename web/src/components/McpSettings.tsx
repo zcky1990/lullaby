@@ -292,8 +292,9 @@ export function McpSettings() {
       <div className="flex flex-col gap-2">
         <h2 className="text-xs font-medium tracking-wider text-muted-foreground uppercase">MCP</h2>
         <p className="text-xs text-muted-foreground">
-          Konfigurasi server MCP global (Model Context Protocol). Server disimpan lokal di app dan
-          dipakai oleh agent saat integrasi MCP diaktifkan.
+          Server MCP global (Model Context Protocol). Tool yang aktif di-inject ke chat Plan/Build
+          dan workflow agent sebagai <span className="font-mono">mcp_&lt;server&gt;_&lt;tool&gt;</span>
+          (kecuali provider Cursor SDK). Nonaktifkan per-tool di bawah setelah Refresh tools.
         </p>
         <Separator />
       </div>

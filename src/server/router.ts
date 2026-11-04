@@ -70,6 +70,7 @@ import {
 } from "../db/db.ts";
 import {
   hydrateCursorConversation,
+  listCloudCursorAgents,
   listLocalCursorAgents,
 } from "./chat/cursor.ts";
 import {
@@ -515,19 +516,41 @@ async function findCursorLlmProvider() {
   ) ?? null;
 }
 
-async function importCursorAgentsIntoSessions(projectId: string, workspacePath: string): Promise<void> {
-  try {
-    const agents = await listLocalCursorAgents(workspacePath, 40);
-    for (const agent of agents) {
-      await upsertImportedCursorSession({
-        projectId,
-        cursorAgentId: agent.agentId,
-        title: agent.name || agent.summary || agent.agentId,
-        updatedAtMs: agent.lastModified,
-      });
+async function importCursorAgentsIntoSessions(
+  projectId: string,
+  workspacePath: string | null,
+  apiKey: string,
+): Promise<void> {
+  const imported: Array<{
+    agentId: string;
+    name: string;
+    summary: string;
+    lastModified: number;
+    runtime: "local" | "cloud";
+  }> = [];
+  if (workspacePath?.trim()) {
+    try {
+      imported.push(...await listLocalCursorAgents(workspacePath.trim(), 40));
+    } catch (error) {
+      log.debug("cursor local agent import failed", { error: String(error), projectId });
     }
+  }
+  try {
+    imported.push(...await listCloudCursorAgents(apiKey, 40));
   } catch (error) {
-    log.debug("cursor agent import failed", { error: String(error), projectId });
+    log.debug("cursor cloud agent import failed", { error: String(error), projectId });
+  }
+  for (const agent of imported) {
+    const base = agent.name || agent.summary || agent.agentId;
+    const title = agent.runtime === "cloud" && !base.toLowerCase().includes("cloud")
+      ? `Cloud · ${base}`
+      : base;
+    await upsertImportedCursorSession({
+      projectId,
+      cursorAgentId: agent.agentId,
+      title,
+      updatedAtMs: agent.lastModified,
+    });
   }
 }
 
@@ -535,8 +558,12 @@ async function listChatSessionsHandler(projectId: string): Promise<Response> {
   const project = await getProject(projectId);
   if (!project) return json({ error: "project_not_found" }, 404);
   const cursorProvider = await findCursorLlmProvider();
-  if (cursorProvider && project.workspace_path?.trim()) {
-    await importCursorAgentsIntoSessions(projectId, project.workspace_path.trim());
+  if (cursorProvider?.api_key?.trim()) {
+    await importCursorAgentsIntoSessions(
+      projectId,
+      project.workspace_path,
+      cursorProvider.api_key.trim(),
+    );
   }
   const sessions = (await listChatSessions(projectId)).map((session) => ({
     id: session.id,
@@ -559,11 +586,12 @@ async function getChatSessionHandler(projectId: string, sessionId: string): Prom
   );
   if (session.cursor_agent_id && visible.length === 0) {
     const project = await getProject(projectId);
+    const cursorProvider = await findCursorLlmProvider();
     try {
-      const conversation = await hydrateCursorConversation(
-        session.cursor_agent_id,
-        project?.workspace_path ?? null,
-      );
+      const conversation = await hydrateCursorConversation(session.cursor_agent_id, {
+        cwd: project?.workspace_path ?? null,
+        apiKey: cursorProvider?.api_key ?? null,
+      });
       for (const message of conversation) {
         await appendChatMessage(session.id, message.role, message.content, []);
       }

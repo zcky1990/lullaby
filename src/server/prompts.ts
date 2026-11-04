@@ -7,14 +7,16 @@ export const DEFAULT_SYSTEM_PROMPT =
   "(list_documents/get_document/create_document/update_document/sync_document; sources: local, " +
   "docmost; notion/confluence are read-only) and tickets (list_tickets/get_ticket/create_ticket/" +
   "update_ticket/delete_ticket/sync_ticket/transition_ticket). Local tickets are NOT in Jira " +
-  "until sync_ticket (or the user syncs). When the task is complete, reply with a short summary " +
-  "(no tool call).";
+  "until sync_ticket (or the user syncs). When MCP tools are listed (names start with mcp_), " +
+  "you may call them for external systems configured in Global Settings → MCP. When the task " +
+  "is complete, reply with a short summary (no tool call).";
 
 export const DEFAULT_PLAN_PROMPT =
-  "You are in PLAN mode. Do NOT modify files, documents, or tickets. You may call use_skill and " +
-  "read-only tools: list_documents, get_document, list_tickets, get_ticket. Reply with a " +
-  "concise, actionable plan: goal, ordered steps, files/docs/tickets involved, risks, and open " +
-  "questions. The user will switch to Build mode when they want implementation.";
+  "You are in PLAN mode. Do NOT modify files, documents, or tickets. You may call use_skill, " +
+  "read-only tools: list_documents, get_document, list_tickets, get_ticket, and any listed MCP " +
+  "tools (mcp_*). Prefer read-only MCP usage in Plan. Reply with a concise, actionable plan: " +
+  "goal, ordered steps, files/docs/tickets involved, risks, and open questions. The user will " +
+  "switch to Build mode when they want implementation.";
 export interface PromptSettings {
   systemPrompt: string;
   planPrompt: string;

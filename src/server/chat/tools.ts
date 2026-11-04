@@ -15,6 +15,7 @@ import {
   updateDocumentTool,
 } from "./document-tools.ts";
 import { safeParse } from "./llm.ts";
+import { executeMcpChatTool, isMcpChatTool } from "./mcp-tools.ts";
 import {
   deleteTicketTool,
   getTicketTool,
@@ -24,6 +25,8 @@ import {
   updateTicketTool,
 } from "./ticket-tools.ts";
 import type { ChatAttachment, Run, ToolCall, ToolDef } from "./types.ts";
+
+export { isMcpChatTool };
 
 export interface ChatToolCatalogEntry {
   name: string;
@@ -373,6 +376,11 @@ export async function applyWriteFile(workspace: string, call: ToolCall): Promise
 
 export async function executeTool(run: Run, call: ToolCall): Promise<string> {
   const args = safeParse(call.arguments);
+  if (isMcpChatTool(call.name)) {
+    const binding = run.mcpTools.get(call.name);
+    if (!binding) return `Unknown MCP tool: ${call.name}`;
+    return await executeMcpChatTool(binding, args);
+  }
   if (call.name === "use_skill") {
     const name = String(args.name ?? "").trim().toLowerCase();
     const skill = run.skills.get(name);

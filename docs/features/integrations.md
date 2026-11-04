@@ -26,5 +26,6 @@ Test koneksi: `POST /api/integrations/test` → `src/integrations/index.ts`.
 
 ## Catatan
 
-- Mode integrasi `mcp` ada di schema; eksekusi MCP dari chat **belum** di-wire
+- MCP global (Global Settings → MCP): tool di-inject ke chat sebagai `mcp_<server>_<tool>`
+  (lihat [chat-agent.md](chat-agent.md))
 - Path workspace Git/Terminal bukan integrasi DB — memakai folder project

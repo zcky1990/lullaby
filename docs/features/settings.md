@@ -19,7 +19,7 @@ Section nav di aside (`GlobalSettingsPanel`):
 | Appearance & Editor | Tema, font aplikasi/chat, ukuran font chat, icon, Monaco theme                   |
 | LLM Providers       | CRUD provider global                                                             |
 | Roles               | Persona + optional provider                                                      |
-| MCP                 | Server stdio/http, enable, disable tools (list saja)                             |
+| MCP                 | Server stdio/http, enable/disable tools; tools aktif masuk chat sebagai `mcp_*`  |
 | Skills              | Enable global + toggle per skill                                                 |
 | Tools               | Auto-approve writes + enable/disable chat tools — [chat-agent.md](chat-agent.md) |
 | Automation          | Auto-build To Do → In Progress — [automation.md](../automation.md)               |

@@ -30,6 +30,10 @@ export interface CursorCompleteResult {
   conversation?: CursorConversationMessage[];
 }
 
+export function isCloudCursorAgentId(agentId: string | null | undefined): boolean {
+  return !!agentId?.trim().toLowerCase().startsWith("bc-");
+}
+
 function textAttachments(turn: ChatTurn): string {
   if (!turn.attachments?.length) return "";
   return turn.attachments
@@ -82,49 +86,71 @@ function sameBytes(a: Uint8Array, b: Uint8Array): boolean {
   return true;
 }
 
-async function copyWorkspace(workspace: string): Promise<string> {
-  const temp = await Deno.makeTempDir({ prefix: "rnd-cursor-" });
-  const index = await listWorkspaceFiles(workspace, MAX_FILES);
-  for (const rel of index.files) {
-    const source = resolveWithin(workspace, rel);
-    if (!source) continue;
-    const target = join(temp, rel);
-    try {
-      await Deno.mkdir(dirname(target), { recursive: true });
-      await Deno.copyFile(source, target);
-    } catch {
-      // skip unreadable files
-    }
-  }
-  return temp;
+function skipCursorMeta(rel: string): boolean {
+  return rel === ".cursor" || rel.startsWith(".cursor/");
 }
 
-export async function collectCursorWrites(
-  temp: string,
+export async function snapshotWorkspaceFiles(
   workspace: string,
+): Promise<Map<string, Uint8Array>> {
+  const index = await listWorkspaceFiles(workspace, MAX_FILES);
+  const out = new Map<string, Uint8Array>();
+  for (const rel of index.files) {
+    if (skipCursorMeta(rel)) continue;
+    const path = resolveWithin(workspace, rel);
+    if (!path) continue;
+    try {
+      out.set(rel, await Deno.readFile(path));
+    } catch {
+      // skip unreadable
+    }
+  }
+  return out;
+}
+
+async function loadBeforeBytes(
+  before: string | ReadonlyMap<string, Uint8Array>,
+  rel: string,
+): Promise<Uint8Array | null> {
+  if (typeof before !== "string") return before.get(rel) ?? null;
+  const source = resolveWithin(before, rel);
+  if (!source) return null;
+  try {
+    return await Deno.readFile(source);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Diff `afterRoot` against a workspace path or an in-memory snapshot.
+ * Used for temp-copy (legacy) and real-cwd snapshot flows.
+ */
+export async function collectCursorWrites(
+  afterRoot: string,
+  before: string | ReadonlyMap<string, Uint8Array>,
 ): Promise<{ writes: Array<{ path: string; content: string }>; notes: string[] }> {
-  const index = await listWorkspaceFiles(temp, MAX_FILES);
+  const index = await listWorkspaceFiles(afterRoot, MAX_FILES);
   const writes: Array<{ path: string; content: string }> = [];
   const notes: string[] = [];
   const decoder = new TextDecoder();
   let skipped = 0;
 
   for (const rel of index.files) {
-    if (rel === ".cursor" || rel.startsWith(".cursor/")) continue;
+    if (skipCursorMeta(rel)) continue;
     if (writes.length >= MAX_WRITES) {
       notes.push(`Perubahan dibatasi ${MAX_WRITES} file; sisanya tidak diajukan.`);
       break;
     }
-    const target = join(temp, rel);
+    const target = join(afterRoot, rel);
     let bytes: Uint8Array;
     try {
       bytes = await Deno.readFile(target);
     } catch {
       continue;
     }
-    const source = resolveWithin(workspace, rel);
-    const before = source ? await Deno.readFile(source).catch(() => null) : null;
-    if (before && sameBytes(before, bytes)) continue;
+    const previous = await loadBeforeBytes(before, rel);
+    if (previous && sameBytes(previous, bytes)) continue;
     if (bytes.byteLength > MAX_WRITE_BYTES || bytes.includes(0)) {
       skipped += 1;
       continue;
@@ -136,6 +162,57 @@ export async function collectCursorWrites(
     notes.push(`${skipped} file biner/terlalu besar tidak diajukan untuk review.`);
   }
   return { writes, notes };
+}
+
+/** Restore workspace to pre-agent snapshot after collecting Review proposals. */
+export async function revertWorkspaceToSnapshot(
+  workspace: string,
+  before: ReadonlyMap<string, Uint8Array>,
+): Promise<void> {
+  const index = await listWorkspaceFiles(workspace, MAX_FILES);
+  for (const rel of index.files) {
+    if (skipCursorMeta(rel)) continue;
+    const path = resolveWithin(workspace, rel);
+    if (!path) continue;
+    const previous = before.get(rel);
+    if (!previous) {
+      try {
+        await Deno.remove(path);
+      } catch {
+        // ignore
+      }
+      continue;
+    }
+    let current: Uint8Array | null = null;
+    try {
+      current = await Deno.readFile(path);
+    } catch {
+      current = null;
+    }
+    if (current && sameBytes(current, previous)) continue;
+    try {
+      await Deno.mkdir(dirname(path), { recursive: true });
+      await Deno.writeFile(path, previous);
+    } catch {
+      // ignore restore errors
+    }
+  }
+
+  for (const [rel, bytes] of before) {
+    if (skipCursorMeta(rel)) continue;
+    const path = resolveWithin(workspace, rel);
+    if (!path) continue;
+    try {
+      await Deno.stat(path);
+    } catch {
+      try {
+        await Deno.mkdir(dirname(path), { recursive: true });
+        await Deno.writeFile(path, bytes);
+      } catch {
+        // ignore
+      }
+    }
+  }
 }
 
 function isPendingCursorToolTurn(turn: ChatTurn | undefined): boolean {
@@ -188,6 +265,22 @@ async function disposeAgent(agent: { close?: () => void | Promise<void> }): Prom
   }
 }
 
+function localAgentOptions(workspace: string | null, mode: "plan" | "build") {
+  const tools = mode === "plan" ? [...CURSOR_PLAN_TOOLS] : [...CURSOR_BUILD_TOOLS];
+  return {
+    tools,
+    ...(workspace
+      ? {
+        local: {
+          cwd: workspace,
+          settingSources: ["project"] as Array<"project">,
+        },
+      }
+      : {}),
+    ...(mode === "plan" ? { mode: "plan" as const } : {}),
+  };
+}
+
 export async function completeCursor(
   provider: LlmProviderRow,
   turns: ChatTurn[],
@@ -201,6 +294,8 @@ export async function completeCursor(
   if (!apiKey) throw new Error("Cursor API key belum diisi.");
   const model = provider.model?.trim() || CURSOR_DEFAULT_MODEL;
   const mode = opts.mode ?? "build";
+  const workspace = opts.workspace?.trim() || null;
+  const cloud = isCloudCursorAgentId(opts.cursorAgentId);
 
   if (isPendingCursorToolTurn(turns[turns.length - 1])) {
     return {
@@ -210,18 +305,28 @@ export async function completeCursor(
     };
   }
 
-  const workspace = opts.workspace ?? null;
-  const temp = workspace ? await copyWorkspace(workspace) : null;
+  if (!cloud && !workspace) {
+    throw new Error("Workspace project belum diatur untuk Cursor local agent.");
+  }
+
+  const snapshot = !cloud && workspace && mode === "build"
+    ? await snapshotWorkspaceFiles(workspace)
+    : null;
+
   const { Agent, CursorAgentError } = await import("@cursor/sdk");
 
-  const tools = mode === "plan" ? [...CURSOR_PLAN_TOOLS] : [...CURSOR_BUILD_TOOLS];
-  const agentOptions = {
-    apiKey,
-    model: { id: model },
-    tools,
-    ...(temp ? { local: { cwd: temp } } : {}),
-    ...(mode === "plan" ? { mode: "plan" as const } : {}),
-  };
+  const agentOptions = cloud
+    ? {
+      apiKey,
+      model: { id: model },
+      ...(mode === "plan" ? { mode: "plan" as const } : {}),
+    }
+    : {
+      apiKey,
+      model: { id: model },
+      ...localAgentOptions(workspace, mode),
+    };
+
   let agent: Awaited<ReturnType<typeof Agent.create>>;
   let resumed = false;
 
@@ -230,7 +335,14 @@ export async function completeCursor(
       try {
         agent = await Agent.resume(opts.cursorAgentId, agentOptions);
         resumed = true;
-      } catch {
+      } catch (error) {
+        if (cloud) {
+          throw new Error(
+            `Gagal resume cloud agent ${opts.cursorAgentId}: ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+          );
+        }
         agent = await Agent.create(agentOptions);
       }
     } else {
@@ -283,7 +395,20 @@ export async function completeCursor(
       }
 
       const agentId = typeof agent.agentId === "string" ? agent.agentId : undefined;
-      if (!temp || !workspace) {
+
+      if (cloud) {
+        const note =
+          "Cloud agent berjalan di VM Cursor (bukan workspace lokal); " +
+          "perubahan file tidak diajukan ke Review lokal.";
+        return {
+          text: [result.result ?? "", note].filter(Boolean).join("\n\n"),
+          toolCalls: [],
+          cursorAgentId: agentId,
+          conversation,
+        };
+      }
+
+      if (!workspace || mode === "plan" || !snapshot) {
         return {
           text: result.result ?? "",
           toolCalls: [],
@@ -292,7 +417,14 @@ export async function completeCursor(
         };
       }
 
-      const { writes, notes } = await collectCursorWrites(temp, workspace);
+      const { writes, notes } = await collectCursorWrites(workspace, snapshot);
+      try {
+        await revertWorkspaceToSnapshot(workspace, snapshot);
+      } catch {
+        notes.push(
+          "Peringatan: gagal mengembalikan sebagian file ke snapshot; cek git status.",
+        );
+      }
       const text = [result.result ?? "", ...notes].filter(Boolean).join("\n\n");
       return {
         text,
@@ -308,14 +440,15 @@ export async function completeCursor(
       if (timer) clearTimeout(timer);
       await disposeAgent(agent);
     }
-  } finally {
-    if (temp) {
+  } catch (error) {
+    if (snapshot && workspace) {
       try {
-        await Deno.remove(temp, { recursive: true });
+        await revertWorkspaceToSnapshot(workspace, snapshot);
       } catch {
-        // ignore cleanup errors
+        // best-effort restore after failure
       }
     }
+    throw error;
   }
 }
 
@@ -354,6 +487,7 @@ export interface CursorListedAgent {
   name: string;
   summary: string;
   lastModified: number;
+  runtime: "local" | "cloud";
 }
 
 export async function listLocalCursorAgents(
@@ -372,6 +506,27 @@ export async function listLocalCursorAgents(
     name: item.name || item.agentId,
     summary: item.summary || item.name || item.agentId,
     lastModified: item.lastModified ?? Date.now(),
+    runtime: "local" as const,
+  }));
+}
+
+export async function listCloudCursorAgents(
+  apiKey: string,
+  limit = 30,
+): Promise<CursorListedAgent[]> {
+  if (!apiKey.trim()) return [];
+  const { Agent } = await import("@cursor/sdk");
+  const listed = await Agent.list({
+    runtime: "cloud",
+    apiKey,
+    limit,
+  });
+  return (listed.items ?? []).map((item) => ({
+    agentId: item.agentId,
+    name: item.name || item.agentId,
+    summary: item.summary || item.name || item.agentId,
+    lastModified: item.lastModified ?? Date.now(),
+    runtime: "cloud" as const,
   }));
 }
 
@@ -389,18 +544,36 @@ function extractAgentMessageText(message: unknown): string {
   return "";
 }
 
+export interface HydrateCursorOptions {
+  cwd?: string | null;
+  apiKey?: string | null;
+}
+
 export async function hydrateCursorConversation(
   cursorAgentId: string,
-  cwd?: string | null,
+  cwdOrOptions?: string | null | HydrateCursorOptions,
 ): Promise<CursorConversationMessage[]> {
   if (!cursorAgentId.trim()) return [];
+  const opts: HydrateCursorOptions = typeof cwdOrOptions === "string" || cwdOrOptions == null
+    ? { cwd: cwdOrOptions }
+    : cwdOrOptions;
+  const cloud = isCloudCursorAgentId(cursorAgentId);
+  const cwd = opts.cwd?.trim() || undefined;
+  const apiKey = opts.apiKey?.trim() || undefined;
   const { Agent } = await import("@cursor/sdk");
-  try {
-    const messages = await Agent.messages.list(cursorAgentId, {
-      runtime: "local",
-      ...(cwd ? { cwd } : {}),
-      limit: 100,
-    });
+
+  const fromMessages = async (): Promise<CursorConversationMessage[]> => {
+    const options: Record<string, unknown> = { limit: 100 };
+    if (cloud) {
+      if (apiKey) options.apiKey = apiKey;
+    } else {
+      options.runtime = "local";
+      if (cwd) options.cwd = cwd;
+    }
+    const messages = await Agent.messages.list(
+      cursorAgentId,
+      options as Parameters<typeof Agent.messages.list>[1],
+    );
     const out: CursorConversationMessage[] = [];
     for (const item of messages) {
       const text = extractAgentMessageText(item.message);
@@ -409,17 +582,16 @@ export async function hydrateCursorConversation(
         out.push({ role: item.type, content: text });
       }
     }
-    if (out.length) return out;
-  } catch {
-    // fall through to listRuns
-  }
+    return out;
+  };
 
-  try {
-    const runs = await Agent.listRuns(cursorAgentId, {
-      runtime: "local",
-      ...(cwd ? { cwd } : {}),
-      limit: 5,
-    });
+  const fromRuns = async (): Promise<CursorConversationMessage[]> => {
+    const runs = await Agent.listRuns(
+      cursorAgentId,
+      cloud
+        ? { runtime: "cloud", ...(apiKey ? { apiKey } : {}), limit: 5 }
+        : { runtime: "local", ...(cwd ? { cwd } : {}), limit: 5 },
+    );
     for (const run of runs.items ?? []) {
       try {
         if (typeof run.supports === "function" && !run.supports("conversation")) continue;
@@ -429,8 +601,33 @@ export async function hydrateCursorConversation(
         // try next run
       }
     }
+    return [];
+  };
+
+  // Cloud: prefer listRuns (supports apiKey). Local: prefer messages.list.
+  if (cloud) {
+    try {
+      const runs = await fromRuns();
+      if (runs.length) return runs;
+    } catch {
+      // fall through
+    }
+    try {
+      return await fromMessages();
+    } catch {
+      return [];
+    }
+  }
+
+  try {
+    const messages = await fromMessages();
+    if (messages.length) return messages;
+  } catch {
+    // fall through
+  }
+  try {
+    return await fromRuns();
   } catch {
     return [];
   }
-  return [];
 }

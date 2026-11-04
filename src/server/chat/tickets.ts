@@ -38,6 +38,7 @@ export async function generateTicketsFromDocument(
     projectId,
     mode: "build",
     skills: new Map(),
+    mcpTools: new Map(),
     createdTickets: [],
     createdAt: Date.now(),
   };

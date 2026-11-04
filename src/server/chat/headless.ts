@@ -8,7 +8,8 @@ import {
 import { loadEnabledSkills, projectSlug, readSkillBody, type SkillInfo } from "../skills.ts";
 import { systemPrompt } from "./agent.ts";
 import { complete, safeParse } from "./llm.ts";
-import { applyWriteFile, executeTool, toolsFor, WRITE_TOOLS } from "./tools.ts";
+import { loadMcpChatTools } from "./mcp-tools.ts";
+import { applyWriteFile, executeTool, isMcpChatTool, toolsFor, WRITE_TOOLS } from "./tools.ts";
 import type { ChatTurn, CreatedTicket, Run, ToolCall } from "./types.ts";
 
 const DEFAULT_MAX_STEPS = 6;
@@ -98,6 +99,7 @@ function makeRun(
     projectId,
     mode,
     skills,
+    mcpTools: new Map(),
     createdTickets: [],
     createdAt: Date.now(),
   };
@@ -153,7 +155,9 @@ export async function runHeadlessAgent(input: HeadlessAgentInput): Promise<Headl
   );
   const toolLog: HeadlessToolLog[] = [];
   const filesTouched: string[] = [];
-  const tools = toolsFor(run.workspace, run.mode, run.skills.size > 0);
+  const mcp = await loadMcpChatTools();
+  run.mcpTools = mcp.byName;
+  const tools = [...toolsFor(run.workspace, run.mode, run.skills.size > 0), ...mcp.defs];
 
   for (let step = 0; step < maxSteps; step++) {
     if (input.isCanceled?.()) {
@@ -206,7 +210,7 @@ export async function runHeadlessAgent(input: HeadlessAgentInput): Promise<Headl
       ]);
       for (const call of response.toolCalls) {
         let result: string;
-        if (!planAllowed.has(call.name)) {
+        if (!planAllowed.has(call.name) && !isMcpChatTool(call.name)) {
           result = "Tool tidak tersedia di mode Plan.";
         } else {
           try {
@@ -260,7 +264,12 @@ export async function runHeadlessAgent(input: HeadlessAgentInput): Promise<Headl
               filesTouched.push(args.path);
             }
           }
-        } else if (!run.workspace && call.name !== "create_ticket" && call.name !== "use_skill") {
+        } else if (
+          !run.workspace &&
+          call.name !== "create_ticket" &&
+          call.name !== "use_skill" &&
+          !isMcpChatTool(call.name)
+        ) {
           result = "No workspace configured.";
         } else {
           result = await executeTool(run, call);

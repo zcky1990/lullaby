@@ -1,6 +1,13 @@
+import type { McpServerInput } from "../../config/schema.ts";
 import type { ChatChange, LlmProviderRow } from "../../db/db.ts";
 import type { DiffHunk } from "../diff.ts";
 import type { SkillInfo } from "../skills.ts";
+
+export interface McpToolBinding {
+  server: McpServerInput;
+  toolName: string;
+  disableKey: string;
+}
 
 export interface ChatAttachment {
   type: "image" | "text" | "workspace";
@@ -95,6 +102,7 @@ export interface Run {
   projectId: string;
   mode: "plan" | "build";
   skills: Map<string, SkillInfo>;
+  mcpTools: Map<string, McpToolBinding>;
   createdTickets: CreatedTicket[];
   createdAt: number;
 }

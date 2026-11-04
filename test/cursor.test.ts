@@ -4,7 +4,10 @@ import {
   bootstrapCursorPrompt,
   collectCursorWrites,
   conversationFromSdkTurns,
+  isCloudCursorAgentId,
   latestUserPrompt,
+  revertWorkspaceToSnapshot,
+  snapshotWorkspaceFiles,
 } from "../src/server/chat/cursor.ts";
 import { ChatInput } from "../src/config/schema.ts";
 import {
@@ -41,6 +44,37 @@ Deno.test("collectCursorWrites returns changed and new text files only", async (
   deepEqual(result.writes.map((write) => write.path).sort(), ["src/a.ts", "src/new.ts"]);
   equal(result.writes.find((write) => write.path === "src/a.ts")?.content, "export const a = 2;\n");
   equal(result.notes.some((note) => note.includes("biner")), true);
+});
+
+Deno.test("snapshot + collect + revert restores real cwd workspace", async () => {
+  const live = await Deno.makeTempDir();
+  await Deno.mkdir(join(live, "src"), { recursive: true });
+  await Deno.writeTextFile(join(live, "src", "a.ts"), "export const a = 1;\n");
+  await Deno.writeTextFile(join(live, "keep.ts"), "keep\n");
+  const snap = await snapshotWorkspaceFiles(live);
+  await Deno.writeTextFile(join(live, "src", "a.ts"), "export const a = 2;\n");
+  await Deno.writeTextFile(join(live, "src", "new.ts"), "created\n");
+  await Deno.remove(join(live, "keep.ts"));
+  const diff = await collectCursorWrites(live, snap);
+  deepEqual(diff.writes.map((write) => write.path).sort(), ["src/a.ts", "src/new.ts"]);
+  await revertWorkspaceToSnapshot(live, snap);
+  equal(await Deno.readTextFile(join(live, "src", "a.ts")), "export const a = 1;\n");
+  equal(await Deno.readTextFile(join(live, "keep.ts")), "keep\n");
+  let missing = false;
+  try {
+    await Deno.stat(join(live, "src", "new.ts"));
+  } catch {
+    missing = true;
+  }
+  equal(missing, true);
+  await Deno.remove(live, { recursive: true });
+});
+
+Deno.test("isCloudCursorAgentId detects bc- prefix", () => {
+  equal(isCloudCursorAgentId("bc-abc123"), true);
+  equal(isCloudCursorAgentId("BC-xyz"), true);
+  equal(isCloudCursorAgentId("agent-local-1"), false);
+  equal(isCloudCursorAgentId(""), false);
 });
 
 Deno.test("collectCursorWrites cleanup", async () => {
