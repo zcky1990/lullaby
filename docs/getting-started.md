@@ -35,7 +35,7 @@ Permission yang dipakai task desktop/run: `--allow-read --allow-write --allow-ne
 
 Default app data dir (bisa dioverride `RND_APP_DATA_DIR`):
 
-- macOS: `~/Library/Application Support/RND Workflow/`
+- macOS: `~/Library/Application Support/Lullaby/`
 - Berisi `data.db` (SQLite) dan folder skills (`skills/`, `project-<slug>/skills/`).
 
 Treat `data.db` sebagai sensitif: token/API key disimpan plaintext di config.

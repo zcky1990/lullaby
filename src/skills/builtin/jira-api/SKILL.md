@@ -14,7 +14,7 @@ Jira dipakai untuk board tiket, detail issue, transisi status, dan sync tiket lo
   `baseUrl`, `deployment` (`cloud` | `data-center`), `cloudId?`, `projectKey`, `email?`, `apiToken`.
 - Token dimask (`••••`) saat dikirim ke renderer. Jangan mencetak token ke log/chat.
 - File DB: `{appDataDir}/data.db`. Di macOS:
-  `~/Library/Application Support/RND Workflow/data.db`.
+  `~/Library/Application Support/Lullaby/data.db`.
 
 ## Autentikasi
 

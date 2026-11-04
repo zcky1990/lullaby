@@ -202,9 +202,9 @@ Document/**Project Settings**/**Ticket**/**Global Settings** memakai **panel kir
 
 Disimpan di direktori data aplikasi (dibuat otomatis):
 
-- macOS: `~/Library/Application Support/RND Workflow/`
-- Linux: `~/.local/share/rnd-workflow/`
-- Windows: `%APPDATA%\RND Workflow\`
+- macOS: `~/Library/Application Support/Lullaby/`
+- Linux: `~/.local/share/lullaby/`
+- Windows: `%APPDATA%\Lullaby\`
 
 Berisi `data.db`. Kredensial (API token/key) **disimpan plaintext** di `config`/`api_key`, sehingga
 `data.db` bersifat sensitif — jangan dibagikan.
