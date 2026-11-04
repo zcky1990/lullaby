@@ -232,8 +232,8 @@ export function WorkflowTab({ projectId, slug, onSaved, onDeleted }: Props) {
     }
   };
 
-  const save = async () => {
-    if (!projectId || !slug) return;
+  const save = useCallback(async () => {
+    if (!projectId || !slug || saving || !dirty) return;
     setSaving(true);
     setError(undefined);
     try {
@@ -245,7 +245,18 @@ export function WorkflowTab({ projectId, slug, onSaved, onDeleted }: Props) {
     } finally {
       setSaving(false);
     }
-  };
+  }, [projectId, slug, saving, dirty, yaml, load, onSaved]);
+
+  useEffect(() => {
+    const handler = (event: KeyboardEvent) => {
+      if (!(event.metaKey || event.ctrlKey) || event.shiftKey || event.altKey) return;
+      if (event.key.toLowerCase() !== "s") return;
+      event.preventDefault();
+      void save();
+    };
+    window.addEventListener("keydown", handler, { capture: true });
+    return () => window.removeEventListener("keydown", handler, { capture: true });
+  }, [save]);
 
   const remove = async () => {
     if (!projectId || !slug) return;
@@ -372,8 +383,9 @@ export function WorkflowTab({ projectId, slug, onSaved, onDeleted }: Props) {
           <Button
             size="sm"
             variant="outline"
-            onClick={save}
+            onClick={() => void save()}
             disabled={saving || !dirty}
+            title="Cmd/Ctrl+S"
             data-icon="inline-start"
           >
             {saving ? <Spinner /> : <Save />}
