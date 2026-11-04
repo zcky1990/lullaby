@@ -175,3 +175,99 @@ Deno.test("parseWorkflow rejects unsupported LLM actions", () => {
     )
   );
 });
+
+Deno.test("parseWorkflow accepts Dagu-style params, array env, outputs and router.route", () => {
+  const definition = parseWorkflow(
+    `
+name: ai-development
+description: AI development with automatic RuboCop and RSpec repair loop
+type: graph
+params:
+  - name: PROMPT
+    type: string
+    default: "Create a simple API"
+    description: Task or feature to implement
+  - name: WORKING_DIRECTORY
+    type: string
+    default: /tmp/app
+    description: Project working directory
+  - name: MAX_ATTEMPTS
+    type: integer
+    default: 5
+    description: Maximum validation attempts per stage
+timeout_sec: 3600
+steps:
+  - id: development
+    timeout_sec: 1800
+    working_dir: "\${params.WORKING_DIRECTORY}"
+    env:
+      - PROMPT: "\${params.PROMPT}"
+    run: |
+      openhands --headless -t "$PROMPT"
+  - id: rubocop
+    depends: development
+    working_dir: "\${params.WORKING_DIRECTORY}"
+    env:
+      - MAX_ATTEMPTS: "\${params.MAX_ATTEMPTS}"
+    run: |
+      echo status=success >> "$DAGU_OUTPUT_FILE"
+    outputs:
+      - name: status
+  - id: rubocop_router
+    depends: rubocop
+    action: router.route
+    with:
+      value: \${steps.rubocop.outputs.status}
+      routes:
+        success: [rspec]
+        failed: [lint_failed]
+  - id: rspec
+    working_dir: "\${params.WORKING_DIRECTORY}"
+    env:
+      - MAX_ATTEMPTS: "\${params.MAX_ATTEMPTS}"
+    run: |
+      echo status=success >> "$DAGU_OUTPUT_FILE"
+    outputs:
+      - name: status
+  - id: rspec_router
+    depends: rspec
+    action: router.route
+    with:
+      value: \${steps.rspec.outputs.status}
+      routes:
+        success: [workflow_success]
+        failed: [tests_failed]
+  - id: workflow_success
+    run: echo "passed"
+  - id: lint_failed
+    run: |
+      echo failed
+      exit 1
+  - id: tests_failed
+    run: |
+      echo failed
+      exit 1
+`,
+    "ai-development",
+  );
+  equal(definition.name, "ai-development");
+  equal(definition.type, "graph");
+  equal(definition.timeoutSec, 3600);
+  equal(definition.params.length, 3);
+  equal(definition.env.PROMPT, "Create a simple API");
+  equal(definition.env.MAX_ATTEMPTS, "5");
+  const development = definition.steps.find((step) => step.id === "development")!;
+  equal(development.timeoutSec, 1800);
+  equal(development.env.PROMPT, "${params.PROMPT}");
+  const rubocop = definition.steps.find((step) => step.id === "rubocop")!;
+  equal(rubocop.outputs.join(","), "status");
+  const router = definition.steps.find((step) => step.id === "rubocop_router")!;
+  equal(router.kind, "router");
+  equal(router.router?.routes.success.join(","), "rspec");
+  const rspec = definition.steps.find((step) => step.id === "rspec")!;
+  equal(rspec.depends.includes("rubocop_router"), true);
+  equal(rspec.routeGate?.routerId, "rubocop_router");
+  const lintFailed = definition.steps.find((step) => step.id === "lint_failed")!;
+  equal(lintFailed.routeGate?.routerId, "rubocop_router");
+  equal(definition.steps.find((step) => step.id === "workflow_success")?.routeGate?.routerId, "rspec_router");
+});

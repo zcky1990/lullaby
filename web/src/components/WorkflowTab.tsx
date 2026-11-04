@@ -32,6 +32,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { useTheme } from "@/components/ThemeProvider";
 import { WikiTab } from "@/components/WikiTab";
+import { WorkflowParamsDialog } from "@/components/WorkflowParamsDialog";
 import {
   api,
   type WorkflowDefinition,
@@ -40,6 +41,7 @@ import {
   type WorkflowRunSummary,
   type WorkflowSummary,
 } from "@/lib/api";
+import { formatApiError } from "@/lib/api-error";
 import {
   runBadgeVariant,
   stepBadgeVariant,
@@ -51,6 +53,9 @@ const MonacoViewer = lazy(() => import("@/components/MonacoViewer"));
 
 function stepCommand(step: WorkflowDefinitionStep): string {
   if (step.run) return step.run;
+  if (step.kind === "router") {
+    return `[router] ${step.router?.value ?? step.action ?? "route"}`;
+  }
   const prompt = step.with?.prompt ?? step.with?.messages?.[0]?.content ??
     (step.kind === "agent" ? "agent" : "chat.completion");
   return step.kind === "agent" ? `[agent] ${prompt}` : `[llm] ${prompt}`;
@@ -86,6 +91,7 @@ export function WorkflowTab({ projectId, slug, onSaved, onDeleted }: Props) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [running, setRunning] = useState(false);
+  const [paramsOpen, setParamsOpen] = useState(false);
   const [error, setError] = useState<string | undefined>();
 
   const refreshRuns = useCallback(async () => {
@@ -146,7 +152,7 @@ export function WorkflowTab({ projectId, slug, onSaved, onDeleted }: Props) {
         setSelectedStep(workflow.definition.steps[0]?.id ?? null);
       }
     } catch (e) {
-      setError((e as Error).message);
+      setError(formatApiError(e));
     } finally {
       setLoading(false);
     }
@@ -180,23 +186,39 @@ export function WorkflowTab({ projectId, slug, onSaved, onDeleted }: Props) {
     onSaved,
   ]);
 
-  const runNow = async () => {
+  const startRun = async (params?: Record<string, string>) => {
     if (!projectId || !slug || running || selectedRun?.status === "running") {
       return;
     }
     setRunning(true);
     setError(undefined);
     try {
-      const { runId } = await api.runWorkflow(projectId, slug);
+      const { runId } = await api.runWorkflow(
+        projectId,
+        slug,
+        params ? { params } : undefined,
+      );
+      setParamsOpen(false);
       setSelectedStep(null);
       await refreshRuns();
       await loadRun(runId);
       onSaved();
     } catch (e) {
-      setError((e as Error).message);
+      setError(formatApiError(e));
     } finally {
       setRunning(false);
     }
+  };
+
+  const runNow = () => {
+    if (!projectId || !slug || running || selectedRun?.status === "running") {
+      return;
+    }
+    if ((definition?.params.length ?? 0) > 0) {
+      setParamsOpen(true);
+      return;
+    }
+    void startRun();
   };
 
   const cancelRun = async () => {
@@ -206,7 +228,7 @@ export function WorkflowTab({ projectId, slug, onSaved, onDeleted }: Props) {
       await api.cancelWorkflowRun(projectId, selectedRunId);
       await loadRun(selectedRunId);
     } catch (e) {
-      setError((e as Error).message);
+      setError(formatApiError(e));
     }
   };
 
@@ -219,7 +241,7 @@ export function WorkflowTab({ projectId, slug, onSaved, onDeleted }: Props) {
       await load();
       onSaved();
     } catch (e) {
-      setError((e as Error).message);
+      setError(formatApiError(e));
     } finally {
       setSaving(false);
     }
@@ -232,7 +254,7 @@ export function WorkflowTab({ projectId, slug, onSaved, onDeleted }: Props) {
       await api.deleteWorkflow(projectId, slug);
       onDeleted();
     } catch (e) {
-      setError((e as Error).message);
+      setError(formatApiError(e));
     }
   };
 
@@ -304,6 +326,13 @@ export function WorkflowTab({ projectId, slug, onSaved, onDeleted }: Props) {
 
   return (
     <div className="flex h-full flex-col">
+      <WorkflowParamsDialog
+        open={paramsOpen}
+        params={definition?.params ?? []}
+        running={running}
+        onOpenChange={setParamsOpen}
+        onConfirm={(values) => void startRun(values)}
+      />
       <div className="flex h-[35px] shrink-0 items-center justify-between gap-2 border-b px-3">
         <div className="flex min-w-0 items-center gap-2">
           <GitBranch className="size-4 shrink-0 text-muted-foreground" />
@@ -363,7 +392,11 @@ export function WorkflowTab({ projectId, slug, onSaved, onDeleted }: Props) {
       </div>
 
       {error
-        ? <p className="border-b px-3 py-2 text-xs text-destructive">{error}</p>
+        ? (
+          <pre className="border-b px-3 py-2 text-xs whitespace-pre-wrap text-destructive">
+            {error}
+          </pre>
+        )
         : null}
       {summary?.error
         ? (

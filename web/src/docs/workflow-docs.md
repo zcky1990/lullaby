@@ -17,8 +17,11 @@ tombol **Workflow baru** atau ditulis langsung di folder tersebut.
 | --- | --- | --- |
 | `name` | string | Nama workflow (opsional; default slug). |
 | `description` | string | Deskripsi singkat. |
-| `env` | map | Environment variable untuk semua step (nilai diubah ke string). |
+| `type` | string | Opsional (mis. `graph`); disimpan, tidak mengubah eksekusi. |
+| `params` | array | Parameter Dagu-style (`name`, `type`, `default`, `description`); default ikut ke env. Saat Run, dialog meminta nilai param. |
+| `env` | map / list map | Environment variable untuk semua step (nilai diubah ke string). |
 | `working_dir` | string | Direktori kerja default, relatif terhadap workspace. |
+| `timeout_sec` | number | Timeout default semua step (bisa dioverride per step / `defaults`). |
 | `llm` | object | Konfigurasi default step AI (`provider`, `model`, `role`, `session`, `system`, `temperature`). |
 | `defaults` | object | Default semua step: `env`, `working_dir`, `retry_policy`, `timeout_sec`. |
 | `steps` | array | Daftar step (wajib, minimal 1). |
@@ -53,7 +56,31 @@ steps:
 | `retry_policy` | `{ limit, interval_sec }`; `limit` = jumlah percobaan ulang. |
 | `timeout_sec` | Batas waktu; proses di-`SIGTERM` lalu `SIGKILL` (exit 124). |
 | `continue_on` | `failure` / `exit_code`: kegagalan step tidak menggagalkan run & dependency tetap boleh lanjut. |
-| `output` | Nama variabel untuk stdout (opsional). |
+| `output` / `outputs` | Nama variabel stdout, atau list `{ name }` (isi lewat `DAGU_OUTPUT_FILE`). |
+
+## Router (`action: router.route`)
+
+```yaml
+steps:
+  - id: check
+    run: printf 'status=success\n' >> "$DAGU_OUTPUT_FILE"
+    outputs:
+      - name: status
+  - id: route
+    depends: check
+    action: router.route
+    with:
+      value: ${steps.check.outputs.status}
+      routes:
+        success: [ok]
+        failed: [bad]
+  - id: ok
+    run: echo ok
+  - id: bad
+    run: exit 1
+```
+
+Target di `routes` otomatis bergantung pada router dan hanya dijalankan jika value cocok.
 
 ## Dependency & eksekusi
 
@@ -68,7 +95,9 @@ steps:
 ## Variabel & output
 
 - `${NAMA}` → nilai `output: NAMA`.
+- `${params.NAME}` → default param / env.
 - `${steps.<id>.output}` → stdout step tersebut (tersedia untuk step yang sudah sukses).
+- `${steps.<id>.outputs.<name>}` → named output dari `DAGU_OUTPUT_FILE`.
 - `${env.KEY}` → environment variable workflow/step.
 - Interpolasi berlaku di `run`, `prompt`, `system`, `messages`, dan nilai `env` step.
 

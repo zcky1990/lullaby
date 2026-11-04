@@ -33,26 +33,45 @@ export interface WorkflowLlmWith {
   maxSteps?: number;
 }
 
+export interface WorkflowRouterWith {
+  value: string;
+  routes: Record<string, string[]>;
+}
+
+export interface WorkflowParam {
+  name: string;
+  type?: "string" | "integer" | "number" | "boolean";
+  default?: string;
+  description?: string;
+}
+
 export interface WorkflowStep {
   id: string;
-  kind: "shell" | "llm" | "agent";
+  kind: "shell" | "llm" | "agent" | "router";
   run?: string;
   action?: string;
   with?: WorkflowLlmWith;
+  router?: WorkflowRouterWith;
   output?: string;
+  outputs: string[];
   depends: string[];
   env: Record<string, string>;
   workingDir?: string;
   retry: WorkflowRetryPolicy;
   timeoutSec?: number;
   continueOn?: string;
+  /** Step only runs when this router selected it. */
+  routeGate?: { routerId: string };
 }
 
 export interface WorkflowDefinition {
   name: string;
   description?: string;
+  type?: string;
+  params: WorkflowParam[];
   env: Record<string, string>;
   workingDir?: string;
+  timeoutSec?: number;
   llm?: WorkflowLlmSettings;
   steps: WorkflowStep[];
   layers: string[][];

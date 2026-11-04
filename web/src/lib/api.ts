@@ -206,26 +206,44 @@ export interface WorkflowLlmWith {
   maxSteps?: number;
 }
 
+export interface WorkflowRouterWith {
+  value: string;
+  routes: Record<string, string[]>;
+}
+
+export interface WorkflowParam {
+  name: string;
+  type?: "string" | "integer" | "number" | "boolean";
+  default?: string;
+  description?: string;
+}
+
 export interface WorkflowDefinitionStep {
   id: string;
-  kind: "shell" | "llm" | "agent";
+  kind: "shell" | "llm" | "agent" | "router";
   run?: string;
   action?: string;
   with?: WorkflowLlmWith;
+  router?: WorkflowRouterWith;
   output?: string;
+  outputs: string[];
   depends: string[];
   env: Record<string, string>;
   workingDir?: string;
   retry: { limit: number; intervalSec: number };
   timeoutSec?: number;
   continueOn?: string;
+  routeGate?: { routerId: string };
 }
 
 export interface WorkflowDefinition {
   name: string;
   description?: string;
+  type?: string;
+  params: WorkflowParam[];
   env: Record<string, string>;
   workingDir?: string;
+  timeoutSec?: number;
   llm?: {
     provider?: string;
     model?: string;
@@ -846,10 +864,14 @@ export const api = {
       `/api/projects/${projectId}/workflows/${encodeURIComponent(slug)}`,
       { method: "DELETE" },
     ),
-  runWorkflow: (projectId: string, slug: string) =>
+  runWorkflow: (
+    projectId: string,
+    slug: string,
+    payload?: { params?: Record<string, string> },
+  ) =>
     request<{ runId: string }>(
       `/api/projects/${projectId}/workflows/${encodeURIComponent(slug)}/run`,
-      { method: "POST" },
+      jsonInit("POST", payload ?? {}),
     ),
   listWorkflowRuns: (projectId: string, options?: { workflow?: string; limit?: number }) =>
     request<{ runs: WorkflowRunSummary[] }>(

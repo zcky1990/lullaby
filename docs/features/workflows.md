@@ -38,10 +38,17 @@ steps:
     continue_on: failure
 ```
 
-Field yang didukung: `name`, `description`, `env`, `working_dir`, `llm`, `defaults` (`env`,
-`working_dir`, `retry_policy`, `timeout_sec`), dan per step: `id`, `run`, `action`, `with`,
-`output`, `depends`, `env`, `working_dir`, `retry_policy`, `timeout_sec`, `continue_on`.
-Field lain ditolak.
+Field yang didukung: `name`, `description`, `type`, `params`, `env`, `working_dir`,
+`timeout_sec`, `llm`, `defaults` (`env`, `working_dir`, `retry_policy`, `timeout_sec`), dan per
+step: `id`, `run`, `action`, `with`, `output` / `outputs`, `depends`, `env` (map atau list map),
+`working_dir`, `retry_policy`, `timeout_sec`, `continue_on`. Field lain ditolak.
+
+Subset Dagu tambahan:
+- `params` → default masuk env / `${params.NAME}`; saat **Run**, UI menampilkan dialog isi param
+  (dikirim sebagai body `POST .../run` `{ params }`)
+- `outputs: [{ name }]` + `DAGU_OUTPUT_FILE` (key=value) → `${steps.<id>.outputs.<name>}`
+- `action: router.route` dengan `with.value` + `with.routes` (target otomatis bergantung pada
+  router dan hanya jalan jika dipilih)
 
 - Step **tanpa `depends`** berjalan paralel.
 - Step dengan dependency menunggu semua dependency `success` (atau `failed` yang `continue_on`
@@ -144,7 +151,8 @@ steps:
 
 ## Eksekusi (`src/server/workflow/runner.ts`)
 
-- `Deno.Command` via shell (`$SHELL -lc`), cwd workspace/step, env proses + workflow + step.
+- `Deno.Command` via `/bin/sh -lc` (POSIX; bukan zsh login shell), cwd workspace/step, env proses +
+  workflow + step.
 - Layer topologis dijalankan paralel (maks 8 per batch); retry `limit`/`interval_sec`; timeout
   `SIGTERM` → `SIGKILL` (exit 124).
 - Log stdout/stderr disimpan per step (cap ±200 KB, penanda dipotong) dan di-poll UI tiap detik

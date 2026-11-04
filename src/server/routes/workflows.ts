@@ -1,4 +1,8 @@
-import { WorkflowCreateInput, WorkflowSaveInput } from "../../config/schema.ts";
+import {
+  WorkflowCreateInput,
+  WorkflowRunInput,
+  WorkflowSaveInput,
+} from "../../config/schema.ts";
 import {
   getProject,
   getWorkflowRun,
@@ -165,15 +169,35 @@ export async function deleteWorkflowHandler(
   }
 }
 
-export async function runWorkflowHandler(projectId: string, slug: string): Promise<Response> {
+export async function runWorkflowHandler(
+  projectId: string,
+  slug: string,
+  req: Request,
+): Promise<Response> {
   const project = await projectFor(projectId);
   if (!project) return json({ error: "project_not_found" }, 404);
   if (!project.workspace_path) {
     return json({ error: "workspace_required", message: "Workspace project belum diatur." }, 400);
   }
+  const parsed = WorkflowRunInput.safeParse(await readJson(req));
+  if (!parsed.success) {
+    return json({ error: "invalid_input", issues: parsed.error.issues }, 400);
+  }
+  const paramOverrides = Object.fromEntries(
+    Object.entries(parsed.data.params ?? {}).map(([key, value]) => [key, String(value)]),
+  );
   try {
     const { yaml, path } = await readWorkflow(project, slug);
     const definition = parseWorkflow(yaml, slug);
+    const known = new Set(definition.params.map((param) => param.name));
+    for (const key of Object.keys(paramOverrides)) {
+      if (!known.has(key)) {
+        return json({
+          error: "invalid_params",
+          message: `Param tidak dikenal: ${key}`,
+        }, 400);
+      }
+    }
     const runId = await startWorkflowRun({
       project,
       projectId,
@@ -181,6 +205,7 @@ export async function runWorkflowHandler(projectId: string, slug: string): Promi
       definition,
       yaml,
       workflowPath: path,
+      params: paramOverrides,
     });
     return json({ runId }, 202);
   } catch (error) {

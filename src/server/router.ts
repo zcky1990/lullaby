@@ -1574,7 +1574,11 @@ export async function handleRequest(req: Request): Promise<Response> {
       /^\/api\/projects\/([^/]+)\/workflows\/([^/]+)\/run$/,
     );
     if (workflowRun && method === "POST") {
-      return await runWorkflowHandler(workflowRun[1], decodeURIComponent(workflowRun[2]));
+      return await runWorkflowHandler(
+        workflowRun[1],
+        decodeURIComponent(workflowRun[2]),
+        req,
+      );
     }
 
     const workflowItem = pathname.match(/^\/api\/projects\/([^/]+)\/workflows\/([^/]+)$/);

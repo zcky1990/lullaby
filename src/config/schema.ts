@@ -131,6 +131,16 @@ export const WorkflowSaveInput = z.object({
   yaml: z.string().min(1).max(200_000),
 });
 
+export const WorkflowRunInput = z.object({
+  params: z
+    .record(
+      z.string().trim().min(1).max(120),
+      z.union([z.string().max(100_000), z.number(), z.boolean()]),
+    )
+    .optional(),
+});
+export type WorkflowRunInput = z.infer<typeof WorkflowRunInput>;
+
 export const GitPathsInput = z.object({
   paths: z.array(z.string().trim().min(1).max(1000)).min(1).max(200),
 });
