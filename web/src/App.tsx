@@ -93,7 +93,7 @@ import {
 } from "@/lib/api";
 
 const MonacoViewer = lazy(() => import("@/components/MonacoViewer"));
-const MarkdownView = lazy(() => import("@/components/MarkdownView"));
+const SearchableMarkdown = lazy(() => import("@/components/SearchableMarkdown"));
 const WorkflowTabComponent = lazy(() =>
   import("@/components/WorkflowTab").then((module) => ({ default: module.WorkflowTab }))
 );
@@ -1616,20 +1616,16 @@ function FileTab({
       </div>
       <div className="min-h-0 flex-1">
         {tab.preview ? (
-          <div className="h-full overflow-y-auto">
-            <div className="px-8 py-6">
-              <Suspense
-                fallback={
-                  <div className="flex flex-col gap-2">
-                    <Skeleton className="h-4 w-2/3" />
-                    <Skeleton className="h-4 w-full" />
-                  </div>
-                }
-              >
-                <MarkdownView content={tab.content || "_(kosong)_"} />
-              </Suspense>
-            </div>
-          </div>
+          <Suspense
+            fallback={
+              <div className="flex flex-col gap-2 px-8 py-6">
+                <Skeleton className="h-4 w-2/3" />
+                <Skeleton className="h-4 w-full" />
+              </div>
+            }
+          >
+            <SearchableMarkdown content={tab.content || "_(kosong)_"} />
+          </Suspense>
         ) : (
           <Suspense fallback={<Skeleton className="h-full w-full rounded-none" />}>
             <MonacoViewer
@@ -1860,20 +1856,16 @@ function DocumentTab({
             />
           </Suspense>
         ) : (
-          <div className="h-full overflow-y-auto">
-            <div className="px-8 py-6">
-              <Suspense
-                fallback={
-                  <div className="flex flex-col gap-2">
-                    <Skeleton className="h-4 w-2/3" />
-                    <Skeleton className="h-4 w-full" />
-                  </div>
-                }
-              >
-                <MarkdownView content={tab.content || "_(kosong)_"} />
-              </Suspense>
-            </div>
-          </div>
+          <Suspense
+            fallback={
+              <div className="flex flex-col gap-2 px-8 py-6">
+                <Skeleton className="h-4 w-2/3" />
+                <Skeleton className="h-4 w-full" />
+              </div>
+            }
+          >
+            <SearchableMarkdown content={tab.content || "_(kosong)_"} />
+          </Suspense>
         )}
       </div>
     </div>
