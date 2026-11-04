@@ -157,6 +157,41 @@ export async function writeWorkspaceFile(
   await Deno.writeTextFile(file, content);
 }
 
+const INVALID_NAME = /[\\/]|^\.+$/;
+
+export function joinWorkspacePath(parent: string, name: string): string {
+  const trimmedParent = parent.trim().replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
+  const trimmedName = name.trim();
+  if (!trimmedName) throw new Error("Nama wajib diisi.");
+  if (INVALID_NAME.test(trimmedName) || trimmedName.includes("..")) {
+    throw new Error("Nama file/folder tidak valid.");
+  }
+  return trimmedParent ? `${trimmedParent}/${trimmedName}` : trimmedName;
+}
+
+export async function createWorkspaceFile(
+  root: string,
+  rel: string,
+  content = "",
+): Promise<string> {
+  const file = resolveWithin(root, rel);
+  if (!file) throw new Error("Path di luar workspace.");
+  const exists = await Deno.stat(file).then(() => true).catch(() => false);
+  if (exists) throw new Error("File atau folder sudah ada.");
+  await Deno.mkdir(dirname(file), { recursive: true });
+  await Deno.writeTextFile(file, content);
+  return rel.replace(/\\/g, "/");
+}
+
+export async function createWorkspaceDir(root: string, rel: string): Promise<string> {
+  const dir = resolveWithin(root, rel);
+  if (!dir) throw new Error("Path di luar workspace.");
+  const exists = await Deno.stat(dir).then(() => true).catch(() => false);
+  if (exists) throw new Error("File atau folder sudah ada.");
+  await Deno.mkdir(dir, { recursive: true });
+  return rel.replace(/\\/g, "/");
+}
+
 export interface WorkspaceFileIndex {
   files: string[];
   truncated: boolean;

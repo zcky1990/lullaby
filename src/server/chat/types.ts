@@ -85,6 +85,7 @@ export interface Run {
   provider: LlmProviderRow;
   workspace: string | null;
   sessionId: string;
+  cursorAgentId?: string | null;
   temperature?: number;
   turns: ChatTurn[];
   pendingBatch: ToolCall[];

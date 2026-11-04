@@ -48,43 +48,54 @@ export function LlmProviderForm({ provider, onSave, onTest, onDelete, onCancel }
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
   const [result, setResult] = useState<TestResult | null>(null);
-  const [models, setModels] = useState<CursorModel[]>([]);
+  const [models, setModels] = useState<CursorModel[]>(() => provider?.models ?? []);
   const [modelsLoading, setModelsLoading] = useState(false);
   const [modelsError, setModelsError] = useState<string | undefined>();
 
   const suffix = provider?.id ?? "new";
   const hasStoredKey = Boolean(provider?.hasApiKey);
   const cursorKeyMissing = kind === "cursor" && !hasStoredKey && !config.apiKey?.trim();
+  const cachedModelCount = provider?.models?.length ?? 0;
 
-  const loadModels = useCallback(async () => {
+  const loadModels = useCallback(async (opts?: { silent?: boolean }) => {
     if (!hasStoredKey && !config.apiKey?.trim()) {
       setModels([]);
       setModelsError(undefined);
       return;
     }
-    setModelsLoading(true);
-    setModelsError(undefined);
+    const silent = Boolean(opts?.silent);
+    if (!silent) {
+      setModelsLoading(true);
+      setModelsError(undefined);
+    }
     try {
       const res = await api.listCursorModels({
         apiKey: config.apiKey?.trim() || undefined,
         providerId: provider?.id,
       });
       setModels(res.models);
+      setModelsError(undefined);
     } catch (error) {
-      setModels([]);
-      setModelsError((error as Error).message);
+      if (!silent) {
+        setModels([]);
+        setModelsError((error as Error).message);
+      }
     } finally {
-      setModelsLoading(false);
+      if (!silent) setModelsLoading(false);
     }
   }, [config.apiKey, hasStoredKey, provider?.id]);
 
   useEffect(() => {
     if (kind !== "cursor") return;
+    if (cachedModelCount > 0 && !config.apiKey?.trim()) {
+      setModels(provider?.models ?? []);
+      return;
+    }
     const timer = setTimeout(() => {
-      void loadModels();
-    }, 400);
+      void loadModels({ silent: cachedModelCount > 0 });
+    }, cachedModelCount > 0 ? 0 : 400);
     return () => clearTimeout(timer);
-  }, [kind, loadModels]);
+  }, [kind, cachedModelCount, config.apiKey, loadModels, provider?.models]);
 
   useEffect(() => {
     if (kind !== "cursor" || models.length === 0) return;

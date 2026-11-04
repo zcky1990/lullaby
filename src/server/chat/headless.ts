@@ -172,7 +172,11 @@ export async function runHeadlessAgent(input: HeadlessAgentInput): Promise<Headl
       tools,
       run.temperature,
       input.maxTokens,
-      run.workspace,
+      {
+        workspace: run.workspace,
+        cursorAgentId: run.cursorAgentId,
+        mode: run.mode,
+      },
     );
 
     if (run.mode === "plan") {

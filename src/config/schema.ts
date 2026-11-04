@@ -180,6 +180,14 @@ export const UpdateFileInput = z.object({
   content: z.string().max(2_000_000),
 });
 
+export const CreateWorkspacePathInput = z.object({
+  type: z.enum(["file", "dir"]),
+  parent: z.string().trim().max(1000).optional().default(""),
+  name: z.string().trim().min(1).max(255),
+  content: z.string().max(2_000_000).optional(),
+});
+export type CreateWorkspacePathInput = z.infer<typeof CreateWorkspacePathInput>;
+
 export const GenerateTicketsInput = z.object({
   title: z.string().trim().min(1).max(200),
   content: z.string().max(200_000),

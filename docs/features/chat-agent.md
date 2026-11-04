@@ -53,11 +53,29 @@ Konfigurasi tetap lewat Global Settings → LLM Providers:
 - `baseUrl`: tidak dipakai.
 - `provider`: `cursor`.
 
-Agent lokal Cursor dibuat per completion dengan tool `read`, `grep`, `glob`, `ls`, `edit`, dan
-`task` (shell/delete dinonaktifkan). Workspace project disalin ke direktori sementara, agent bekerja
-di salinan itu, lalu file yang berubah dipetakan menjadi panggilan `write_file` sintetis sehingga
-masuk ke **Review** aplikasi (atau auto-approve bila diaktifkan). Percakapan dikirim sebagai prompt
-gabungan; attachment gambar diteruskan ke SDK. Test koneksi memakai `Cursor.models.list`.
+Katalog model dari `Cursor.models.list` disimpan di `llm_providers.config.cursorModels` (plus
+`cursorModelsUpdatedAt`). Saat bootstrap, aplikasi sync ulang semua provider Cursor yang punya API
+key (`syncConfiguredCursorModels`), sehingga selector model di chat/settings memakai cache lokal
+tanpa loading. Create/update provider dan `POST /api/llm/cursor/models` (dengan `providerId`) juga
+menyimpan ulang katalog.
+
+Setiap sesi chat menyimpan `chat_sessions.cursor_agent_id` (SDK agent id). Turn pertama memakai
+`Agent.create`; turn berikutnya `Agent.resume` (fallback ke create bila resume gagal, mis. cwd
+sementara sudah hilang). Hanya pesan user terbaru (+ gambar) yang dikirim saat resume; create
+pertama menyertakan catatan runtime/system singkat. Mode Plan memakai tool tanpa `edit` dan
+`mode: "plan"`.
+
+Workspace project tetap disalin ke direktori sementara (`local.cwd`), agent bekerja di salinan, lalu
+file yang berubah dipetakan menjadi `write_file` sintetis → **Review** (atau auto-approve). Setelah
+run sukses, transcript `run.conversation()` disinkronkan ke `chat_messages` (assistant baru saja;
+dedupe). Test koneksi memakai `Cursor.models.list`.
+
+### Import riwayat Cursor
+
+`GET /api/projects/:id/chat/sessions` memanggil `Agent.list({ runtime: "local", cwd: workspace })`
+bila ada provider Cursor + `workspace_path`, lalu upsert baris `source: "cursor"` (satu sesi per
+`cursor_agent_id`). Sidebar menampilkan badge **Cursor**. Membuka sesi kosong menghidrasi pesan
+via `Agent.messages.list` / `listRuns` + `conversation()` (best-effort).
 
 ## Skills
 

@@ -1,7 +1,30 @@
 import type { LlmProviderRow } from "../../db/db.ts";
 import { request } from "../../integrations/http.ts";
-import { completeCursor } from "./cursor.ts";
+import {
+  completeCursor,
+  type CursorCompleteOptions,
+  type CursorCompleteResult,
+  type CursorConversationMessage,
+} from "./cursor.ts";
 import type { ChatAttachment, ChatTurn, ToolCall, ToolDef } from "./types.ts";
+
+export type { CursorConversationMessage };
+
+export interface CompleteOptions extends CursorCompleteOptions {}
+
+export interface CompleteResult {
+  text: string;
+  toolCalls: ToolCall[];
+  cursorAgentId?: string;
+  conversation?: CursorConversationMessage[];
+}
+
+function asCompleteOptions(
+  value: string | null | undefined | CompleteOptions,
+): CompleteOptions {
+  if (value && typeof value === "object") return value;
+  return { workspace: value ?? null };
+}
 
 export function safeParse(value: string): Record<string, unknown> {
   try {
@@ -226,10 +249,13 @@ export function complete(
   tools: ToolDef[],
   temperature?: number,
   maxTokens?: number,
-  workspace?: string | null,
-): Promise<{ text: string; toolCalls: ToolCall[] }> {
+  workspaceOrOptions?: string | null | CompleteOptions,
+): Promise<CompleteResult> {
   const type = (provider.provider || "openai").toLowerCase();
-  if (type === "cursor") return completeCursor(provider, turns, workspace);
+  const options = asCompleteOptions(workspaceOrOptions);
+  if (type === "cursor") {
+    return completeCursor(provider, turns, options) as Promise<CursorCompleteResult>;
+  }
   return type === "anthropic"
     ? completeAnthropic(provider, turns, tools, temperature, maxTokens)
     : completeOpenAi(provider, turns, tools, temperature, maxTokens);

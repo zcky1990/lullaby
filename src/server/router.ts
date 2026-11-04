@@ -31,12 +31,14 @@ import {
   ProjectUpdateInput,
   TicketTransitionInput,
   UpdateDocumentInput,
+  CreateWorkspacePathInput,
   UpdateFileInput,
 } from "../config/schema.ts";
 import { log } from "../core/logger.ts";
 import {
   createLocalTicket,
   createProject,
+  appendChatMessage,
   deleteChatSession,
   deleteLocalTicket,
   deleteProject,
@@ -63,8 +65,13 @@ import {
   recentEvents,
   updateLocalTicket,
   updateProject,
+  upsertImportedCursorSession,
   upsertIntegration,
 } from "../db/db.ts";
+import {
+  hydrateCursorConversation,
+  listLocalCursorAgents,
+} from "./chat/cursor.ts";
 import {
   createLocalDocument,
   listLocalDocuments,
@@ -96,6 +103,9 @@ import {
 import {
   findInWorkspace,
   listDirectory,
+  createWorkspaceDir,
+  createWorkspaceFile,
+  joinWorkspacePath,
   listWorkspaceFiles,
   readWorkspaceFile,
   writeWorkspaceFile,
@@ -297,6 +307,31 @@ async function writeFileHandler(projectId: string, req: Request): Promise<Respon
   }
 }
 
+async function createPathHandler(projectId: string, req: Request): Promise<Response> {
+  const project = await getProject(projectId);
+  if (!project) return json({ error: "project_not_found" }, 404);
+  if (!project.workspace_path) return json({ error: "no_workspace" }, 400);
+
+  const parsed = CreateWorkspacePathInput.safeParse(await readJson(req));
+  if (!parsed.success) {
+    return json({ error: "invalid_input", issues: parsed.error.issues }, 400);
+  }
+
+  try {
+    const path = joinWorkspacePath(parsed.data.parent ?? "", parsed.data.name);
+    if (parsed.data.type === "dir") {
+      await createWorkspaceDir(project.workspace_path, path);
+      await record("file.dir_created", { projectId, path });
+      return json({ ok: true, type: "dir", path }, 201);
+    }
+    await createWorkspaceFile(project.workspace_path, path, parsed.data.content ?? "");
+    await record("file.created", { projectId, path });
+    return json({ ok: true, type: "file", path }, 201);
+  } catch (error) {
+    return json({ error: (error as Error).message }, 400);
+  }
+}
+
 async function upsertIntegrationHandler(
   projectId: string,
   kind: IntegrationKind,
@@ -469,13 +504,42 @@ function parseChanges(value: string | null): unknown[] {
   }
 }
 
+async function findCursorLlmProvider() {
+  const providers = await listLlmProviders();
+  return providers.find((provider) =>
+    (provider.provider || "").toLowerCase() === "cursor" && !!provider.api_key?.trim()
+  ) ?? null;
+}
+
+async function importCursorAgentsIntoSessions(projectId: string, workspacePath: string): Promise<void> {
+  try {
+    const agents = await listLocalCursorAgents(workspacePath, 40);
+    for (const agent of agents) {
+      await upsertImportedCursorSession({
+        projectId,
+        cursorAgentId: agent.agentId,
+        title: agent.name || agent.summary || agent.agentId,
+        updatedAtMs: agent.lastModified,
+      });
+    }
+  } catch (error) {
+    log.debug("cursor agent import failed", { error: String(error), projectId });
+  }
+}
+
 async function listChatSessionsHandler(projectId: string): Promise<Response> {
   const project = await getProject(projectId);
   if (!project) return json({ error: "project_not_found" }, 404);
+  const cursorProvider = await findCursorLlmProvider();
+  if (cursorProvider && project.workspace_path?.trim()) {
+    await importCursorAgentsIntoSessions(projectId, project.workspace_path.trim());
+  }
   const sessions = (await listChatSessions(projectId)).map((session) => ({
     id: session.id,
     title: session.title,
     updatedAt: session.updated_at,
+    source: session.source === "cursor" ? "cursor" : "app",
+    cursorAgentId: session.cursor_agent_id ?? undefined,
   }));
   return json({ sessions });
 }
@@ -485,7 +549,26 @@ async function getChatSessionHandler(projectId: string, sessionId: string): Prom
   if (!session || session.project_id !== projectId) {
     return json({ error: "session_not_found" }, 404);
   }
-  const messages = (await listChatMessages(session.id))
+  let stored = await listChatMessages(session.id);
+  const visible = stored.filter((message) =>
+    message.role === "user" || message.role === "assistant"
+  );
+  if (session.cursor_agent_id && visible.length === 0) {
+    const project = await getProject(projectId);
+    try {
+      const conversation = await hydrateCursorConversation(
+        session.cursor_agent_id,
+        project?.workspace_path ?? null,
+      );
+      for (const message of conversation) {
+        await appendChatMessage(session.id, message.role, message.content, []);
+      }
+      if (conversation.length) stored = await listChatMessages(session.id);
+    } catch (error) {
+      log.debug("cursor session hydrate failed", { error: String(error), sessionId });
+    }
+  }
+  const messages = stored
     .filter((message) => message.role === "user" || message.role === "assistant")
     .map((message) => ({
       role: message.role,
@@ -493,7 +576,13 @@ async function getChatSessionHandler(projectId: string, sessionId: string): Prom
       changes: parseChanges(message.changes),
     }));
   return json({
-    session: { id: session.id, title: session.title, updatedAt: session.updated_at },
+    session: {
+      id: session.id,
+      title: session.title,
+      updatedAt: session.updated_at,
+      source: session.source === "cursor" ? "cursor" : "app",
+      cursorAgentId: session.cursor_agent_id ?? undefined,
+    },
     messages,
   });
 }
@@ -1600,6 +1689,9 @@ export async function handleRequest(req: Request): Promise<Response> {
     const files = pathname.match(/^\/api\/projects\/([^/]+)\/files$/);
     if (files && method === "GET") {
       return await listFilesHandler(files[1], url.searchParams.get("path") ?? "");
+    }
+    if (files && method === "POST") {
+      return await createPathHandler(files[1], req);
     }
 
     const fileIndex = pathname.match(/^\/api\/projects\/([^/]+)\/files\/index$/);

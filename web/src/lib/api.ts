@@ -484,6 +484,8 @@ export interface ChatSession {
   id: string;
   title: string;
   updatedAt: string;
+  source?: "app" | "cursor";
+  cursorAgentId?: string;
 }
 
 export interface ChatSessionDetail {
@@ -651,6 +653,14 @@ export const api = {
     request<{ ok: boolean; path: string; size: number }>(
       `/api/projects/${projectId}/files/content`,
       jsonInit("PUT", { path, content }),
+    ),
+  createPath: (
+    projectId: string,
+    payload: { type: "file" | "dir"; parent?: string; name: string; content?: string },
+  ) =>
+    request<{ ok: boolean; type: "file" | "dir"; path: string }>(
+      `/api/projects/${projectId}/files`,
+      jsonInit("POST", payload),
     ),
   projectDetail: (id: string) => request<ProjectDetail>(`/api/projects/${id}`),
   listDocuments: (projectId: string, pageId?: string, source: DocumentSource = "docmost") => {

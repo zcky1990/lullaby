@@ -781,7 +781,14 @@ export function ChatSidebar({
                 </SelectItem>
                 {sessions.map((session) => (
                   <SelectItem key={session.id} value={session.id}>
-                    {session.title}
+                    <div className="flex min-w-0 items-center gap-2 text-sm">
+                      <span className="truncate">{session.title}</span>
+                      {session.source === "cursor" ? (
+                        <Badge variant="outline" className="shrink-0 text-[10px]">
+                          Cursor
+                        </Badge>
+                      ) : null}
+                    </div>
                   </SelectItem>
                 ))}
               </SelectGroup>
