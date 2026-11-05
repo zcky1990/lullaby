@@ -11,9 +11,9 @@ import {
   encryptSecretValue,
   maskMcpServers,
   maskNotificationChannels,
+  type McpServerSecrets,
   mergeMcpServerSecrets,
   mergeNotificationChannelSecrets,
-  type McpServerSecrets,
   type NotificationChannelSecrets,
 } from "../secrets/fields.ts";
 
@@ -246,11 +246,7 @@ export async function buildGlobalBackup(options: ExportOptions): Promise<BackupB
     provider: row.provider,
     model: row.model,
     base_url: row.base_url,
-    api_key: options.includeSecrets
-      ? row.api_key
-      : row.api_key
-      ? SECRET_MASK
-      : null,
+    api_key: options.includeSecrets ? row.api_key : row.api_key ? SECRET_MASK : null,
     mode: row.mode,
     config: parseJsonObject(row.config),
     created_at: row.created_at,
@@ -623,11 +619,12 @@ function prepareRoleRows(
 }
 
 async function prepareIntegrationRows(
-  rows: Array<Record<string, unknown>>,
+  rows: ReadonlyArray<BackupIntegration | Record<string, unknown>>,
   projectIdOverride?: string,
 ): Promise<Array<Record<string, unknown>>> {
   const out: Array<Record<string, unknown>> = [];
-  for (const row of rows) {
+  for (const entry of rows) {
+    const row = entry as Record<string, unknown>;
     const kind = nullableString(row.kind);
     const projectId = projectIdOverride ?? nullableString(row.project_id);
     if (!kind || !projectId) continue;
@@ -677,9 +674,7 @@ export async function applyGlobalBackup(
   const prepared = new Map<string, Array<Record<string, unknown>>>();
   for (const spec of TABLE_SPECS) {
     const rows = bundle.tables[spec.name] ?? [];
-    const next = spec.name === "project_integrations"
-      ? await prepareIntegrationRows(rows)
-      : rows;
+    const next = spec.name === "project_integrations" ? await prepareIntegrationRows(rows) : rows;
     prepared.set(spec.name, next);
   }
 
