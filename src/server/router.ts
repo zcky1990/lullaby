@@ -4,6 +4,7 @@ import {
   ChatChangeAllInput,
   ChatChangeInput,
   ChatInput,
+  ChatToolPermissionInput,
   ClickUpConfig,
   ConfluenceConfig,
   CreateDocumentInput,
@@ -550,8 +551,23 @@ async function chatCancelHandler(projectId: string, req: Request): Promise<Respo
     return json({ ok: true, cancelled: false });
   }
   run.cancelled = true;
+  run.pendingPermission?.resolve("deny");
   run.abort?.abort();
   return json({ ok: true, cancelled: true });
+}
+
+async function chatToolPermissionHandler(req: Request): Promise<Response> {
+  const parsed = ChatToolPermissionInput.safeParse(await readJson(req));
+  if (!parsed.success) {
+    return json({ error: "invalid_input", issues: parsed.error.issues }, 400);
+  }
+  const run = getRun(parsed.data.runId);
+  const pending = run?.pendingPermission;
+  if (!run || !pending || pending.id !== parsed.data.permissionId) {
+    return json({ ok: false, error: "permission_not_found" }, 404);
+  }
+  pending.resolve(parsed.data.decision);
+  return json({ ok: true, decision: parsed.data.decision });
 }
 
 async function chatChangeHandler(req: Request): Promise<Response> {
@@ -2144,6 +2160,10 @@ export async function handleRequest(req: Request): Promise<Response> {
 
     if (pathname === "/api/chat/change-all" && method === "POST") {
       return await chatChangeAllHandler(req);
+    }
+
+    if (pathname === "/api/chat/tool-permission" && method === "POST") {
+      return await chatToolPermissionHandler(req);
     }
 
     const integration = pathname.match(/^\/api\/projects\/([^/]+)\/integrations\/([a-z]+)$/);

@@ -26,6 +26,7 @@ import {
 } from "../../secrets/fields.ts";
 import {
   AUTO_APPROVE_WRITES_KEY,
+  CHAT_AUTO_APPROVE_TOOLS_KEY,
   CHAT_DISABLED_TOOLS_KEY,
   CHAT_MAX_STEPS_KEY,
   readChatToolsSettings,
@@ -172,6 +173,7 @@ export async function getChatToolsSettingsHandler(): Promise<Response> {
   return json({
     autoApproveWrites: settings.autoApproveWrites,
     disabledTools: settings.disabledTools,
+    autoApproveTools: settings.autoApproveTools,
     maxSteps: settings.maxSteps,
     tools: CHAT_TOOL_CATALOG,
   });
@@ -186,23 +188,30 @@ export async function saveChatToolsSettingsHandler(req: Request): Promise<Respon
   const disabledTools = [
     ...new Set(parsed.data.disabledTools.filter((name) => allowed.has(name))),
   ];
+  const current = await readChatToolsSettings();
+  const autoApproveTools = parsed.data.autoApproveTools === undefined
+    ? current.autoApproveTools
+    : [...new Set(parsed.data.autoApproveTools)];
   const maxSteps = parsed.data.maxSteps === undefined
-    ? (await readChatToolsSettings()).maxSteps
+    ? current.maxSteps
     : normalizeMaxSteps(parsed.data.maxSteps);
   await setAppSetting(
     AUTO_APPROVE_WRITES_KEY,
     parsed.data.autoApproveWrites ? "true" : "false",
   );
   await setAppSetting(CHAT_DISABLED_TOOLS_KEY, JSON.stringify(disabledTools));
+  await setAppSetting(CHAT_AUTO_APPROVE_TOOLS_KEY, JSON.stringify(autoApproveTools));
   await setAppSetting(CHAT_MAX_STEPS_KEY, maxSteps == null ? "" : String(maxSteps));
   await record("settings.chat_tools_updated", {
     autoApproveWrites: parsed.data.autoApproveWrites,
     disabled: disabledTools.length,
+    autoApproveTools: autoApproveTools.length,
     maxSteps,
   });
   return json({
     autoApproveWrites: parsed.data.autoApproveWrites,
     disabledTools,
+    autoApproveTools,
     maxSteps,
     tools: CHAT_TOOL_CATALOG,
   });

@@ -88,7 +88,9 @@ export interface PendingApproval {
   summary: string;
 }
 
-export type ChatStepKind = "thinking" | "tool" | "approval" | "assistant";
+export type ChatStepKind = "thinking" | "tool" | "approval" | "permission" | "assistant";
+
+export type ToolPermissionDecision = "once" | "always" | "deny";
 
 export interface ChatStep {
   id: string;
@@ -127,6 +129,12 @@ export interface Run {
   emit?: (step: ChatStep) => void;
   abort?: AbortController;
   cancelled?: boolean;
+  allowedTools?: Set<string>;
+  pendingPermission?: {
+    id: string;
+    toolName: string;
+    resolve: (decision: ToolPermissionDecision) => void;
+  };
 }
 
 export interface PendingChange {

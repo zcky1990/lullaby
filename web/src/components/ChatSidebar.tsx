@@ -224,6 +224,7 @@ export function ChatSidebar({
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [steps, setSteps] = useState<ChatStep[]>([]);
+  const [permissionBusy, setPermissionBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | undefined>();
   const [pending, setPending] = useState<PendingState | null>(null);
   const [skills, setSkills] = useState<SkillInfo[]>([]);
@@ -868,6 +869,26 @@ export function ChatSidebar({
     }
   };
 
+  const decidePermission = async (
+    step: ChatStep,
+    decision: "once" | "always" | "deny",
+  ) => {
+    if (!step.runId || permissionBusy) return;
+    setPermissionBusy(step.id);
+    setError(undefined);
+    try {
+      await api.decideToolPermission({
+        runId: step.runId,
+        permissionId: step.id,
+        decision,
+      });
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setPermissionBusy(null);
+    }
+  };
+
   const stop = async () => {
     if (!projectId) return;
     const controller = streamAbortRef.current;
@@ -880,6 +901,7 @@ export function ChatSidebar({
     controller?.abort();
     setSending(false);
     setSteps([]);
+    setPermissionBusy(null);
   };
 
   const selectSession = async (value: string) => {
@@ -1115,6 +1137,41 @@ export function ChatSidebar({
                           {step.detail
                             ? (
                               <p className="break-words text-muted-foreground/80">{step.detail}</p>
+                            )
+                            : null}
+                          {step.kind === "permission" && step.status === "running"
+                            ? (
+                              <div className="mt-1.5 flex flex-wrap gap-1.5">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-6 px-2 text-[11px]"
+                                  disabled={permissionBusy !== null ||
+                                    step.runId === undefined}
+                                  onClick={() => void decidePermission(step, "once")}
+                                >
+                                  Allow once
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  className="h-6 px-2 text-[11px]"
+                                  disabled={permissionBusy !== null ||
+                                    step.runId === undefined}
+                                  onClick={() => void decidePermission(step, "always")}
+                                >
+                                  Always allow
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-6 px-2 text-[11px] text-destructive"
+                                  disabled={permissionBusy !== null ||
+                                    step.runId === undefined}
+                                  onClick={() => void decidePermission(step, "deny")}
+                                >
+                                  No
+                                </Button>
+                              </div>
                             )
                             : null}
                         </div>

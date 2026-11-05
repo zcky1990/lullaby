@@ -332,6 +332,7 @@ export interface ChatToolCatalogEntry {
 export interface ChatToolsSettingsResponse {
   autoApproveWrites: boolean;
   disabledTools: string[];
+  autoApproveTools: string[];
   /** null = unlimited (OpenCode-style). */
   maxSteps: number | null;
   tools: ChatToolCatalogEntry[];
@@ -554,7 +555,7 @@ export type ChatResponse =
   | { status: "error"; error: string; sessionId?: string }
   | { status: "cancelled"; message: string; sessionId: string };
 
-export type ChatStepKind = "thinking" | "tool" | "approval" | "assistant";
+export type ChatStepKind = "thinking" | "tool" | "approval" | "permission" | "assistant";
 
 export interface ChatStep {
   id: string;
@@ -965,6 +966,15 @@ export const api = {
       `/api/projects/${projectId}/chat/cancel`,
       jsonInit("POST", payload, { timeoutMs: 15_000 }),
     ),
+  decideToolPermission: (payload: {
+    runId: string;
+    permissionId: string;
+    decision: "once" | "always" | "deny";
+  }) =>
+    request<{ ok: boolean; decision: string }>(
+      "/api/chat/tool-permission",
+      jsonInit("POST", payload, { timeoutMs: 15_000 }),
+    ),
   chatChange: (payload: { runId: string; callId: string; hunk: number; accept: boolean }) =>
     request<ChatResponse>("/api/chat/change", jsonInit("POST", payload, { timeoutMs: 900_000 })),
   chatChangeAll: (payload: { runId: string; accept: boolean }) =>
@@ -1152,6 +1162,7 @@ export const api = {
   saveChatToolsSettings: (payload: {
     autoApproveWrites: boolean;
     disabledTools: string[];
+    autoApproveTools?: string[];
     maxSteps?: number | null;
   }) =>
     request<ChatToolsSettingsResponse>(

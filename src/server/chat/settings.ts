@@ -1,13 +1,15 @@
-import { getAppSetting } from "../../db/db.ts";
+import { getAppSetting, setAppSetting } from "../../db/db.ts";
 import { normalizeMaxSteps } from "./max-steps.ts";
 
 const AUTO_APPROVE_WRITES_KEY = "auto_approve_writes";
 const CHAT_DISABLED_TOOLS_KEY = "chat_disabled_tools";
+const CHAT_AUTO_APPROVE_TOOLS_KEY = "chat_auto_approve_tools";
 const CHAT_MAX_STEPS_KEY = "chat_max_steps";
 
 export interface ChatToolsSettings {
   autoApproveWrites: boolean;
   disabledTools: string[];
+  autoApproveTools: string[];
   /** null = unlimited (OpenCode-style default). */
   maxSteps: number | null;
 }
@@ -25,9 +27,22 @@ function parseStringArray(raw: string | null): string[] {
 export async function readChatToolsSettings(): Promise<ChatToolsSettings> {
   const autoApproveWrites = (await getAppSetting(AUTO_APPROVE_WRITES_KEY)) === "true";
   const disabledTools = parseStringArray(await getAppSetting(CHAT_DISABLED_TOOLS_KEY));
+  const autoApproveTools = parseStringArray(await getAppSetting(CHAT_AUTO_APPROVE_TOOLS_KEY));
   const rawMax = (await getAppSetting(CHAT_MAX_STEPS_KEY))?.trim() ?? "";
   const maxSteps = rawMax === "" || rawMax === "0" ? null : normalizeMaxSteps(Number(rawMax));
-  return { autoApproveWrites, disabledTools, maxSteps };
+  return { autoApproveWrites, disabledTools, autoApproveTools, maxSteps };
 }
 
-export { AUTO_APPROVE_WRITES_KEY, CHAT_DISABLED_TOOLS_KEY, CHAT_MAX_STEPS_KEY };
+export async function addAutoApprovedTool(name: string): Promise<void> {
+  const settings = await readChatToolsSettings();
+  if (settings.autoApproveTools.includes(name)) return;
+  const next = [...settings.autoApproveTools, name].slice(-200);
+  await setAppSetting(CHAT_AUTO_APPROVE_TOOLS_KEY, JSON.stringify(next));
+}
+
+export {
+  AUTO_APPROVE_WRITES_KEY,
+  CHAT_AUTO_APPROVE_TOOLS_KEY,
+  CHAT_DISABLED_TOOLS_KEY,
+  CHAT_MAX_STEPS_KEY,
+};

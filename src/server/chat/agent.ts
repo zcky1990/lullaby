@@ -20,7 +20,7 @@ import type { CursorConversationMessage, CursorStreamEvent } from "./cursor.ts";
 import { complete, type CompleteResult, VARIANT_TEMPERATURE } from "./llm.ts";
 import { approvalResponse, prepareWriteChange, setAdvance } from "./review.ts";
 import { isFinalMaxStep, shouldContinueSteps, toolsForStep, turnsForStep } from "./max-steps.ts";
-import { readChatToolsSettings } from "./settings.ts";
+import { addAutoApprovedTool, readChatToolsSettings } from "./settings.ts";
 import { scheduleSkillLearn } from "./skill-learn.ts";
 import { describeToolCall, emitChatStep, summarizeToolResult } from "./steps.ts";
 import { deleteRun, pruneRuns, setRun } from "./state.ts";
@@ -33,7 +33,13 @@ import {
   toolsFor,
   WRITE_TOOLS,
 } from "./tools.ts";
-import type { ChatResponse, ChatStep, Run, VisibleMessage } from "./types.ts";
+import type {
+  ChatResponse,
+  ChatStep,
+  Run,
+  ToolPermissionDecision,
+  VisibleMessage,
+} from "./types.ts";
 
 export async function syncCursorConversation(
   sessionId: string,
@@ -227,6 +233,82 @@ function createCursorProgress(
   };
 }
 
+const PERMISSION_TIMEOUT_MS = 10 * 60_000;
+
+function needsToolPermission(
+  run: Run,
+  toolName: string,
+  settings: { disabledTools: string[]; autoApproveTools: string[] },
+): boolean {
+  if (settings.disabledTools.includes(toolName)) return false;
+  if (settings.autoApproveTools.includes(toolName)) return false;
+  if (run.allowedTools?.has(toolName)) return false;
+  return true;
+}
+
+function requestToolPermission(
+  run: Run,
+  toolName: string,
+  label: string,
+): Promise<{ id: string; decision: ToolPermissionDecision }> {
+  const id = crypto.randomUUID();
+  return new Promise((resolve) => {
+    function settle(decision: ToolPermissionDecision) {
+      clearTimeout(timer);
+      if (run.pendingPermission?.id === id) run.pendingPermission = undefined;
+      resolve({ id, decision });
+    }
+    const timer = setTimeout(() => settle("deny"), PERMISSION_TIMEOUT_MS);
+    run.pendingPermission = { id, toolName, resolve: settle };
+    emitChatStep(run, {
+      id,
+      kind: "permission",
+      status: "running",
+      title: `Butuh izin: ${label}`,
+      detail: "Pilih Allow once, Always allow, atau No.",
+      toolName,
+    });
+  });
+}
+
+async function ensureToolPermission(
+  run: Run,
+  call: { name: string },
+  label: string,
+  settings: { disabledTools: string[]; autoApproveTools: string[] },
+): Promise<{ outcome: "allowed" | "denied" | "cancelled"; id?: string }> {
+  if (!needsToolPermission(run, call.name, settings)) return { outcome: "allowed" };
+  const { id, decision } = await requestToolPermission(run, call.name, label);
+  if (isCancelled(run)) return { outcome: "cancelled", id };
+  if (decision === "deny") {
+    emitChatStep(run, {
+      id,
+      kind: "permission",
+      status: "error",
+      title: `Ditolak: ${label}`,
+      detail: "Tool tidak dijalankan.",
+      toolName: call.name,
+    });
+    return { outcome: "denied", id };
+  }
+  if (decision === "always") {
+    try {
+      await addAutoApprovedTool(call.name);
+    } catch {
+      // keep the run going even if persisting the preference fails
+    }
+  }
+  run.allowedTools?.add(call.name);
+  emitChatStep(run, {
+    id,
+    kind: "permission",
+    status: "done",
+    title: decision === "always" ? `Selalu diizinkan: ${label}` : `Diizinkan: ${label}`,
+    toolName: call.name,
+  });
+  return { outcome: "allowed", id };
+}
+
 function isCancelled(run: Run): boolean {
   return run.cancelled === true || run.abort?.signal.aborted === true;
 }
@@ -347,6 +429,19 @@ export async function advance(run: Run): Promise<ChatResponse> {
           if (isCancelled(run)) return cancelledResponse(run);
           const stepId = `tool-${call.id}`;
           const label = describeToolCall(call);
+          const allowedByPlan = planAllowed.has(call.name) || isMcpChatTool(call.name);
+          const permission = allowedByPlan && !disabledTools.has(call.name)
+            ? await ensureToolPermission(run, call, label, settings)
+            : { outcome: "allowed" as const };
+          if (permission.outcome === "cancelled") return cancelledResponse(run);
+          if (permission.outcome === "denied") {
+            run.turns.push({
+              role: "tool",
+              toolCallId: call.id,
+              content: `Tool "${call.name}" dibatalkan oleh pengguna.`,
+            });
+            continue;
+          }
           emitChatStep(run, {
             id: stepId,
             kind: "tool",
@@ -394,6 +489,12 @@ export async function advance(run: Run): Promise<ChatResponse> {
         if (isCancelled(run)) return cancelledResponse(run);
         const stepId = `tool-${call.id}`;
         const label = describeToolCall(call);
+        const permission = await ensureToolPermission(run, call, label, settings);
+        if (permission.outcome === "cancelled") return cancelledResponse(run);
+        if (permission.outcome === "denied") {
+          run.batchResults.set(call.id, `Tool "${call.name}" dibatalkan oleh pengguna.`);
+          continue;
+        }
         emitChatStep(run, {
           id: stepId,
           kind: "tool",
@@ -619,6 +720,7 @@ export async function startChat(
     createdAt: Date.now(),
     emit,
     abort: new AbortController(),
+    allowedTools: new Set(),
   };
   setRun(run);
   return await advance(run);
