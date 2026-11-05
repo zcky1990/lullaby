@@ -142,7 +142,7 @@ steps:
       prompt: |
         Implementasikan ticket berikut:
         ${steps.ticket.output}
-      max_steps: 8           # 1–12, default 6
+      max_steps: 8           # 1–200, opsional; default unlimited
       variant: medium        # short | medium | long (temperature preset)
     output: RESULT
   - id: done

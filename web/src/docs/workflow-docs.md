@@ -198,7 +198,7 @@ steps:
 | `mode` | `plan` \| `build` (hanya `action: agent`; default `build`). |
 | `skill` / `skill_name` | Skill aktif (hanya agent). |
 | `variant` | `short` \| `medium` \| `long` (preset temperature agent). |
-| `max_steps` | 1–12, default 6 (batas round agent). |
+| `max_steps` | 1–200, opsional; default unlimited (langkah terakhir = text-only). |
 
 ```yaml
 steps:

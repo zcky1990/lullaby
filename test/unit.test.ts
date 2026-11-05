@@ -786,16 +786,39 @@ Deno.test("AutomationSettingsInput defaults autoBuildOnInProgress to false", () 
   equal(AutomationSettingsInput.parse({ autoBuildOnInProgress: true }).autoBuildOnInProgress, true);
 });
 
+Deno.test("max-steps helpers match OpenCode unlimited/final semantics", async () => {
+  const {
+    isFinalMaxStep,
+    normalizeMaxSteps,
+    shouldContinueSteps,
+    toolsForStep,
+  } = await import("../src/server/chat/max-steps.ts");
+  equal(normalizeMaxSteps(undefined), null);
+  equal(normalizeMaxSteps(null), null);
+  equal(normalizeMaxSteps(0), null);
+  equal(normalizeMaxSteps(8), 8);
+  equal(shouldContinueSteps(0, null), true);
+  equal(shouldContinueSteps(99, null), true);
+  equal(shouldContinueSteps(5, 5), false);
+  equal(isFinalMaxStep(4, 5), true);
+  equal(isFinalMaxStep(3, 5), false);
+  equal(toolsForStep([{ name: "read", description: "", parameters: {} }], true).length, 0);
+});
+
 Deno.test("ChatToolsSettingsInput defaults and accepts disabled tools", () => {
   const empty = ChatToolsSettingsInput.parse({});
   equal(empty.autoApproveWrites, false);
   deepEqual(empty.disabledTools, []);
+  equal(empty.maxSteps, undefined);
   const parsed = ChatToolsSettingsInput.parse({
     autoApproveWrites: true,
     disabledTools: ["write_file", "create_ticket"],
+    maxSteps: 20,
   });
   equal(parsed.autoApproveWrites, true);
   deepEqual(parsed.disabledTools, ["write_file", "create_ticket"]);
+  equal(parsed.maxSteps, 20);
+  equal(ChatToolsSettingsInput.parse({ maxSteps: null }).maxSteps, null);
 });
 
 Deno.test("toolsFor filters disabled tools and plan/build membership", () => {

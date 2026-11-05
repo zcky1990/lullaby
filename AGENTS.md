@@ -164,7 +164,9 @@ finishing a change.
   Writes (chat `write_file`) create **pending hunk changes** in `src/server/chat.ts`; a **Review
   tab** (`ReviewTab`) in the main area accepts/rejects each hunk (`POST /api/chat/change`) or all
   (`/api/chat/change-all`) before `writeWorkspaceFile` runs — unless Global Settings → Tools
-  `auto_approve_writes` is on (then writes apply immediately). Chat/workflow agent also has document
+  `auto_approve_writes` is on (then writes apply immediately). Chat agent steps default to
+  unlimited (OpenCode-style); optional `chat_max_steps` in Global Settings → Tools forces a
+  text-only summary on the final step. Chat/workflow agent also has document
   tools (`src/server/chat/document-tools.ts`: local + Docmost/Notion/Confluence) and ticket tools
   (`ticket-tools.ts`: local + Jira list/get/update/sync/transition); those mutations apply
   immediately (no Review). Chat tools can be disabled via `chat_disabled_tools` (same Tools

@@ -165,7 +165,7 @@ Field `with` mengatur parameter satu step AI. Nilai `llm` menjadi default untuk 
 | `mode` | string | `plan` \| `build` (agent saja; default `build`). |
 | `skill` / `skill_name` | string | Skill aktif untuk agent. |
 | `variant` | string | `short` \| `medium` \| `long` (preset temperature agent). |
-| `max_steps` | number | 1–12, default 6 (batas round agent). |
+| `max_steps` | number | 1–200, opsional; default unlimited (langkah terakhir = text-only). |
 
 Catatan:
 

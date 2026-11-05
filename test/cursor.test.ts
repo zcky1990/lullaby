@@ -23,6 +23,7 @@ import {
   cursorModelsAreFresh,
   storeCursorModels,
 } from "../src/server/chat/cursor-models.ts";
+import { rewriteCursorTransportError } from "../src/server/chat/cursor-sdk.ts";
 import { serializeLlm } from "../src/server/serializers.ts";
 import type { ChatTurn } from "../src/server/chat/types.ts";
 
@@ -184,6 +185,14 @@ Deno.test("storeCursorModels persists catalog on provider config", async () => {
   ]);
   const config = JSON.parse(stored!.config || "{}") as { cursorModelsUpdatedAt?: string };
   equal(typeof config.cursorModelsUpdatedAt, "string");
+});
+
+Deno.test("rewriteCursorTransportError explains Deno fetch streaming limit", () => {
+  const rewritten = rewriteCursorTransportError(
+    new Error("[unknown] The fetch API does not support streaming request bodies"),
+  );
+  equal(rewritten.message.includes("HTTP/1.1 SSE"), true);
+  equal(rewritten.message.includes("bc-"), true);
 });
 
 Deno.test("cursorModelsAreFresh respects TTL", () => {

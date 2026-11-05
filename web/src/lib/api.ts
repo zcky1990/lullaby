@@ -332,6 +332,8 @@ export interface ChatToolCatalogEntry {
 export interface ChatToolsSettingsResponse {
   autoApproveWrites: boolean;
   disabledTools: string[];
+  /** null = unlimited (OpenCode-style). */
+  maxSteps: number | null;
   tools: ChatToolCatalogEntry[];
 }
 
@@ -1068,6 +1070,7 @@ export const api = {
   saveChatToolsSettings: (payload: {
     autoApproveWrites: boolean;
     disabledTools: string[];
+    maxSteps?: number | null;
   }) =>
     request<ChatToolsSettingsResponse>(
       "/api/settings/chat-tools",

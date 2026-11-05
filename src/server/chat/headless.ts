@@ -8,11 +8,16 @@ import {
 import { loadEnabledSkills, projectSlug, readSkillBody, type SkillInfo } from "../skills.ts";
 import { systemPrompt } from "./agent.ts";
 import { complete, safeParse } from "./llm.ts";
+import {
+  isFinalMaxStep,
+  normalizeMaxSteps,
+  shouldContinueSteps,
+  toolsForStep,
+  turnsForStep,
+} from "./max-steps.ts";
 import { loadMcpChatTools } from "./mcp-tools.ts";
 import { applyWriteFile, executeTool, isMcpChatTool, toolsFor, WRITE_TOOLS } from "./tools.ts";
 import type { ChatTurn, CreatedTicket, Run, ToolCall } from "./types.ts";
-
-const DEFAULT_MAX_STEPS = 6;
 const VARIANT_TEMPERATURE: Record<string, number> = {
   short: 0.2,
   medium: 0.5,
@@ -107,7 +112,7 @@ function makeRun(
 
 export async function runHeadlessAgent(input: HeadlessAgentInput): Promise<HeadlessAgentResult> {
   const mode = input.mode ?? "build";
-  const maxSteps = Math.min(12, Math.max(1, input.maxSteps ?? DEFAULT_MAX_STEPS));
+  const maxSteps = normalizeMaxSteps(input.maxSteps);
   const slug = projectSlug(input.projectName, input.projectId);
   const skills = await loadEnabledSkills(input.workspace, slug);
   const skillMap = new Map(skills.map((skill) => [skill.name, skill]));
@@ -159,7 +164,7 @@ export async function runHeadlessAgent(input: HeadlessAgentInput): Promise<Headl
   run.mcpTools = mcp.byName;
   const tools = [...toolsFor(run.workspace, run.mode, run.skills.size > 0), ...mcp.defs];
 
-  for (let step = 0; step < maxSteps; step++) {
+  for (let step = 0; shouldContinueSteps(step, maxSteps); step++) {
     if (input.isCanceled?.()) {
       return {
         message: "(dibatalkan)",
@@ -170,10 +175,11 @@ export async function runHeadlessAgent(input: HeadlessAgentInput): Promise<Headl
       };
     }
 
+    const finalStep = isFinalMaxStep(step, maxSteps);
     const response = await complete(
       run.provider,
-      run.turns,
-      tools,
+      turnsForStep(run.turns, finalStep),
+      toolsForStep(tools, finalStep),
       run.temperature,
       input.maxTokens,
       {
@@ -183,19 +189,22 @@ export async function runHeadlessAgent(input: HeadlessAgentInput): Promise<Headl
       },
     );
 
+    if (finalStep || response.toolCalls.length === 0) {
+      const message = response.text ||
+        (run.mode === "plan"
+          ? "(Mode plan: tidak ada tool yang dijalankan. Aktifkan mode Build untuk implementasi.)"
+          : "(selesai)");
+      run.turns.push({ role: "assistant", content: message });
+      return {
+        message,
+        toolLog,
+        createdTickets: run.createdTickets,
+        filesTouched,
+        canceled: false,
+      };
+    }
+
     if (run.mode === "plan") {
-      if (response.toolCalls.length === 0) {
-        const message = response.text ||
-          "(Mode plan: tidak ada tool yang dijalankan. Aktifkan mode Build untuk implementasi.)";
-        run.turns.push({ role: "assistant", content: message });
-        return {
-          message,
-          toolLog,
-          createdTickets: run.createdTickets,
-          filesTouched,
-          canceled: false,
-        };
-      }
       run.turns.push({
         role: "assistant",
         content: response.text,
@@ -223,17 +232,6 @@ export async function runHeadlessAgent(input: HeadlessAgentInput): Promise<Headl
         run.turns.push({ role: "tool", toolCallId: call.id, content: result });
       }
       continue;
-    }
-
-    if (response.toolCalls.length === 0) {
-      run.turns.push({ role: "assistant", content: response.text });
-      return {
-        message: response.text,
-        toolLog,
-        createdTickets: run.createdTickets,
-        filesTouched,
-        canceled: false,
-      };
     }
 
     run.turns.push({
@@ -283,7 +281,7 @@ export async function runHeadlessAgent(input: HeadlessAgentInput): Promise<Headl
   }
 
   return {
-    message: "(berhenti: batas langkah tercapai)",
+    message: "(selesai)",
     toolLog,
     createdTickets: run.createdTickets,
     filesTouched,

@@ -1,6 +1,7 @@
 import { dirname, join } from "node:path";
 import type { LlmProviderRow } from "../../db/db.ts";
 import { listWorkspaceFiles, resolveWithin } from "../../fs/workspace.ts";
+import { loadCursorSdk, withCursorConnectTransport } from "./cursor-sdk.ts";
 import type { ChatTurn, ToolCall } from "./types.ts";
 
 const CURSOR_DEFAULT_MODEL = "composer-2";
@@ -313,7 +314,7 @@ export async function completeCursor(
     ? await snapshotWorkspaceFiles(workspace)
     : null;
 
-  const { Agent, CursorAgentError } = await import("@cursor/sdk");
+  const { Agent, CursorAgentError } = await loadCursorSdk();
 
   const agentOptions = cloud
     ? {
@@ -327,128 +328,130 @@ export async function completeCursor(
       ...localAgentOptions(workspace, mode),
     };
 
-  let agent: Awaited<ReturnType<typeof Agent.create>>;
-  let resumed = false;
+  return await withCursorConnectTransport(async () => {
+    let agent: Awaited<ReturnType<typeof Agent.create>>;
+    let resumed = false;
 
-  try {
-    if (opts.cursorAgentId) {
-      try {
-        agent = await Agent.resume(opts.cursorAgentId, agentOptions);
-        resumed = true;
-      } catch (error) {
-        if (cloud) {
-          throw new Error(
-            `Gagal resume cloud agent ${opts.cursorAgentId}: ${
-              error instanceof Error ? error.message : String(error)
-            }`,
-          );
+    try {
+      if (opts.cursorAgentId) {
+        try {
+          agent = await Agent.resume(opts.cursorAgentId, agentOptions);
+          resumed = true;
+        } catch (error) {
+          if (cloud) {
+            throw new Error(
+              `Gagal resume cloud agent ${opts.cursorAgentId}: ${
+                error instanceof Error ? error.message : String(error)
+              }`,
+            );
+          }
+          agent = await Agent.create(agentOptions);
         }
+      } else {
         agent = await Agent.create(agentOptions);
       }
-    } else {
-      agent = await Agent.create(agentOptions);
-    }
 
-    const prompt = resumed ? latestUserPrompt(turns) : bootstrapCursorPrompt(turns);
-    if (!prompt.trim()) {
-      await disposeAgent(agent);
-      throw new Error("Pesan user kosong.");
-    }
+      const prompt = resumed ? latestUserPrompt(turns) : bootstrapCursorPrompt(turns);
+      if (!prompt.trim()) {
+        await disposeAgent(agent);
+        throw new Error("Pesan user kosong.");
+      }
 
-    const images = imageParts(turns);
-    let run: Awaited<ReturnType<typeof agent.send>>;
-    try {
-      run = await agent.send({
-        text: prompt,
-        ...(images.length ? { images } : {}),
-        ...(mode === "plan" ? { mode: "plan" } : {}),
+      const images = imageParts(turns);
+      let run: Awaited<ReturnType<typeof agent.send>>;
+      try {
+        run = await agent.send({
+          text: prompt,
+          ...(images.length ? { images } : {}),
+          ...(mode === "plan" ? { mode: "plan" } : {}),
+        });
+      } catch (error) {
+        await disposeAgent(agent);
+        if (error instanceof CursorAgentError) {
+          throw new Error(`Cursor gagal start: ${error.message}`);
+        }
+        throw error;
+      }
+
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const timeout = new Promise<never>((_, reject) => {
+        timer = setTimeout(() => {
+          void run.cancel?.().catch(() => {});
+          reject(new Error(`Cursor run timeout setelah ${CURSOR_TIMEOUT_MS / 1000} detik.`));
+        }, CURSOR_TIMEOUT_MS);
       });
+
+      try {
+        const result = await Promise.race([run.wait(), timeout]);
+        if (result.status !== "finished") {
+          throw new Error(result.error?.message ?? `Cursor run ${result.status}.`);
+        }
+
+        let conversation: CursorConversationMessage[] | undefined;
+        try {
+          if (typeof run.supports === "function" && run.supports("conversation")) {
+            conversation = conversationFromSdkTurns(await run.conversation());
+          }
+        } catch {
+          conversation = undefined;
+        }
+
+        const agentId = typeof agent.agentId === "string" ? agent.agentId : undefined;
+
+        if (cloud) {
+          const note = "Cloud agent berjalan di VM Cursor (bukan workspace lokal); " +
+            "perubahan file tidak diajukan ke Review lokal.";
+          return {
+            text: [result.result ?? "", note].filter(Boolean).join("\n\n"),
+            toolCalls: [],
+            cursorAgentId: agentId,
+            conversation,
+          };
+        }
+
+        if (!workspace || mode === "plan" || !snapshot) {
+          return {
+            text: result.result ?? "",
+            toolCalls: [],
+            cursorAgentId: agentId,
+            conversation,
+          };
+        }
+
+        const { writes, notes } = await collectCursorWrites(workspace, snapshot);
+        try {
+          await revertWorkspaceToSnapshot(workspace, snapshot);
+        } catch {
+          notes.push(
+            "Peringatan: gagal mengembalikan sebagian file ke snapshot; cek git status.",
+          );
+        }
+        const text = [result.result ?? "", ...notes].filter(Boolean).join("\n\n");
+        return {
+          text,
+          toolCalls: writes.map((write) => ({
+            id: `${CURSOR_CALL_PREFIX}${crypto.randomUUID()}`,
+            name: "write_file",
+            arguments: JSON.stringify(write),
+          })),
+          cursorAgentId: agentId,
+          conversation,
+        };
+      } finally {
+        if (timer) clearTimeout(timer);
+        await disposeAgent(agent);
+      }
     } catch (error) {
-      await disposeAgent(agent);
-      if (error instanceof CursorAgentError) {
-        throw new Error(`Cursor gagal start: ${error.message}`);
+      if (snapshot && workspace) {
+        try {
+          await revertWorkspaceToSnapshot(workspace, snapshot);
+        } catch {
+          // best-effort restore after failure
+        }
       }
       throw error;
     }
-
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const timeout = new Promise<never>((_, reject) => {
-      timer = setTimeout(() => {
-        void run.cancel?.().catch(() => {});
-        reject(new Error(`Cursor run timeout setelah ${CURSOR_TIMEOUT_MS / 1000} detik.`));
-      }, CURSOR_TIMEOUT_MS);
-    });
-
-    try {
-      const result = await Promise.race([run.wait(), timeout]);
-      if (result.status !== "finished") {
-        throw new Error(result.error?.message ?? `Cursor run ${result.status}.`);
-      }
-
-      let conversation: CursorConversationMessage[] | undefined;
-      try {
-        if (typeof run.supports === "function" && run.supports("conversation")) {
-          conversation = conversationFromSdkTurns(await run.conversation());
-        }
-      } catch {
-        conversation = undefined;
-      }
-
-      const agentId = typeof agent.agentId === "string" ? agent.agentId : undefined;
-
-      if (cloud) {
-        const note = "Cloud agent berjalan di VM Cursor (bukan workspace lokal); " +
-          "perubahan file tidak diajukan ke Review lokal.";
-        return {
-          text: [result.result ?? "", note].filter(Boolean).join("\n\n"),
-          toolCalls: [],
-          cursorAgentId: agentId,
-          conversation,
-        };
-      }
-
-      if (!workspace || mode === "plan" || !snapshot) {
-        return {
-          text: result.result ?? "",
-          toolCalls: [],
-          cursorAgentId: agentId,
-          conversation,
-        };
-      }
-
-      const { writes, notes } = await collectCursorWrites(workspace, snapshot);
-      try {
-        await revertWorkspaceToSnapshot(workspace, snapshot);
-      } catch {
-        notes.push(
-          "Peringatan: gagal mengembalikan sebagian file ke snapshot; cek git status.",
-        );
-      }
-      const text = [result.result ?? "", ...notes].filter(Boolean).join("\n\n");
-      return {
-        text,
-        toolCalls: writes.map((write) => ({
-          id: `${CURSOR_CALL_PREFIX}${crypto.randomUUID()}`,
-          name: "write_file",
-          arguments: JSON.stringify(write),
-        })),
-        cursorAgentId: agentId,
-        conversation,
-      };
-    } finally {
-      if (timer) clearTimeout(timer);
-      await disposeAgent(agent);
-    }
-  } catch (error) {
-    if (snapshot && workspace) {
-      try {
-        await revertWorkspaceToSnapshot(workspace, snapshot);
-      } catch {
-        // best-effort restore after failure
-      }
-    }
-    throw error;
-  }
+  });
 }
 
 export interface CursorModelInfo {
@@ -461,16 +464,18 @@ const CURSOR_MODELS_TIMEOUT_MS = 12_000;
 
 export async function listCursorModels(apiKey: string): Promise<CursorModelInfo[]> {
   if (!apiKey.trim()) throw new Error("Cursor API key belum diisi.");
-  const { Cursor } = await import("@cursor/sdk");
-  const models = await Promise.race([
-    Cursor.models.list({ apiKey }),
-    new Promise<never>((_resolve, reject) => {
-      setTimeout(
-        () => reject(new Error("Cursor models list timed out")),
-        CURSOR_MODELS_TIMEOUT_MS,
-      );
-    }),
-  ]);
+  const { Cursor } = await loadCursorSdk();
+  const models = await withCursorConnectTransport(() =>
+    Promise.race([
+      Cursor.models.list({ apiKey }),
+      new Promise<never>((_resolve, reject) => {
+        setTimeout(
+          () => reject(new Error("Cursor models list timed out")),
+          CURSOR_MODELS_TIMEOUT_MS,
+        );
+      }),
+    ])
+  );
   return models.map((model) => ({
     id: model.id,
     name: model.displayName || model.id,
@@ -482,8 +487,8 @@ export async function testCursor(
   apiKey: string,
 ): Promise<{ ok: boolean; message: string; count?: number }> {
   if (!apiKey.trim()) return { ok: false, message: "Cursor API key belum diisi." };
-  const { Cursor } = await import("@cursor/sdk");
-  const models = await Cursor.models.list({ apiKey });
+  const { Cursor } = await loadCursorSdk();
+  const models = await withCursorConnectTransport(() => Cursor.models.list({ apiKey }));
   return {
     ok: true,
     message: `Cursor terhubung (${models.length} model tersedia).`,
@@ -504,12 +509,14 @@ export async function listLocalCursorAgents(
   limit = 30,
 ): Promise<CursorListedAgent[]> {
   if (!cwd.trim()) return [];
-  const { Agent } = await import("@cursor/sdk");
-  const listed = await Agent.list({
-    runtime: "local",
-    cwd,
-    limit,
-  });
+  const { Agent } = await loadCursorSdk();
+  const listed = await withCursorConnectTransport(() =>
+    Agent.list({
+      runtime: "local",
+      cwd,
+      limit,
+    })
+  );
   return (listed.items ?? []).map((item) => ({
     agentId: item.agentId,
     name: item.name || item.agentId,
@@ -524,12 +531,14 @@ export async function listCloudCursorAgents(
   limit = 30,
 ): Promise<CursorListedAgent[]> {
   if (!apiKey.trim()) return [];
-  const { Agent } = await import("@cursor/sdk");
-  const listed = await Agent.list({
-    runtime: "cloud",
-    apiKey,
-    limit,
-  });
+  const { Agent } = await loadCursorSdk();
+  const listed = await withCursorConnectTransport(() =>
+    Agent.list({
+      runtime: "cloud",
+      apiKey,
+      limit,
+    })
+  );
   return (listed.items ?? []).map((item) => ({
     agentId: item.agentId,
     name: item.name || item.agentId,
@@ -569,7 +578,7 @@ export async function hydrateCursorConversation(
   const cloud = isCloudCursorAgentId(cursorAgentId);
   const cwd = opts.cwd?.trim() || undefined;
   const apiKey = opts.apiKey?.trim() || undefined;
-  const { Agent } = await import("@cursor/sdk");
+  const { Agent } = await loadCursorSdk();
 
   const fromMessages = async (): Promise<CursorConversationMessage[]> => {
     const options: Record<string, unknown> = { limit: 100 };
@@ -613,30 +622,32 @@ export async function hydrateCursorConversation(
     return [];
   };
 
-  // Cloud: prefer listRuns (supports apiKey). Local: prefer messages.list.
-  if (cloud) {
+  return await withCursorConnectTransport(async () => {
+    // Cloud: prefer listRuns (supports apiKey). Local: prefer messages.list.
+    if (cloud) {
+      try {
+        const runs = await fromRuns();
+        if (runs.length) return runs;
+      } catch {
+        // fall through
+      }
+      try {
+        return await fromMessages();
+      } catch {
+        return [];
+      }
+    }
+
     try {
-      const runs = await fromRuns();
-      if (runs.length) return runs;
+      const messages = await fromMessages();
+      if (messages.length) return messages;
     } catch {
       // fall through
     }
     try {
-      return await fromMessages();
+      return await fromRuns();
     } catch {
       return [];
     }
-  }
-
-  try {
-    const messages = await fromMessages();
-    if (messages.length) return messages;
-  } catch {
-    // fall through
-  }
-  try {
-    return await fromRuns();
-  } catch {
-    return [];
-  }
+  });
 }

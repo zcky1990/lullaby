@@ -29,7 +29,9 @@ Mode disimpan di localStorage (`rnd.chatMode:v1`).
   `tools/call` lewat stdio/HTTP (`src/server/mcp.ts`). Cache `tools/list` ~60s. Tidak memakai
   deny-list Chat Tools; kurangi lewat MCP settings. Provider **Cursor SDK** mengabaikan tool
   OpenAI-style ini (tool Cursor sendiri).
-- Loop tool dibatasi langkah (`MAX_STEPS` di agent); sama untuk workflow `action: agent`
+- Loop tool default **unlimited** (seperti OpenCode). Opsional batas di Global Settings →
+  Tools (`chat_max_steps`); langkah terakhir = text-only + ringkasan. Workflow
+  `action: agent` memakai `max_steps` opsional (default juga unlimited)
 
 ## Dua jalur write
 
@@ -45,6 +47,8 @@ Event UI: `web/src/lib/review-events.ts`.
 `GET`/`PUT` `/api/settings/chat-tools` (`app_settings.auto_approve_writes`, `chat_disabled_tools`):
 
 - **Auto-approve writes** — skip Review untuk `write_file` di chat Build (default off).
+- **Max agent steps** — kosong/null = unlimited; jika diisi (1–200), langkah terakhir memaksa
+  jawaban teks saja (OpenCode-style).
 - **Disabled tools** — deny-list nama tool; dihilangkan dari tool list LLM dan ditolak jika
   dipanggil. UI: Global Settings → Tools (+ **Enable all**).
 - Hanya chat interaktif; workflow `action: agent` tetap auto-write dan tidak memakai deny-list ini.
@@ -52,6 +56,8 @@ Event UI: `web/src/lib/review-events.ts`.
 ## Cursor SDK provider
 
 Provider LLM dengan `provider: cursor` memakai `@cursor/sdk` (lihat `src/server/chat/cursor.ts`).
+Di runtime Deno, app memaksa HTTP/1.1 SSE + transport Node (`node:http2`) karena Deno `fetch`
+tidak mendukung streaming request body untuk local agent bidi — lihat `cursor-sdk.ts`.
 Konfigurasi tetap lewat Global Settings → LLM Providers:
 
 - `apiKey`: Cursor API key (disimpan di `llm_providers.api_key`).
@@ -60,10 +66,9 @@ Konfigurasi tetap lewat Global Settings → LLM Providers:
 - `provider`: `cursor`.
 
 Katalog model dari `Cursor.models.list` disimpan di `llm_providers.config.cursorModels` (plus
-`cursorModelsUpdatedAt`). Saat bootstrap, aplikasi sync ulang semua provider Cursor yang punya API
-key (`syncConfiguredCursorModels`), sehingga selector model di chat/settings memakai cache lokal
-tanpa loading. Create/update provider dan `POST /api/llm/cursor/models` (dengan `providerId`) juga
-menyimpan ulang katalog.
+`cursorModelsUpdatedAt`). Sync katalog berjalan di background setelah listen (`bootstrapBackground`)
+dan di-skip bila cache masih segar (&lt; 24 jam). Create/update provider dan
+`POST /api/llm/cursor/models` (dengan `providerId`) juga menyimpan ulang katalog.
 
 Setiap sesi chat menyimpan `chat_sessions.cursor_agent_id` (SDK agent id). Turn pertama memakai
 `Agent.create`; turn berikutnya `Agent.resume` (local: fallback create bila resume gagal; cloud

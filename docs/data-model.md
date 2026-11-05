@@ -86,6 +86,7 @@ Key-value global.
 | `skills_disabled` | JSON skill id[] |
 | `auto_approve_writes` | `"true"` / `"false"` (chat Build skip Review) |
 | `chat_disabled_tools` | JSON tool name[] (deny-list chat tools) |
+| `chat_max_steps` | kosong = unlimited; angka 1–200 = batas langkah agent |
 | `auto_build_on_in_progress` | `"true"` / `"false"` |
 | `notifications` | JSON: `{ channels: [{ id, name, type, enabled, webhookUrl }] }` (`webhookUrl` terenkripsi) |
 | `terminal_shell` | `"zsh"` / `"bash"` |

@@ -19,6 +19,7 @@ import { diffLines } from "../diff.ts";
 import type { CursorConversationMessage } from "./cursor.ts";
 import { complete, type CompleteResult, VARIANT_TEMPERATURE } from "./llm.ts";
 import { approvalResponse, prepareWriteChange, setAdvance } from "./review.ts";
+import { isFinalMaxStep, shouldContinueSteps, toolsForStep, turnsForStep } from "./max-steps.ts";
 import { readChatToolsSettings } from "./settings.ts";
 import { scheduleSkillLearn } from "./skill-learn.ts";
 import { deleteRun, pruneRuns, setRun } from "./state.ts";
@@ -66,8 +67,6 @@ async function rememberCursorResult(run: Run, response: CompleteResult): Promise
 }
 
 const CODE_REVIEW_SKILL = "code-review";
-
-const MAX_STEPS = 6;
 
 function skillPrompt(skills: SkillInfo[]): string {
   if (!skills.length) return "";
@@ -125,11 +124,13 @@ export async function advance(run: Run): Promise<ChatResponse> {
       ...toolsFor(run.workspace, run.mode, run.skills.size > 0, disabledTools),
       ...mcp.defs,
     ];
-    for (let step = 0; step < MAX_STEPS; step++) {
+    const maxSteps = settings.maxSteps;
+    for (let step = 0; shouldContinueSteps(step, maxSteps); step++) {
+      const finalStep = isFinalMaxStep(step, maxSteps);
       const response = await complete(
         run.provider,
-        run.turns,
-        tools,
+        turnsForStep(run.turns, finalStep),
+        toolsForStep(tools, finalStep),
         run.temperature,
         undefined,
         {
@@ -139,21 +140,26 @@ export async function advance(run: Run): Promise<ChatResponse> {
         },
       );
       await rememberCursorResult(run, response);
+
+      if (finalStep || response.toolCalls.length === 0) {
+        const message = response.text ||
+          (run.mode === "plan"
+            ? "(Mode plan: tidak ada tool yang dijalankan. Aktifkan mode Build untuk implementasi.)"
+            : "(selesai)");
+        run.turns.push({ role: "assistant", content: message });
+        await appendChatMessage(run.sessionId, "assistant", message, run.changes);
+        if (run.mode === "build") scheduleSkillLearn(run);
+        deleteRun(run.id);
+        return {
+          status: "done",
+          message,
+          sessionId: run.sessionId,
+          changes: run.mode === "plan" ? [] : run.changes,
+          createdTickets: run.mode === "plan" ? [] : run.createdTickets,
+        };
+      }
+
       if (run.mode === "plan") {
-        if (response.toolCalls.length === 0) {
-          const message = response.text ||
-            "(Mode plan: tidak ada tool yang dijalankan. Aktifkan mode Build untuk implementasi.)";
-          run.turns.push({ role: "assistant", content: message });
-          await appendChatMessage(run.sessionId, "assistant", message, []);
-          deleteRun(run.id);
-          return {
-            status: "done",
-            message,
-            sessionId: run.sessionId,
-            changes: [],
-            createdTickets: [],
-          };
-        }
         run.turns.push({
           role: "assistant",
           content: response.text,
@@ -182,19 +188,6 @@ export async function advance(run: Run): Promise<ChatResponse> {
           run.turns.push({ role: "tool", toolCallId: call.id, content: result });
         }
         continue;
-      }
-      if (response.toolCalls.length === 0) {
-        run.turns.push({ role: "assistant", content: response.text });
-        await appendChatMessage(run.sessionId, "assistant", response.text, run.changes);
-        scheduleSkillLearn(run);
-        deleteRun(run.id);
-        return {
-          status: "done",
-          message: response.text,
-          sessionId: run.sessionId,
-          changes: run.changes,
-          createdTickets: run.createdTickets,
-        };
       }
 
       run.turns.push({
@@ -269,7 +262,7 @@ export async function advance(run: Run): Promise<ChatResponse> {
       run.pendingBatch = [];
       run.batchResults.clear();
     }
-    const message = "(berhenti: batas langkah tercapai)";
+    const message = "(selesai)";
     await appendChatMessage(run.sessionId, "assistant", message, run.changes);
     scheduleSkillLearn(run);
     deleteRun(run.id);

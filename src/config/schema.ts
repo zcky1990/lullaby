@@ -349,6 +349,8 @@ export type NotificationTestInput = z.infer<typeof NotificationTestInput>;
 export const ChatToolsSettingsInput = z.object({
   autoApproveWrites: z.boolean().default(false),
   disabledTools: z.array(z.string().trim().min(1).max(80)).max(50).default([]),
+  /** null/omit = unlimited agent steps (OpenCode-style). */
+  maxSteps: z.number().int().min(1).max(200).nullable().optional(),
 });
 export type ChatToolsSettingsInput = z.infer<typeof ChatToolsSettingsInput>;
 

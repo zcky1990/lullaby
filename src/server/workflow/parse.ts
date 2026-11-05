@@ -52,7 +52,7 @@ const stepWithSchema = z
     skill: z.string().trim().min(1).max(80).optional(),
     skill_name: z.string().trim().min(1).max(80).optional(),
     variant: z.enum(["short", "medium", "long"]).optional(),
-    max_steps: z.number().int().min(1).max(12).optional(),
+    max_steps: z.number().int().min(1).max(200).optional(),
     value: z.union([z.string(), z.number(), z.boolean()]).optional(),
     routes: z
       .record(

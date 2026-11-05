@@ -27,8 +27,10 @@ import {
 import {
   AUTO_APPROVE_WRITES_KEY,
   CHAT_DISABLED_TOOLS_KEY,
+  CHAT_MAX_STEPS_KEY,
   readChatToolsSettings,
 } from "../chat/settings.ts";
+import { normalizeMaxSteps } from "../chat/max-steps.ts";
 import { CHAT_TOOL_CATALOG } from "../chat/tools.ts";
 import { json, readJson, record } from "../http.ts";
 import { lspPresets, probeLspCommand, readLspSettings, writeLspSettings } from "../lsp.ts";
@@ -170,6 +172,7 @@ export async function getChatToolsSettingsHandler(): Promise<Response> {
   return json({
     autoApproveWrites: settings.autoApproveWrites,
     disabledTools: settings.disabledTools,
+    maxSteps: settings.maxSteps,
     tools: CHAT_TOOL_CATALOG,
   });
 }
@@ -183,18 +186,24 @@ export async function saveChatToolsSettingsHandler(req: Request): Promise<Respon
   const disabledTools = [
     ...new Set(parsed.data.disabledTools.filter((name) => allowed.has(name))),
   ];
+  const maxSteps = parsed.data.maxSteps === undefined
+    ? (await readChatToolsSettings()).maxSteps
+    : normalizeMaxSteps(parsed.data.maxSteps);
   await setAppSetting(
     AUTO_APPROVE_WRITES_KEY,
     parsed.data.autoApproveWrites ? "true" : "false",
   );
   await setAppSetting(CHAT_DISABLED_TOOLS_KEY, JSON.stringify(disabledTools));
+  await setAppSetting(CHAT_MAX_STEPS_KEY, maxSteps == null ? "" : String(maxSteps));
   await record("settings.chat_tools_updated", {
     autoApproveWrites: parsed.data.autoApproveWrites,
     disabled: disabledTools.length,
+    maxSteps,
   });
   return json({
     autoApproveWrites: parsed.data.autoApproveWrites,
     disabledTools,
+    maxSteps,
     tools: CHAT_TOOL_CATALOG,
   });
 }
