@@ -1,6 +1,7 @@
 import { bootstrap, bootstrapBackground } from "./src/core/bootstrap.ts";
 import { createMainWindow } from "./src/desktop/window.ts";
-import { handleRequest } from "./src/server/router.ts";
+import { handleBackupRequest } from "./src/server/routes/backup.ts";
+import { handleRequest as handleCoreRequest } from "./src/server/router.ts";
 
 await bootstrap();
 
@@ -19,7 +20,10 @@ function listenOptions(): Deno.ServeTcpOptions {
 const opts = listenOptions();
 createMainWindow({ title: "Lullaby" });
 
-Deno.serve(opts, handleRequest);
+Deno.serve(
+  opts,
+  async (req) => (await handleBackupRequest(req)) ?? await handleCoreRequest(req),
+);
 bootstrapBackground();
 
 console.log(`Lullaby listening on 127.0.0.1:${opts.port ?? "(auto)"}`);

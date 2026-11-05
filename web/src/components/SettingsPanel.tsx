@@ -1,13 +1,14 @@
-import { FolderCog, type LucideIcon, Plug, ScrollText } from "lucide-react";
+import { Database, FolderCog, Plug, ScrollText, type LucideIcon } from "lucide-react";
 import { PanelHeader } from "@/components/PanelHeader";
 import { cn } from "@/lib/utils";
 
-export type SettingsSection = "workspace" | "integrations" | "activity";
+export type SettingsSection = "workspace" | "integrations" | "activity" | "backup";
 
 const SECTIONS: { id: SettingsSection; label: string; icon: LucideIcon }[] = [
   { id: "workspace", label: "Workspace", icon: FolderCog },
   { id: "integrations", label: "Integrations", icon: Plug },
   { id: "activity", label: "Activity", icon: ScrollText },
+  { id: "backup", label: "Backup & Restore", icon: Database },
 ];
 
 interface Props {

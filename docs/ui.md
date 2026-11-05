@@ -7,16 +7,16 @@ status bar.
 
 | Menu | Panel / perilaku |
 | --- | --- |
-| Workspace | `WorkspacePanel` — daftar & pilih project |
+| Workspace | `WorkspacePanel` — daftar, buat, pilih, ganti nama (klik dua kali / ikon pensil), hapus project |
 | Explorer | `FileTreePanel` — butuh `workspace_path`; tombol buat file/folder |
 | Document | `DocumentPanel` — Local / Docmost / Notion / Confluence |
 | Ticket | `TicketPanel` — filter + create/refresh; board full-height dengan scroll per kolom |
 | Workflows | `WorkflowPanel` — daftar YAML, recent runs, create/refresh |
 | Cron | `CronPanel` — jadwal `schedule`/`on`, toggle enable, docs wiki |
-| Project Settings | `SettingsPanel` — section nav |
+| Project Settings | `SettingsPanel` — section nav (Workspace, Integrations, Activity, Backup & Restore) |
 | Terminal | Toggle **bottom panel** (bukan tab utama) |
 | Git | `GitPanel` — branches / refresh |
-| Global Settings | `GlobalSettingsPanel` — section nav di aside |
+| Global Settings | `GlobalSettingsPanel` — section nav di aside (termasuk Backup & Restore) |
 
 File dan dokumen terbuka sebagai **tab dinamis**. Menu Workspace / Ticket / Settings / Git / Global
 membuka **singleton tab**.
@@ -50,6 +50,7 @@ Tombol **Chat** di header. Fitur:
 - Slash skill `/nama-skill`
 - Event `rnd:auto-build` untuk automation
 - Aksi **Kerjakan tiket** di dialog detail tiket
+- Collapsible **Perubahan file** setelah chat selesai
 
 ### Drag & drop ke chat
 
@@ -79,6 +80,57 @@ Dialog detail tiket punya tombol **Kerjakan tiket**:
 1. dialog ditutup (dialog modal memblokir area chat),
 2. `rnd:chat-open-request` membuka panel chat,
 3. `rnd:auto-build` mengirim prompt `buildAutoBuildPrompt` (mode Build, sesi baru).
+
+### Daftar file yang berubah (collapsible)
+
+Setelah chat selesai (`status: "done"`), pesan asisten menyimpan `changes` (`FileChange[]`) dan
+menampilkan collapsible **Perubahan file** — komponen `web/src/components/ChatChangesList.tsx`:
+
+- Header collapsible (default **tertutup**): jumlah file, ringkasan “n baru, m diubah”, total
+  `+added` / `−removed`. Klik header untuk membuka/menutup.
+- Satu baris per path (font mono, `truncate`, `title` = path lengkap): ikon `FilePlus2` untuk file
+  **baru**, `FileCode2` untuk file **diubah**, label aksi, dan angka +/−.
+- **Klik baris** → `dispatchChangesApplied([path])` (`web/src/lib/review-events.ts`). `App.tsx`
+  sudah menangani event itu dengan `openFile(path, true)`, sehingga file dibuka/difokuskan sebagai
+  **tab editor** dan isinya di-refresh dari disk.
+- Normalisasi & dedupe path: `web/src/lib/chat-changes.ts` (path sama digabung, aksi `create`
+  dipertahankan, angka memakai kondisi akhir file).
+- Daftar juga tampil saat sesi lama dibuka, karena `changes` per pesan disimpan di DB
+  (`GET /api/projects/:id/chat/sessions/:sessionId`).
+- Perubahan yang masih menunggu persetujuan tidak masuk daftar ini (pakai tombol **Buka review** /
+  tombol accept di langkah chat).
+
+## Workspace (nama project)
+
+`WorkspacePanel` bisa mengganti nama project tanpa keluar dari panel:
+
+- **Klik dua kali** baris project, atau klik ikon **pensil** (muncul saat hover).
+- Input inline: `Enter` simpan, `Escape` batal, tombol ✓ / ✕.
+- Nama baru dikirim lewat `PUT /api/projects/:id` (`{ name }`), daftar project langsung diperbarui.
+- Nama di header/toolbar mengikuti data detail project yang dimuat ulang saat project diganti.
+
+## Backup & restore
+
+Dua tempat, komponen yang sama (`web/src/components/BackupSettings.tsx`):
+
+| Lokasi | Section | Cakupan |
+| --- | --- | --- |
+| Global Settings | Backup & Restore | Seluruh config (`app_settings`, LLM provider, role, integrasi) + database (project, tiket lokal, dokumen lokal, chat, workflow) |
+| Project Settings | Backup & Restore | Integration config project + data milik project tersebut |
+
+Alur UI:
+
+1. **Export** — toggle “Sertakan nilai rahasia” (default mati → nilai diganti `••••••••`), lalu
+   **Unduh backup** (`web/src/lib/backup.ts` membuat blob JSON) atau **Simpan ke folder backup**
+   (`?save=1` → server menulis `<data dir>/backups/<file>.json`, path ditampilkan di UI).
+2. **Import** — pilih file `.json` (divalidasi `format`/`scope` di klien), mode **Merge** (upsert)
+   atau **Replace** (hapus data scope lebih dulu, butuh konfirmasi), lalu **Import**.
+3. Setelah import global, tombol **Muat ulang aplikasi** muncul karena state UI di memori belum
+   menyesuaikan.
+
+Catatan: import project menyalin tiket/sesi chat/workflow run dengan id baru sehingga data lama
+tidak tertimpa. Import tanpa menyertakan rahasia akan menyisakan nilai `••••••••` yang perlu diisi
+ulang di form integrasi.
 
 ## Terminal panel
 

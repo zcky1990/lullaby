@@ -1,6 +1,7 @@
 import {
   Bell,
   Cpu,
+  Database,
   Info,
   type LucideIcon,
   MessageSquareText,
@@ -28,6 +29,7 @@ export type GlobalSection =
   | "automation"
   | "notifications"
   | "terminal"
+  | "backup"
   | "about";
 
 const SECTIONS: { id: GlobalSection; label: string; icon: LucideIcon }[] = [
@@ -42,6 +44,7 @@ const SECTIONS: { id: GlobalSection; label: string; icon: LucideIcon }[] = [
   { id: "automation", label: "Automation", icon: Zap },
   { id: "notifications", label: "Notifications", icon: Bell },
   { id: "terminal", label: "Terminal", icon: SquareTerminal },
+  { id: "backup", label: "Backup & Restore", icon: Database },
   { id: "about", label: "About", icon: Info },
 ];
 

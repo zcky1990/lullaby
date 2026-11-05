@@ -2,7 +2,8 @@
 
 Base: proses lokal Deno. Auth: cookie `app_token` atau header `x-app-token`, kecuali health.
 
-Implementasi: `src/server/router.ts`. Input divalidasi Zod (`src/config/schema.ts`).
+Implementasi: `src/server/router.ts` (+ `src/server/routes/*`). Input divalidasi Zod
+(`src/config/schema.ts`).
 
 ## Meta & events
 
@@ -11,6 +12,31 @@ Implementasi: `src/server/router.ts`. Input divalidasi Zod (`src/config/schema.t
 | `GET`  | `/api/health`        | Open, tanpa auth |
 | `GET`  | `/api/events`        | SSE activity     |
 | `GET`  | `/api/events/recent` | Snapshot events  |
+
+## Backup & restore
+
+Implementasi: `src/server/backup.ts` + `src/server/routes/backup.ts` (didaftarkan dari
+`main.ts` sebelum router utama).
+
+| Method | Path                             | Keterangan                                            |
+| ------ | -------------------------------- | ----------------------------------------------------- |
+| `GET`  | `/api/backup/global?secrets=&save=` | Bundle JSON seluruh config + database              |
+| `POST` | `/api/backup/global`             | `{ bundle, mode: merge\|replace }` → restore global   |
+| `GET`  | `/api/projects/:id/backup?secrets=&save=` | Bundle JSON project (config + data)          |
+| `POST` | `/api/projects/:id/backup`       | `{ bundle, mode: merge\|replace }` → restore project  |
+
+- `secrets=1` menyertakan nilai rahasia (api key, token integrasi, webhook) apa adanya; default
+  diganti `••••••••`.
+- `save=1` menulis file ke `<data dir>/backups/<nama-file>.json` dan mengembalikan
+  `{ ok, path, bytes }` (dipakai saat webview memblokir unduhan).
+- Bundle memakai `format: "lullaby-backup"`, `version: 1`, `scope: "global" | "project"`.
+- Isi bundle: `settings` (app_settings), `llmProviders`, `roles`, `project` (project scope),
+  `integrations` (project scope), dan `tables` (projects, project_integrations, local_tickets,
+  local_documents, chat_sessions, chat_messages, workflow_*).
+- Import `merge` memakai upsert per primary key; `replace` menghapus data scope tersebut lebih
+  dulu. Import project selalu menyalin baris dengan id baru (tiket, sesi chat, workflow run) agar
+  tidak menimpa data yang ada; baris yatim (parent tidak ada) dilewati.
+- Rahasia dienkripsi ulang dengan master key mesin tujuan saat import.
 
 ## Settings (global)
 
@@ -35,7 +61,7 @@ Implementasi: `src/server/router.ts`. Input divalidasi Zod (`src/config/schema.t
 | Method               | Path                                   | Keterangan                                                      |
 | -------------------- | -------------------------------------- | --------------------------------------------------------------- |
 | `GET`/`POST`         | `/api/projects`                        | List / create                                                   |
-| `GET`/`PUT`/`DELETE` | `/api/projects/:id`                    | Detail / update / hapus (CASCADE data lokal; folder disk tetap) |
+| `GET`/`PUT`/`DELETE` | `/api/projects/:id`                    | Detail / update (termasuk `name`) / hapus (CASCADE data lokal)   |
 | `PUT`/`POST`         | `/api/projects/:id/integrations/:kind` | Upsert integrasi                                                |
 
 ## Files (workspace)

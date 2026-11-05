@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { useState } from "react";
 import { ChevronRight, FolderOpen, GitBranchPlus, Plus } from "lucide-react";
 import { ActivityFeed, type ActivityEvent } from "@/components/ActivityFeed";
+import { BackupSettings } from "@/components/BackupSettings";
 import { IntegrationForm } from "@/components/IntegrationForm";
 import type { SettingsSection } from "@/components/SettingsPanel";
 import { Badge } from "@/components/ui/badge";
@@ -246,6 +247,8 @@ export function SettingsView({
       )}
 
       {section === "activity" && <ActivityFeed events={activity} />}
+
+      {section === "backup" && <BackupSettings scope="project" projectId={project.id} />}
     </div>
   );
 }
@@ -389,7 +392,7 @@ function CloneSection({
     <div className="flex flex-col gap-4">
       <p className="text-xs text-muted-foreground">
         Clone langsung ke path workspace di atas. Folder harus kosong. Auth memakai credential
-        git di mesin (HTTPS credential helper / SSH key).
+        mesin (HTTPS credential helper / SSH key).
       </p>
       {!ready ? (
         <p className="text-xs text-muted-foreground">

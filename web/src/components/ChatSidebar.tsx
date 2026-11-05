@@ -21,6 +21,7 @@ import {
   Trash2,
   X,
 } from "lucide-react";
+import { ChatChangesList } from "@/components/ChatChangesList";
 import { SkillMentionMenu, type SkillOption } from "@/components/SkillMentionMenu";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -426,6 +427,16 @@ export function ChatSidebar({
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
   }, [entries, sending, pending, steps]);
+
+  /**
+   * Buka file hasil perubahan chat di tab editor.
+   * Memakai event `CHANGES_APPLIED_EVENT` yang sudah ditangani `App.tsx`
+   * (`openFile(path, true)`), jadi tab langsung dibuat/difokuskan tanpa prop baru.
+   */
+  const openChangedFile = useCallback((path: string) => {
+    if (!path) return;
+    dispatchChangesApplied([path]);
+  }, []);
 
   const refreshSessions = useCallback(async () => {
     if (!projectId) {
@@ -1164,17 +1175,28 @@ export function ChatSidebar({
                     : null}
                   {entry.role === "assistant"
                     ? (
-                      entry.content
-                        ? (
-                          <Suspense fallback={<Skeleton className="h-4 w-32" />}>
-                            <MarkdownView
-                              content={entry.content}
-                              fontSize={chatFontSize}
-                              fontFamily={chatFontFamily}
+                      <>
+                        {entry.content
+                          ? (
+                            <Suspense fallback={<Skeleton className="h-4 w-32" />}>
+                              <MarkdownView
+                                content={entry.content}
+                                fontSize={chatFontSize}
+                                fontFamily={chatFontFamily}
+                              />
+                            </Suspense>
+                          )
+                          : null}
+                        {entry.changes?.length
+                          ? (
+                            <ChatChangesList
+                              changes={entry.changes}
+                              onOpenFile={openChangedFile}
+                              className="mt-2"
                             />
-                          </Suspense>
-                        )
-                        : null
+                          )
+                          : null}
+                      </>
                     )
                     : <span className="whitespace-pre-wrap">{entry.content}</span>}
                 </div>

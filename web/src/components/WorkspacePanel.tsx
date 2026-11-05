@@ -95,6 +95,10 @@ export function WorkspacePanel({
   return (
     <>
       <PanelHeader title="Workspace" count={projects.length} />
+      <p className="px-3 pb-2 text-[11px] leading-snug text-muted-foreground">
+        Klik dua kali nama project (atau ikon pensil) untuk <span className="font-medium">ganti
+        nama</span>. Nama hanya label — folder workspace & data lokal tidak berubah.
+      </p>
       <div className="flex flex-col gap-2 px-3 pb-3">
         <Input
           value={name}
@@ -199,6 +203,7 @@ export function WorkspacePanel({
                     type="button"
                     onClick={() => onSelect(project.id)}
                     onDoubleClick={() => startEdit(project)}
+                    title="Klik untuk pilih, klik dua kali untuk ganti nama"
                     className="flex min-w-0 flex-1 flex-col items-start gap-0.5 px-3 py-2 text-left text-xs"
                   >
                     <span className="flex w-full items-center justify-between gap-2">
@@ -213,7 +218,7 @@ export function WorkspacePanel({
                       {project.workspace_path ?? "Belum ada workspace"}
                     </span>
                   </button>
-                  <div className="mt-1.5 mr-1 flex shrink-0 gap-0.5 opacity-0 group-hover:opacity-100">
+                  <div className="mt-1.5 mr-1 flex shrink-0 gap-0.5 opacity-60 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
                     <Button
                       size="icon"
                       variant="ghost"
@@ -223,7 +228,7 @@ export function WorkspacePanel({
                         startEdit(project);
                       }}
                       aria-label={`Ganti nama project ${project.name}`}
-                      title="Ganti nama"
+                      title="Ganti nama project"
                     >
                       <Pencil />
                     </Button>

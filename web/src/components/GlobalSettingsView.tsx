@@ -23,6 +23,7 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { AutomationSettings } from "@/components/AutomationSettings";
+import { BackupSettings } from "@/components/BackupSettings";
 import { ChatToolsSettings } from "@/components/ChatToolsSettings";
 import { LlmProvidersSettings } from "@/components/LlmProvidersSettings";
 import { LspSettingsPanel } from "@/components/LspSettings";
@@ -172,6 +173,9 @@ export function GlobalSettingsView({
   if (section === "automation") return <AutomationSettings />;
   if (section === "notifications") return <NotificationSettings />;
   if (section === "terminal") return <TerminalSettings />;
+  if (section === "backup") {
+    return <BackupSettings scope="global" projectId={projectId} />;
+  }
   return <About />;
 }
 
