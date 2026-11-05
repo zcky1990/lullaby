@@ -6,6 +6,7 @@ import { startWorkflowScheduler } from "../server/workflow/scheduler.ts";
 import { log } from "./logger.ts";
 import { appDataDir, ensureAppDataDir } from "./paths.ts";
 
+/** Blocking work required before the HTTP server / window can open. */
 export async function bootstrap(): Promise<void> {
   const dir = await ensureAppDataDir();
   await getDb();
@@ -20,15 +21,21 @@ export async function bootstrap(): Promise<void> {
   if (installedSkills.length > 0) {
     log.info("installed default skills", { skills: installedSkills });
   }
-  try {
-    const synced = await syncConfiguredCursorModels();
-    if (synced > 0) {
-      log.info("synced cursor models", { providers: synced });
-    }
-  } catch (error) {
-    log.warn("cursor model sync skipped", { error: String(error) });
-  }
   startWorkflowScheduler();
   await appendEvent("app.started", { dataDir: dir });
   log.info("bootstrap complete", { dataDir: appDataDir() });
+}
+
+/** Non-blocking work that must not delay first paint / listen. */
+export function bootstrapBackground(): void {
+  void (async () => {
+    try {
+      const synced = await syncConfiguredCursorModels();
+      if (synced > 0) {
+        log.info("synced cursor models", { providers: synced });
+      }
+    } catch (error) {
+      log.warn("cursor model sync skipped", { error: String(error) });
+    }
+  })();
 }

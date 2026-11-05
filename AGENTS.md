@@ -151,8 +151,8 @@ finishing a change.
 - Integration credentials (API token/key) are entered as normal text and stored **encrypted at
   rest** in integration `config`, `llm_providers.api_key`, MCP `env`/`headers`, and notification
   `webhookUrl` (`enc:v1:` AES-256-GCM via `src/secrets/`; master key in macOS Keychain or
-  `{appDataDir}/.master.key`, override `RND_SECRETS_KEY`). Decrypt at the DB/settings boundary; mask
-  for the renderer. Do not log secrets.
+  `{appDataDir}/.master.key` preferred over Keychain for startup speed, override `RND_SECRETS_KEY`).
+  Decrypt at the DB/settings boundary; mask for the renderer. Do not log secrets.
 - Validate all API inputs and integration configs with Zod (`src/config/schema.ts`).
 - Desktop-only globals: `deno check --desktop main.ts` loads `lib.deno.desktop.d.ts`; prefer that
   over casts. `src/desktop/window.ts` guards `Deno.BrowserWindow` at runtime so `deno run` still

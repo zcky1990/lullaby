@@ -33,6 +33,18 @@ export async function refreshCursorModels(
   return models;
 }
 
+const CURSOR_MODELS_TTL_MS = 24 * 60 * 60 * 1000;
+
+export function cursorModelsAreFresh(configRaw: string, now = Date.now()): boolean {
+  const config = parseProviderConfig(configRaw);
+  const updatedAt = typeof config.cursorModelsUpdatedAt === "string"
+    ? Date.parse(config.cursorModelsUpdatedAt)
+    : NaN;
+  if (!Number.isFinite(updatedAt)) return false;
+  if (!Array.isArray(config.cursorModels) || config.cursorModels.length === 0) return false;
+  return now - updatedAt < CURSOR_MODELS_TTL_MS;
+}
+
 export async function syncConfiguredCursorModels(): Promise<number> {
   const providers = await listLlmProviders();
   let synced = 0;
@@ -40,6 +52,7 @@ export async function syncConfiguredCursorModels(): Promise<number> {
     if ((provider.provider || "").toLowerCase() !== "cursor") continue;
     const apiKey = provider.api_key?.trim();
     if (!apiKey) continue;
+    if (cursorModelsAreFresh(provider.config)) continue;
     try {
       await refreshCursorModels(provider.id, apiKey);
       synced += 1;

@@ -131,29 +131,31 @@ export async function getMasterKeyBytes(): Promise<Uint8Array> {
     return cached;
   }
 
-  const fromKeychain = await readKeychain();
-  if (fromKeychain) {
-    cached = fromKeychain;
-    return cached;
-  }
-
+  // Prefer the local file — spawning `security` on every launch is slow and can
+  // block on Keychain UI. Keychain remains a backup / initial source.
   const fromFile = await readKeyFile();
   if (fromFile) {
     cached = fromFile;
-    if (Deno.build.os === "darwin") {
-      await writeKeychain(fromFile);
+    return cached;
+  }
+
+  const fromKeychain = await readKeychain();
+  if (fromKeychain) {
+    cached = fromKeychain;
+    try {
+      await writeKeyFile(fromKeychain);
+    } catch (error) {
+      log.debug("could not mirror master key to file", { error: String(error) });
     }
     return cached;
   }
 
   const created = generateKey();
+  await writeKeyFile(created);
   const storedInKeychain = await writeKeychain(created);
-  if (!storedInKeychain) {
-    await writeKeyFile(created);
-  }
   cached = created;
   log.info("created secrets master key", {
-    storage: storedInKeychain ? "keychain" : "file",
+    storage: storedInKeychain ? "file+keychain" : "file",
   });
   return cached;
 }

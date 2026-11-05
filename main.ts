@@ -1,4 +1,4 @@
-import { bootstrap } from "./src/core/bootstrap.ts";
+import { bootstrap, bootstrapBackground } from "./src/core/bootstrap.ts";
 import { createMainWindow } from "./src/desktop/window.ts";
 import { handleRequest } from "./src/server/router.ts";
 
@@ -20,5 +20,6 @@ const opts = listenOptions();
 createMainWindow({ title: "Lullaby" });
 
 Deno.serve(opts, handleRequest);
+bootstrapBackground();
 
 console.log(`Lullaby listening on 127.0.0.1:${opts.port ?? "(auto)"}`);

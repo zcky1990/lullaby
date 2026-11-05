@@ -20,9 +20,9 @@ import {
   maskMcpServers,
   maskNotificationChannels,
   type McpServerSecrets,
-  type NotificationChannelSecrets,
   mergeMcpServerSecrets,
   mergeNotificationChannelSecrets,
+  type NotificationChannelSecrets,
 } from "../../secrets/fields.ts";
 import {
   AUTO_APPROVE_WRITES_KEY,

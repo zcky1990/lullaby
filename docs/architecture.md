@@ -2,8 +2,9 @@
 
 ## Entry & bootstrap
 
-1. `main.ts` — `bootstrap()` → `createMainWindow()` → `Deno.serve(..., handleRequest)`
-2. `src/core/bootstrap.ts` — pastikan app data dir, buka DB, prune events
+1. `main.ts` — `bootstrap()` → `createMainWindow()` → `Deno.serve(...)` →
+   `bootstrapBackground()` (Cursor model sync, non-blocking)
+2. `src/core/bootstrap.ts` — pastikan app data dir, buka DB, prune events, secrets migrate
 3. `src/desktop/window.ts` — `Deno.BrowserWindow` (null jika bukan runtime desktop)
 4. `src/server/router.ts` — satu `handleRequest` untuk static + REST + SSE + upgrade terminal
 
@@ -54,8 +55,9 @@ Build: `npm --prefix web run build` → `scripts/build-assets.ts` embed ke gener
 - Semua `/api/*` kecuali `GET /api/health` butuh cookie atau header `x-app-token`
 - Path workspace: wajib lewat `src/fs/workspace.ts` (tolak `..`, symlink escape, batas ukuran baca)
 - Secret di-mask saat serialisasi ke renderer (`SECRET_CONFIG_KEYS`)
-- Token/API key di SQLite dienkripsi AES-256-GCM; master key di macOS Keychain (fallback
-  `{appDataDir}/.master.key`, override `RND_SECRETS_KEY`) — `src/secrets/`
+- Token/API key di SQLite dienkripsi AES-256-GCM; master key di `{appDataDir}/.master.key`
+  (Keychain backup, override `RND_SECRETS_KEY`) — `src/secrets/`
+- Bootstrap kritis (DB/migrasi) sebelum window; sync model Cursor jalan di background
 
 ## Global vs per-project
 

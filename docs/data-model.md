@@ -99,8 +99,9 @@ Token integrasi, `llm_providers.api_key`, nilai MCP `env`/`headers`, dan notific
 Master key (32 byte):
 
 1. Env `RND_SECRETS_KEY` (base64 atau hex) — untuk test / override
-2. macOS Keychain service `Lullaby Master Key` (account `lullaby`)
-3. Fallback file `{appDataDir}/.master.key` (mode `0600`)
+2. File `{appDataDir}/.master.key` (mode `0600`, preferred for fast startup)
+3. macOS Keychain service `Lullaby Master Key` (account `lullaby`) — backup /
+   bootstrap source; mirrored to the file after first read
 
 Baca lewat helper DB / settings selalu mendekripsi; API ke renderer tetap me-mask. Migrasi
 one-shot di bootstrap: `migratePlaintextSecrets()` (`src/secrets/migrate.ts`).

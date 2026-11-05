@@ -457,10 +457,20 @@ export interface CursorModelInfo {
   description?: string;
 }
 
+const CURSOR_MODELS_TIMEOUT_MS = 12_000;
+
 export async function listCursorModels(apiKey: string): Promise<CursorModelInfo[]> {
   if (!apiKey.trim()) throw new Error("Cursor API key belum diisi.");
   const { Cursor } = await import("@cursor/sdk");
-  const models = await Cursor.models.list({ apiKey });
+  const models = await Promise.race([
+    Cursor.models.list({ apiKey }),
+    new Promise<never>((_resolve, reject) => {
+      setTimeout(
+        () => reject(new Error("Cursor models list timed out")),
+        CURSOR_MODELS_TIMEOUT_MS,
+      );
+    }),
+  ]);
   return models.map((model) => ({
     id: model.id,
     name: model.displayName || model.id,

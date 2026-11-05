@@ -19,7 +19,10 @@ import {
   getLlmProvider,
   upsertImportedCursorSession,
 } from "../src/db/db.ts";
-import { storeCursorModels } from "../src/server/chat/cursor-models.ts";
+import {
+  cursorModelsAreFresh,
+  storeCursorModels,
+} from "../src/server/chat/cursor-models.ts";
 import { serializeLlm } from "../src/server/serializers.ts";
 import type { ChatTurn } from "../src/server/chat/types.ts";
 
@@ -181,6 +184,31 @@ Deno.test("storeCursorModels persists catalog on provider config", async () => {
   ]);
   const config = JSON.parse(stored!.config || "{}") as { cursorModelsUpdatedAt?: string };
   equal(typeof config.cursorModelsUpdatedAt, "string");
+});
+
+Deno.test("cursorModelsAreFresh respects TTL", () => {
+  const now = Date.parse("2026-01-02T00:00:00.000Z");
+  equal(
+    cursorModelsAreFresh(
+      JSON.stringify({
+        cursorModels: [{ id: "composer-2" }],
+        cursorModelsUpdatedAt: "2026-01-01T12:00:00.000Z",
+      }),
+      now,
+    ),
+    true,
+  );
+  equal(
+    cursorModelsAreFresh(
+      JSON.stringify({
+        cursorModels: [{ id: "composer-2" }],
+        cursorModelsUpdatedAt: "2025-12-01T00:00:00.000Z",
+      }),
+      now,
+    ),
+    false,
+  );
+  equal(cursorModelsAreFresh(JSON.stringify({ cursorModels: [] }), now), false);
 });
 
 Deno.test("ChatInput accepts a model override", () => {
