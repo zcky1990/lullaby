@@ -79,7 +79,8 @@ export type ChatResponse =
     changes: ChatChange[];
     createdTickets: CreatedTicket[];
   }
-  | { status: "error"; error: string; sessionId?: string };
+  | { status: "error"; error: string; sessionId?: string }
+  | { status: "cancelled"; message: string; sessionId: string };
 
 export interface PendingApproval {
   id: string;
@@ -124,6 +125,8 @@ export interface Run {
   createdTickets: CreatedTicket[];
   createdAt: number;
   emit?: (step: ChatStep) => void;
+  abort?: AbortController;
+  cancelled?: boolean;
 }
 
 export interface PendingChange {

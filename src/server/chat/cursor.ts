@@ -16,10 +16,23 @@ const MAX_WRITE_BYTES = 500_000;
 const MAX_WRITES = 100;
 const CURSOR_CALL_PREFIX = "cursor_";
 
+export interface CursorStreamEvent {
+  type: "tool_call" | "thinking" | "status" | "task" | "summary" | "assistant";
+  callId?: string;
+  name?: string;
+  status?: string;
+  args?: unknown;
+  result?: unknown;
+  text?: string;
+  message?: string;
+}
+
 export interface CursorCompleteOptions {
   workspace?: string | null;
   cursorAgentId?: string | null;
   mode?: "plan" | "build";
+  onEvent?: (event: CursorStreamEvent) => void;
+  signal?: AbortSignal;
 }
 
 export interface CursorConversationMessage {
@@ -294,11 +307,50 @@ type CursorRunHandle = {
   cancel?: () => void | Promise<void>;
 };
 
-/** Single `wait()` with wall-clock timeout — do not also drain `stream()` (can hang). */
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" ? value as Record<string, unknown> : null;
+}
+
+function mapCursorStep(raw: unknown): CursorStreamEvent | null {
+  const step = asRecord(raw);
+  if (!step) return null;
+  const type = typeof step.type === "string" ? step.type : "";
+  if (type === "toolCall") {
+    const call = asRecord(step.message);
+    if (!call) return null;
+    const result = asRecord(call.result);
+    return {
+      type: "tool_call",
+      name: typeof call.type === "string" ? call.type : undefined,
+      status: result?.status === "error" ? "error" : result ? "completed" : "running",
+      args: call.args,
+      result: result?.status === "success" ? result.value : result?.error,
+    };
+  }
+  if (type === "thinkingMessage") {
+    const message = asRecord(step.message);
+    return {
+      type: "thinking",
+      text: typeof message?.text === "string" ? message.text : undefined,
+    };
+  }
+  if (type === "assistantMessage") return { type: "assistant" };
+  return null;
+}
+
+function cancellationError(): Error {
+  const error = new Error("Chat dihentikan.");
+  error.name = "AbortError";
+  return error;
+}
+
+/** Single `wait()` with wall-clock timeout; progress comes from `send({ onStep })`. */
 async function waitForCursorRun(
   run: CursorRunHandle,
+  signal?: AbortSignal,
 ): Promise<Awaited<ReturnType<CursorRunHandle["wait"]>>> {
   let timer: ReturnType<typeof setTimeout> | undefined;
+  let onAbort: (() => void) | undefined;
   try {
     return await Promise.race([
       run.wait(),
@@ -318,9 +370,25 @@ async function waitForCursorRun(
           })();
         }, CURSOR_RUN_TIMEOUT_MS);
       }),
+      new Promise<never>((_resolve, reject) => {
+        if (!signal) return;
+        onAbort = () => {
+          void (async () => {
+            try {
+              await run.cancel?.();
+            } catch {
+              // ignore
+            }
+            reject(cancellationError());
+          })();
+        };
+        if (signal.aborted) onAbort();
+        else signal.addEventListener("abort", onAbort, { once: true });
+      }),
     ]);
   } finally {
     if (timer) clearTimeout(timer);
+    if (signal && onAbort) signal.removeEventListener("abort", onAbort);
   }
 }
 
@@ -351,6 +419,8 @@ export async function completeCursor(
   if (!cloud && !workspace) {
     throw new Error("Workspace project belum diatur untuk Cursor local agent.");
   }
+
+  if (opts.signal?.aborted) throw cancellationError();
 
   const snapshot = !cloud && workspace && mode === "build"
     ? await snapshotWorkspaceFiles(workspace)
@@ -400,6 +470,7 @@ export async function completeCursor(
       }
 
       const images = imageParts(turns);
+      const onEvent = opts.onEvent;
       let run: Awaited<ReturnType<typeof agent.send>>;
       try {
         run = await Promise.race([
@@ -407,6 +478,14 @@ export async function completeCursor(
             text: prompt,
             ...(images.length ? { images } : {}),
             ...(mode === "plan" ? { mode: "plan" } : {}),
+            ...(onEvent
+              ? {
+                onStep: (args: { step: unknown }) => {
+                  const event = mapCursorStep(args.step);
+                  if (event) onEvent(event);
+                },
+              }
+              : {}),
           }),
           new Promise<never>((_resolve, reject) => {
             setTimeout(
@@ -430,7 +509,8 @@ export async function completeCursor(
       }
 
       try {
-        const result = await waitForCursorRun(run as CursorRunHandle);
+        const result = await waitForCursorRun(run as CursorRunHandle, opts.signal);
+        if (opts.signal?.aborted) throw cancellationError();
         if (result.status !== "finished") {
           throw new Error(result.error?.message ?? `Cursor run ${result.status}.`);
         }

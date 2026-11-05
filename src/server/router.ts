@@ -1,5 +1,6 @@
 import {
   AutoskillsInput,
+  ChatCancelInput,
   ChatChangeAllInput,
   ChatChangeInput,
   ChatInput,
@@ -141,7 +142,10 @@ import { createTicket, getTicket, listTickets, transitionTicket } from "../integ
 import {
   decideAllChatChanges,
   decideChatChange,
+  findRunByProject,
+  findRunBySession,
   generateTicketsFromDocument,
+  getRun,
   startChat,
   type VisibleMessage,
 } from "./chat.ts";
@@ -530,6 +534,24 @@ async function chatHandler(projectId: string, req: Request): Promise<Response> {
       "x-accel-buffering": "no",
     },
   });
+}
+
+async function chatCancelHandler(projectId: string, req: Request): Promise<Response> {
+  const parsed = ChatCancelInput.safeParse(await readJson(req));
+  if (!parsed.success) {
+    return json({ error: "invalid_input", issues: parsed.error.issues }, 400);
+  }
+  const run = parsed.data.runId
+    ? getRun(parsed.data.runId)
+    : parsed.data.sessionId
+    ? findRunBySession(parsed.data.sessionId)
+    : findRunByProject(projectId);
+  if (!run || run.projectId !== projectId) {
+    return json({ ok: true, cancelled: false });
+  }
+  run.cancelled = true;
+  run.abort?.abort();
+  return json({ ok: true, cancelled: true });
 }
 
 async function chatChangeHandler(req: Request): Promise<Response> {
@@ -2106,6 +2128,10 @@ export async function handleRequest(req: Request): Promise<Response> {
 
     const chatRoute = pathname.match(/^\/api\/projects\/([^/]+)\/chat$/);
     if (chatRoute && method === "POST") return await chatHandler(chatRoute[1], req);
+    const chatCancelRoute = pathname.match(/^\/api\/projects\/([^/]+)\/chat\/cancel$/);
+    if (chatCancelRoute && method === "POST") {
+      return await chatCancelHandler(chatCancelRoute[1], req);
+    }
 
     const autoskillsRoute = pathname.match(/^\/api\/projects\/([^/]+)\/autoskills$/);
     if (autoskillsRoute && method === "POST") {

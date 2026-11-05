@@ -16,7 +16,7 @@ import {
   readPromptSettings,
 } from "../prompts.ts";
 import { diffLines } from "../diff.ts";
-import type { CursorConversationMessage } from "./cursor.ts";
+import type { CursorConversationMessage, CursorStreamEvent } from "./cursor.ts";
 import { complete, type CompleteResult, VARIANT_TEMPERATURE } from "./llm.ts";
 import { approvalResponse, prepareWriteChange, setAdvance } from "./review.ts";
 import { isFinalMaxStep, shouldContinueSteps, toolsForStep, turnsForStep } from "./max-steps.ts";
@@ -115,8 +115,137 @@ export function systemPrompt(
   return withActive;
 }
 
+function describeCursorTool(name: string | undefined, args: unknown): string {
+  const record = args && typeof args === "object" ? args as Record<string, unknown> : {};
+  const path = typeof record.path === "string"
+    ? record.path
+    : typeof record.file_path === "string"
+    ? record.file_path
+    : "";
+  switch ((name ?? "").toLowerCase()) {
+    case "read":
+      return path ? `Membaca ${path}` : "Membaca file";
+    case "write":
+    case "edit":
+    case "strreplace":
+      return path ? `Mengedit ${path}` : "Mengedit file";
+    case "grep":
+      return "Mencari di kode";
+    case "glob":
+      return "Mencari file";
+    case "ls":
+      return path ? `Melihat folder ${path}` : "Melihat isi workspace";
+    case "task":
+      return "Menjalankan sub-agent";
+    default:
+      return name ? `Menjalankan ${name}` : "Menjalankan tool Cursor";
+  }
+}
+
+function cursorResultDetail(result: unknown): string | undefined {
+  if (result === undefined || result === null) return undefined;
+  const text = typeof result === "string" ? result : JSON.stringify(result);
+  if (!text) return undefined;
+  const collapsed = text.replace(/\s+/g, " ").trim();
+  return collapsed.length > 160 ? `${collapsed.slice(0, 160)}…` : collapsed;
+}
+
+function createCursorProgress(
+  run: Run,
+  thinkingId: string,
+): { onEvent: (event: CursorStreamEvent) => void; dispose: () => void } {
+  let activity = false;
+  const startedAt = Date.now();
+  const timer = setInterval(() => {
+    if (activity || isCancelled(run)) return;
+    emitChatStep(run, {
+      id: thinkingId,
+      kind: "thinking",
+      status: "running",
+      title: "Cursor sedang bekerja…",
+      detail: `${Math.round((Date.now() - startedAt) / 1000)} detik`,
+    });
+  }, 5_000);
+  return {
+    onEvent: (event) => {
+      if (event.type === "tool_call" || event.type === "task") {
+        if (!activity) {
+          activity = true;
+          emitChatStep(run, {
+            id: thinkingId,
+            kind: "thinking",
+            status: "done",
+            title: "Cursor mulai bekerja",
+          });
+        }
+      }
+      if (event.type === "tool_call") {
+        const id = `cursor-tool-${event.callId ?? crypto.randomUUID()}`;
+        const title = describeCursorTool(event.name, event.args);
+        if (event.status === "running") {
+          emitChatStep(run, { id, kind: "tool", status: "running", title, toolName: event.name });
+          return;
+        }
+        emitChatStep(run, {
+          id,
+          kind: "tool",
+          status: event.status === "error" ? "error" : "done",
+          title,
+          toolName: event.name,
+          detail: cursorResultDetail(event.result),
+        });
+        return;
+      }
+      if (event.type === "task") {
+        emitChatStep(run, {
+          id: "cursor-task",
+          kind: "tool",
+          status: event.status === "error"
+            ? "error"
+            : event.status === "running"
+            ? "running"
+            : "done",
+          title: "Menjalankan sub-agent",
+          detail: event.text || undefined,
+        });
+        return;
+      }
+      if (event.type === "summary") {
+        emitChatStep(run, {
+          id: "cursor-summary",
+          kind: "thinking",
+          status: event.status === "error"
+            ? "error"
+            : event.status === "running"
+            ? "running"
+            : "done",
+          title: "Merangkum percakapan…",
+        });
+      }
+    },
+    dispose: () => clearInterval(timer),
+  };
+}
+
+function isCancelled(run: Run): boolean {
+  return run.cancelled === true || run.abort?.signal.aborted === true;
+}
+
+function cancelledResponse(run: Run): ChatResponse {
+  run.cancelled = true;
+  emitChatStep(run, {
+    id: "run-cancelled",
+    kind: "thinking",
+    status: "done",
+    title: "Chat dihentikan",
+  });
+  deleteRun(run.id);
+  return { status: "cancelled", message: "Chat dihentikan.", sessionId: run.sessionId };
+}
+
 export async function advance(run: Run): Promise<ChatResponse> {
   try {
+    if (isCancelled(run)) return cancelledResponse(run);
     const settings = await readChatToolsSettings();
     const disabledTools = new Set(settings.disabledTools);
     const mcp = await loadMcpChatTools();
@@ -127,6 +256,7 @@ export async function advance(run: Run): Promise<ChatResponse> {
     ];
     const maxSteps = settings.maxSteps;
     for (let step = 0; shouldContinueSteps(step, maxSteps); step++) {
+      if (isCancelled(run)) return cancelledResponse(run);
       const finalStep = isFinalMaxStep(step, maxSteps);
       const thinkingId = crypto.randomUUID();
       emitChatStep(run, {
@@ -135,6 +265,9 @@ export async function advance(run: Run): Promise<ChatResponse> {
         status: "running",
         title: step === 0 ? "Menganalisis permintaan…" : "Melanjutkan ke langkah berikutnya…",
       });
+      const cursorProgress = (run.provider.provider || "").toLowerCase() === "cursor"
+        ? createCursorProgress(run, thinkingId)
+        : null;
       let response: CompleteResult;
       try {
         response = await complete(
@@ -147,9 +280,12 @@ export async function advance(run: Run): Promise<ChatResponse> {
             workspace: run.workspace,
             cursorAgentId: run.cursorAgentId,
             mode: run.mode,
+            signal: run.abort?.signal,
+            ...(cursorProgress ? { onEvent: cursorProgress.onEvent } : {}),
           },
         );
       } catch (error) {
+        if (isCancelled(run)) return cancelledResponse(run);
         emitChatStep(run, {
           id: thinkingId,
           kind: "thinking",
@@ -158,7 +294,10 @@ export async function advance(run: Run): Promise<ChatResponse> {
           detail: (error as Error).message,
         });
         throw error;
+      } finally {
+        cursorProgress?.dispose();
       }
+      if (isCancelled(run)) return cancelledResponse(run);
       emitChatStep(run, {
         id: thinkingId,
         kind: "thinking",
@@ -205,6 +344,7 @@ export async function advance(run: Run): Promise<ChatResponse> {
           "get_ticket",
         ]);
         for (const call of response.toolCalls) {
+          if (isCancelled(run)) return cancelledResponse(run);
           const stepId = `tool-${call.id}`;
           const label = describeToolCall(call);
           emitChatStep(run, {
@@ -251,6 +391,7 @@ export async function advance(run: Run): Promise<ChatResponse> {
       let hasReviews = false;
 
       for (const call of batch) {
+        if (isCancelled(run)) return cancelledResponse(run);
         const stepId = `tool-${call.id}`;
         const label = describeToolCall(call);
         emitChatStep(run, {
@@ -339,6 +480,7 @@ export async function advance(run: Run): Promise<ChatResponse> {
       run.pendingBatch = [];
       run.batchResults.clear();
     }
+    if (isCancelled(run)) return cancelledResponse(run);
     const message = "(selesai)";
     await appendChatMessage(run.sessionId, "assistant", message, run.changes);
     emitChatStep(run, {
@@ -357,6 +499,7 @@ export async function advance(run: Run): Promise<ChatResponse> {
       createdTickets: run.createdTickets,
     };
   } catch (error) {
+    if (isCancelled(run)) return cancelledResponse(run);
     emitChatStep(run, {
       id: "run-error",
       kind: "thinking",
@@ -475,6 +618,7 @@ export async function startChat(
     createdTickets: [],
     createdAt: Date.now(),
     emit,
+    abort: new AbortController(),
   };
   setRun(run);
   return await advance(run);

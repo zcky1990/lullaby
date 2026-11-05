@@ -88,6 +88,7 @@ async function completeOpenAi(
   tools: ToolDef[],
   temperature?: number,
   maxTokens?: number,
+  signal?: AbortSignal,
 ): Promise<{ text: string; toolCalls: ToolCall[] }> {
   const base = (provider.base_url ?? "").replace(/\/+$/, "");
   if (!base) throw new Error("baseUrl provider LLM belum diisi.");
@@ -111,6 +112,7 @@ async function completeOpenAi(
       Authorization: `Bearer ${provider.api_key ?? ""}`,
     },
     body: JSON.stringify(body),
+    signal,
   }, 300_000);
   if (!res.ok) throw new Error(`LLM HTTP ${res.status}: ${res.text.slice(0, 300)}`);
   const json = JSON.parse(res.text || "{}") as {
@@ -139,6 +141,7 @@ async function completeAnthropic(
   tools: ToolDef[],
   temperature?: number,
   maxTokens?: number,
+  signal?: AbortSignal,
 ): Promise<{ text: string; toolCalls: ToolCall[] }> {
   const base = (provider.base_url ?? "").replace(/\/+$/, "");
   if (!base) throw new Error("baseUrl provider LLM belum diisi.");
@@ -223,6 +226,7 @@ async function completeAnthropic(
       "anthropic-version": "2023-06-01",
     },
     body: JSON.stringify(body),
+    signal,
   }, 300_000);
   if (!res.ok) throw new Error(`LLM HTTP ${res.status}: ${res.text.slice(0, 300)}`);
   const json = JSON.parse(res.text || "{}") as {
@@ -257,8 +261,8 @@ export function complete(
     return completeCursor(provider, turns, options) as Promise<CursorCompleteResult>;
   }
   return type === "anthropic"
-    ? completeAnthropic(provider, turns, tools, temperature, maxTokens)
-    : completeOpenAi(provider, turns, tools, temperature, maxTokens);
+    ? completeAnthropic(provider, turns, tools, temperature, maxTokens, options.signal)
+    : completeOpenAi(provider, turns, tools, temperature, maxTokens, options.signal);
 }
 
 export const VARIANT_TEMPERATURE: Record<string, number | undefined> = {

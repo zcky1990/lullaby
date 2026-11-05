@@ -20,12 +20,19 @@ export async function request(
 ): Promise<{ status: number; ok: boolean; text: string; headers: Headers }> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const external = init.signal;
+  const onAbort = () => controller.abort();
+  if (external) {
+    if (external.aborted) controller.abort();
+    else external.addEventListener("abort", onAbort, { once: true });
+  }
   try {
     const res = await fetch(url, { ...init, signal: controller.signal });
     const text = await res.text();
     return { status: res.status, ok: res.ok, text, headers: res.headers };
   } finally {
     clearTimeout(timer);
+    external?.removeEventListener("abort", onAbort);
   }
 }
 

@@ -17,6 +17,7 @@ import {
   Plus,
   Send,
   Sparkles,
+  Square,
   Trash2,
   X,
 } from "lucide-react";
@@ -235,6 +236,7 @@ export function ChatSidebar({
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const streamAbortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     try {
@@ -490,6 +492,13 @@ export function ChatSidebar({
     refreshSessions().catch(console.error);
   }, [projectId, refreshSessions]);
 
+  useEffect(() => {
+    return () => {
+      streamAbortRef.current?.abort();
+      streamAbortRef.current = null;
+    };
+  }, []);
+
   const handleFiles = useCallback(async (files: File[]) => {
     if (!files.length) return;
     setError(undefined);
@@ -545,8 +554,18 @@ export function ChatSidebar({
   }, []);
 
   const handleResponse = (response: ChatResponse) => {
-    if (response.status !== "error" && response.createdTickets?.length) {
+    if (
+      (response.status === "done" || response.status === "approval_required") &&
+      response.createdTickets?.length
+    ) {
       onTicketsChanged?.();
+    }
+    if (response.status === "cancelled") {
+      setPending(null);
+      setSteps([]);
+      setError(undefined);
+      if (response.sessionId) setSessionId(response.sessionId);
+      return;
     }
     if (response.status === "done") {
       setPending(null);
@@ -670,6 +689,8 @@ export function ChatSidebar({
         ];
         setEntries(next);
         setSending(true);
+        const controller = new AbortController();
+        streamAbortRef.current = controller;
         try {
           const response = await api.chatStream(activeProjectId, {
             providerId: providerIdRef.current || undefined,
@@ -677,11 +698,12 @@ export function ChatSidebar({
             variant: variantRef.current,
             mode: "build",
             messages: [{ role: "user", content }],
-          }, { onStep: mergeStep });
+          }, { onStep: mergeStep, signal: controller.signal });
           responseRef.current(response);
         } catch (e) {
-          setError((e as Error).message);
+          if (!controller.signal.aborted) setError((e as Error).message);
         } finally {
+          if (streamAbortRef.current === controller) streamAbortRef.current = null;
           setSending(false);
         }
       })();
@@ -820,6 +842,8 @@ export function ChatSidebar({
     setEntries(next);
     setSteps([]);
     setSending(true);
+    const controller = new AbortController();
+    streamAbortRef.current = controller;
     try {
       const response = await api.chatStream(projectId, {
         providerId: providerId || undefined,
@@ -834,13 +858,28 @@ export function ChatSidebar({
           content: entry.content,
           ...(index === next.length - 1 && outgoing.length ? { attachments: outgoing } : {}),
         })),
-      }, { onStep: mergeStep });
+      }, { onStep: mergeStep, signal: controller.signal });
       handleResponse(response);
     } catch (e) {
-      setError((e as Error).message);
+      if (!controller.signal.aborted) setError((e as Error).message);
     } finally {
+      if (streamAbortRef.current === controller) streamAbortRef.current = null;
       setSending(false);
     }
+  };
+
+  const stop = async () => {
+    if (!projectId) return;
+    const controller = streamAbortRef.current;
+    streamAbortRef.current = null;
+    try {
+      await api.cancelChat(projectId, { sessionId: sessionId ?? undefined });
+    } catch {
+      // ignore cancel errors; aborting the stream still stops the UI
+    }
+    controller?.abort();
+    setSending(false);
+    setSteps([]);
   };
 
   const selectSession = async (value: string) => {
@@ -1403,12 +1442,13 @@ export function ChatSidebar({
               type="button"
               size="icon"
               className="ml-auto size-7 shrink-0"
-              onClick={send}
-              disabled={sending || !!pending ||
-                (!input.trim() && attachments.length === 0 && !selectedSkill)}
-              aria-label="Kirim"
+              onClick={sending ? stop : send}
+              disabled={!sending && (!!pending ||
+                (!input.trim() && attachments.length === 0 && !selectedSkill))}
+              aria-label={sending ? "Hentikan chat" : "Kirim"}
+              title={sending ? "Hentikan chat" : "Kirim"}
             >
-              {sending ? <Spinner /> : <Send />}
+              {sending ? <Square className="size-3 fill-current" /> : <Send />}
             </Button>
           </div>
         </div>

@@ -236,6 +236,12 @@ export const ChatChangeAllInput = z.object({
 });
 export type ChatChangeAllInput = z.infer<typeof ChatChangeAllInput>;
 
+export const ChatCancelInput = z.object({
+  runId: z.string().trim().min(1).optional(),
+  sessionId: z.string().trim().min(1).optional(),
+});
+export type ChatCancelInput = z.infer<typeof ChatCancelInput>;
+
 export const McpTransport = z.enum(["stdio", "http"]);
 export type McpTransport = z.infer<typeof McpTransport>;
 

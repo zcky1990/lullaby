@@ -15,6 +15,24 @@ export function getRun(id: string): Run | undefined {
   return runs.get(id);
 }
 
+export function findRunBySession(sessionId: string): Run | undefined {
+  let latest: Run | undefined;
+  for (const run of runs.values()) {
+    if (run.sessionId !== sessionId) continue;
+    if (!latest || run.createdAt > latest.createdAt) latest = run;
+  }
+  return latest;
+}
+
+export function findRunByProject(projectId: string): Run | undefined {
+  let latest: Run | undefined;
+  for (const run of runs.values()) {
+    if (run.projectId !== projectId) continue;
+    if (!latest || run.createdAt > latest.createdAt) latest = run;
+  }
+  return latest;
+}
+
 export function setRun(run: Run): void {
   runs.set(run.id, run);
 }

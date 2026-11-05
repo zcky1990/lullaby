@@ -551,7 +551,8 @@ export type ChatResponse =
     changes: FileChange[];
     createdTickets: CreatedTicket[];
   }
-  | { status: "error"; error: string; sessionId?: string };
+  | { status: "error"; error: string; sessionId?: string }
+  | { status: "cancelled"; message: string; sessionId: string };
 
 export type ChatStepKind = "thinking" | "tool" | "approval" | "assistant";
 
@@ -717,7 +718,11 @@ async function request<T>(path: string, init?: RequestOptions): Promise<T> {
   }
 }
 
-const jsonInit = (method: string, body: unknown, options?: { timeoutMs?: number }): RequestOptions => ({
+const jsonInit = (
+  method: string,
+  body: unknown,
+  options?: { timeoutMs?: number },
+): RequestOptions => ({
   method,
   headers: { "content-type": "application/json" },
   body: JSON.stringify(body),
@@ -733,8 +738,7 @@ export const api = {
   updateProject: (
     id: string,
     input: { name?: string; workspacePath?: string; documentPath?: string },
-  ) =>
-    request<{ project: Project }>(`/api/projects/${id}`, jsonInit("PUT", input)),
+  ) => request<{ project: Project }>(`/api/projects/${id}`, jsonInit("PUT", input)),
   deleteProject: (id: string) =>
     request<{ ok: boolean }>(`/api/projects/${id}`, { method: "DELETE" }),
   listFiles: (projectId: string, path: string) =>
@@ -881,8 +885,9 @@ export const api = {
       jsonInit("POST", projectId ? { ...payload, projectId } : payload),
     ),
   listRoles: () => request<{ roles: Role[] }>("/api/roles"),
-  createRole: (payload: { name: string; description?: string; persona: string; providerId?: string }) =>
-    request<{ role: Role }>("/api/roles", jsonInit("POST", payload)),
+  createRole: (
+    payload: { name: string; description?: string; persona: string; providerId?: string },
+  ) => request<{ role: Role }>("/api/roles", jsonInit("POST", payload)),
   updateRole: (
     id: string,
     payload: { name: string; description?: string; persona: string; providerId?: string },
@@ -895,8 +900,7 @@ export const api = {
     request<{ provider: LlmProvider }>("/api/llm", jsonInit("POST", payload)),
   updateLlm: (id: string, payload: LlmProviderPayload) =>
     request<{ provider: LlmProvider }>(`/api/llm/${id}`, jsonInit("PUT", payload)),
-  deleteLlm: (id: string) =>
-    request<{ ok: boolean }>(`/api/llm/${id}`, { method: "DELETE" }),
+  deleteLlm: (id: string) => request<{ ok: boolean }>(`/api/llm/${id}`, { method: "DELETE" }),
   chatStream: async (
     projectId: string,
     payload: ChatRequestPayload,
@@ -956,6 +960,11 @@ export const api = {
     if (!result) throw new ApiError(500, "chat_stream_incomplete", null);
     return result;
   },
+  cancelChat: (projectId: string, payload: { runId?: string; sessionId?: string }) =>
+    request<{ ok: boolean; cancelled: boolean }>(
+      `/api/projects/${projectId}/chat/cancel`,
+      jsonInit("POST", payload, { timeoutMs: 15_000 }),
+    ),
   chatChange: (payload: { runId: string; callId: string; hunk: number; accept: boolean }) =>
     request<ChatResponse>("/api/chat/change", jsonInit("POST", payload, { timeoutMs: 900_000 })),
   chatChangeAll: (payload: { runId: string; accept: boolean }) =>
@@ -1059,7 +1068,9 @@ export const api = {
     request<{ commits: GitCommit[] }>(`/api/projects/${projectId}/git/log?limit=${limit}`),
   gitDiff: (projectId: string, path: string, staged: boolean) =>
     request<{ diff: string }>(
-      `/api/projects/${projectId}/git/diff?path=${encodeURIComponent(path)}&staged=${staged ? "1" : "0"}`,
+      `/api/projects/${projectId}/git/diff?path=${encodeURIComponent(path)}&staged=${
+        staged ? "1" : "0"
+      }`,
     ),
   gitShow: (projectId: string, hash: string) =>
     request<{ commit: GitCommitDetail }>(
@@ -1134,12 +1145,10 @@ export const api = {
     servers: McpServer[];
     enabled: boolean;
     disabledTools: string[];
-  }) =>
-    request<McpSettingsResponse>("/api/settings/mcp", jsonInit("PUT", payload)),
+  }) => request<McpSettingsResponse>("/api/settings/mcp", jsonInit("PUT", payload)),
   listMcpTools: (server: McpServer) =>
     request<{ tools: McpTool[] }>("/api/settings/mcp/tools", jsonInit("POST", { server })),
-  getChatToolsSettings: () =>
-    request<ChatToolsSettingsResponse>("/api/settings/chat-tools"),
+  getChatToolsSettings: () => request<ChatToolsSettingsResponse>("/api/settings/chat-tools"),
   saveChatToolsSettings: (payload: {
     autoApproveWrites: boolean;
     disabledTools: string[];
@@ -1174,12 +1183,10 @@ export const api = {
         error?: string;
       }>;
     }>("/api/settings/notifications/test", jsonInit("POST", payload)),
-  getTerminalSettings: () =>
-    request<{ shell: TerminalShell }>("/api/settings/terminal"),
+  getTerminalSettings: () => request<{ shell: TerminalShell }>("/api/settings/terminal"),
   saveTerminalSettings: (payload: { shell: TerminalShell }) =>
     request<{ shell: TerminalShell }>("/api/settings/terminal", jsonInit("PUT", payload)),
-  getUiPreferences: () =>
-    request<{ preferences: UiPreferences }>("/api/settings/ui"),
+  getUiPreferences: () => request<{ preferences: UiPreferences }>("/api/settings/ui"),
   saveUiPreferences: (preferences: UiPreferences) =>
     request<{ preferences: UiPreferences }>("/api/settings/ui", jsonInit("PUT", preferences)),
   getLspSettings: () =>
