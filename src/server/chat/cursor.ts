@@ -311,31 +311,85 @@ function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" ? value as Record<string, unknown> : null;
 }
 
-function mapCursorStep(raw: unknown): CursorStreamEvent | null {
-  const step = asRecord(raw);
-  if (!step) return null;
-  const type = typeof step.type === "string" ? step.type : "";
-  if (type === "toolCall") {
-    const call = asRecord(step.message);
-    if (!call) return null;
-    const result = asRecord(call.result);
-    return {
-      type: "tool_call",
-      name: typeof call.type === "string" ? call.type : undefined,
-      status: result?.status === "error" ? "error" : result ? "completed" : "running",
-      args: call.args,
-      result: result?.status === "success" ? result.value : result?.error,
-    };
+function toolCallParts(raw: unknown): {
+  name?: string;
+  args?: unknown;
+  result?: unknown;
+  completed: boolean;
+  failed: boolean;
+} {
+  const call = asRecord(raw);
+  const result = asRecord(call?.result);
+  return {
+    name: typeof call?.type === "string" ? call.type : undefined,
+    args: call?.args,
+    result: result?.status === "success" ? result.value : result?.error,
+    completed: !!result,
+    failed: result?.status === "error",
+  };
+}
+
+function mapCursorDelta(raw: unknown): CursorStreamEvent | null {
+  const update = asRecord(raw);
+  if (!update) return null;
+  const type = typeof update.type === "string" ? update.type : "";
+  const callId = typeof update.callId === "string" ? update.callId : undefined;
+  switch (type) {
+    case "tool-call-started":
+    case "tool-call-completed":
+    case "partial-tool-call": {
+      const parts = toolCallParts(update.toolCall);
+      return {
+        type: "tool_call",
+        callId,
+        name: parts.name,
+        status: type === "tool-call-completed" ? (parts.failed ? "error" : "completed") : "running",
+        args: parts.args,
+        result: parts.result,
+      };
+    }
+    case "thinking-delta":
+      return {
+        type: "thinking",
+        status: "running",
+        text: typeof update.text === "string" ? update.text : undefined,
+      };
+    case "thinking-completed":
+      return { type: "thinking", status: "completed" };
+    case "text-delta":
+      return {
+        type: "assistant",
+        status: "running",
+        text: typeof update.text === "string" ? update.text : undefined,
+      };
+    case "summary-started":
+      return { type: "summary", status: "running" };
+    case "summary-completed":
+      return { type: "summary", status: update.failed ? "error" : "completed" };
+    case "tool-requests-listed":
+      return {
+        type: "status",
+        status: "requests",
+        message: `${Number(update.callCount) || 0} tool diminta`,
+      };
+    case "step-started":
+      return { type: "status", status: "step-started" };
+    case "step-completed":
+      return { type: "status", status: "step-completed" };
+    case "tool-call-delta": {
+      const nested = mapCursorDelta(update.taskUpdate);
+      if (!nested) return null;
+      return {
+        ...nested,
+        type: "task",
+        text: nested.name
+          ? `${nested.name}${nested.status ? ` (${nested.status})` : ""}`
+          : nested.text,
+      };
+    }
+    default:
+      return null;
   }
-  if (type === "thinkingMessage") {
-    const message = asRecord(step.message);
-    return {
-      type: "thinking",
-      text: typeof message?.text === "string" ? message.text : undefined,
-    };
-  }
-  if (type === "assistantMessage") return { type: "assistant" };
-  return null;
 }
 
 function cancellationError(): Error {
@@ -344,7 +398,7 @@ function cancellationError(): Error {
   return error;
 }
 
-/** Single `wait()` with wall-clock timeout; progress comes from `send({ onStep })`. */
+/** Single `wait()` with wall-clock timeout; progress comes from `send({ onDelta })`. */
 async function waitForCursorRun(
   run: CursorRunHandle,
   signal?: AbortSignal,
@@ -480,8 +534,8 @@ export async function completeCursor(
             ...(mode === "plan" ? { mode: "plan" } : {}),
             ...(onEvent
               ? {
-                onStep: (args: { step: unknown }) => {
-                  const event = mapCursorStep(args.step);
+                onDelta: (args: { update: unknown }) => {
+                  const event = mapCursorDelta(args.update);
                   if (event) onEvent(event);
                 },
               }

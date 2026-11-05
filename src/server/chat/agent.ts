@@ -156,12 +156,32 @@ function cursorResultDetail(result: unknown): string | undefined {
   return collapsed.length > 160 ? `${collapsed.slice(0, 160)}…` : collapsed;
 }
 
+function deltaDetail(text: string): string {
+  const collapsed = text.replace(/\s+/g, " ").trim();
+  return collapsed.length > 240 ? `…${collapsed.slice(-240)}` : collapsed;
+}
+
 function createCursorProgress(
   run: Run,
   thinkingId: string,
 ): { onEvent: (event: CursorStreamEvent) => void; dispose: () => void } {
   let activity = false;
+  let thinkingText = "";
+  let assistantText = "";
+  let lastThinkingEmit = 0;
+  let lastAssistantEmit = 0;
+  const lastToolEmit = new Map<string, number>();
   const startedAt = Date.now();
+  const markActive = () => {
+    if (activity) return;
+    activity = true;
+    emitChatStep(run, {
+      id: thinkingId,
+      kind: "thinking",
+      status: "done",
+      title: "Cursor mulai bekerja",
+    });
+  };
   const timer = setInterval(() => {
     if (activity || isCancelled(run)) return;
     emitChatStep(run, {
@@ -174,22 +194,23 @@ function createCursorProgress(
   }, 5_000);
   return {
     onEvent: (event) => {
-      if (event.type === "tool_call" || event.type === "task") {
-        if (!activity) {
-          activity = true;
-          emitChatStep(run, {
-            id: thinkingId,
-            kind: "thinking",
-            status: "done",
-            title: "Cursor mulai bekerja",
-          });
-        }
-      }
       if (event.type === "tool_call") {
+        markActive();
         const id = `cursor-tool-${event.callId ?? crypto.randomUUID()}`;
         const title = describeCursorTool(event.name, event.args);
         if (event.status === "running") {
-          emitChatStep(run, { id, kind: "tool", status: "running", title, toolName: event.name });
+          const now = Date.now();
+          const last = lastToolEmit.get(id) ?? 0;
+          if (now - last < 200) return;
+          lastToolEmit.set(id, now);
+          emitChatStep(run, {
+            id,
+            kind: "tool",
+            status: "running",
+            title,
+            toolName: event.name,
+            detail: event.args ? cursorResultDetail(event.args) : undefined,
+          });
           return;
         }
         emitChatStep(run, {
@@ -198,22 +219,65 @@ function createCursorProgress(
           status: event.status === "error" ? "error" : "done",
           title,
           toolName: event.name,
-          detail: cursorResultDetail(event.result),
+          detail: cursorResultDetail(event.result) ?? cursorResultDetail(event.args),
         });
         return;
       }
       if (event.type === "task") {
+        markActive();
         emitChatStep(run, {
-          id: "cursor-task",
+          id: `cursor-task-${event.callId ?? "current"}`,
           kind: "tool",
           status: event.status === "error"
             ? "error"
             : event.status === "running"
             ? "running"
             : "done",
-          title: "Menjalankan sub-agent",
-          detail: event.text || undefined,
+          title: "Menjalankan sub-agent Cursor",
+          detail: event.text ? deltaDetail(event.text) : undefined,
         });
+        return;
+      }
+      if (event.type === "thinking") {
+        if (event.text) thinkingText += event.text;
+        markActive();
+        const now = Date.now();
+        if (event.status !== "completed" && now - lastThinkingEmit < 200) return;
+        lastThinkingEmit = now;
+        emitChatStep(run, {
+          id: thinkingId,
+          kind: "thinking",
+          status: event.status === "completed" ? "done" : "running",
+          title: event.status === "completed" ? "Selesai berpikir" : "Cursor berpikir…",
+          detail: thinkingText ? deltaDetail(thinkingText) : undefined,
+        });
+        return;
+      }
+      if (event.type === "assistant") {
+        if (event.text) assistantText += event.text;
+        markActive();
+        const now = Date.now();
+        if (now - lastAssistantEmit < 150) return;
+        lastAssistantEmit = now;
+        emitChatStep(run, {
+          id: "cursor-assistant",
+          kind: "assistant",
+          status: "running",
+          title: "Menulis jawaban…",
+          detail: assistantText ? deltaDetail(assistantText) : undefined,
+        });
+        return;
+      }
+      if (event.type === "status") {
+        if (event.status === "requests") {
+          emitChatStep(run, {
+            id: "cursor-requests",
+            kind: "thinking",
+            status: "running",
+            title: "Menyiapkan tool…",
+            detail: event.message,
+          });
+        }
         return;
       }
       if (event.type === "summary") {
@@ -222,9 +286,9 @@ function createCursorProgress(
           kind: "thinking",
           status: event.status === "error"
             ? "error"
-            : event.status === "running"
-            ? "running"
-            : "done",
+            : event.status === "completed"
+            ? "done"
+            : "running",
           title: "Merangkum percakapan…",
         });
       }
