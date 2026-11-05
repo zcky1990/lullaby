@@ -16,6 +16,7 @@ import { Label } from "@/components/ui/label";
 import { PanelHeader } from "@/components/PanelHeader";
 import { Spinner } from "@/components/ui/spinner";
 import { api, type DocSummary, type DocumentSource, type LocalDocSummary } from "@/lib/api";
+import { requestChatOpen, setChatDragData } from "@/lib/chat-drag";
 import { cn } from "@/lib/utils";
 
 export type PanelDocSource = "local" | DocumentSource;
@@ -227,16 +228,31 @@ export function DocumentPanel({
               localDocuments.length === 0 && (
               <Hint>Belum ada dokumen lokal. Klik tombol + untuk membuat.</Hint>
             )}
+            {localDocuments.length > 0 ? (
+              <p className="px-2 pb-1 text-[11px] text-muted-foreground">
+                Seret dokumen ke panel chat untuk dijadikan konteks.
+              </p>
+            ) : null}
             {localDocuments.map((doc) => (
               <button
                 key={doc.id}
                 type="button"
                 onClick={() => onSelectLocal(doc.path, doc.title)}
+                draggable
+                onDragStart={(event) => {
+                  setChatDragData(event.dataTransfer, {
+                    kind: "document",
+                    source: "local",
+                    path: doc.path,
+                    title: doc.title,
+                  });
+                  requestChatOpen();
+                }}
                 className={cn(
-                  "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs transition-colors hover:bg-accent",
+                  "flex w-full cursor-grab items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs transition-colors hover:bg-accent active:cursor-grabbing",
                   selectedId === doc.path && "bg-accent",
                 )}
-                title={doc.path}
+                title={`${doc.path} · seret ke chat`}
               >
                 <FileText className="size-4 shrink-0 text-muted-foreground" />
                 <span className="min-w-0 flex-1 truncate text-xs">{doc.title}</span>
@@ -282,6 +298,11 @@ export function DocumentPanel({
                 )}
               </>
             )}
+            {projectId && !loading && configured && !error && documents.length > 0 ? (
+              <p className="px-2 pb-1 text-[11px] text-muted-foreground">
+                Seret dokumen ke panel chat untuk dijadikan konteks.
+              </p>
+            ) : null}
             {documents.map((doc) => (
               <DocNode
                 key={doc.id}
@@ -352,6 +373,8 @@ function DocNode({
   const [loadingChildren, setLoadingChildren] = useState(false);
   const [childError, setChildError] = useState<string | undefined>();
   const active = doc.id === selectedId;
+  // Node "space:" hanya placeholder (belum punya halaman), jadi tidak bisa diseret.
+  const draggable = !doc.id.startsWith("space:");
 
   const toggle = async () => {
     const next = !open;
@@ -397,8 +420,22 @@ function DocNode({
         )}
         <button
           onClick={() => onSelect(doc.id, doc.title, source)}
-          className="flex min-w-0 flex-1 items-center gap-1.5 py-1 text-left"
-          title={doc.title}
+          draggable={draggable}
+          onDragStart={(event) => {
+            if (!draggable) return;
+            setChatDragData(event.dataTransfer, {
+              kind: "document",
+              source,
+              id: doc.id,
+              title: doc.title,
+            });
+            requestChatOpen();
+          }}
+          className={cn(
+            "flex min-w-0 flex-1 items-center gap-1.5 py-1 text-left",
+            draggable && "cursor-grab active:cursor-grabbing",
+          )}
+          title={draggable ? `${doc.title} · seret ke chat` : doc.title}
         >
           {hasChildren ? (
             open ? (

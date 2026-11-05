@@ -49,6 +49,36 @@ Tombol **Chat** di header. Fitur:
 - Lampiran gambar/teks/path workspace
 - Slash skill `/nama-skill`
 - Event `rnd:auto-build` untuk automation
+- Aksi **Kerjakan tiket** di dialog detail tiket
+
+### Drag & drop ke chat
+
+Semua sumber drag memakai kontrak di `web/src/lib/chat-drag.ts`:
+
+| Sumber | MIME | Hasil di chat |
+| --- | --- | --- |
+| File di `FileTreePanel` | `application/x-rnd-workspace-path` | lampiran `workspace` (path) |
+| Dokumen lokal di `DocumentPanel` | `application/x-rnd-chat-document` | lampiran teks berisi isi `.md` |
+| Dokumen Docmost/Notion/Confluence | `application/x-rnd-chat-document` | lampiran teks berisi konten halaman |
+| Kartu tiket (`TicketKanban`) | `application/x-rnd-chat-ticket` | lampiran teks berisi detail tiket |
+| File dari OS / clipboard | `Files` | lampiran gambar/teks |
+
+- Isi dokumen/tiket diambil saat **drop** (`web/src/lib/chat-context.ts`) lalu dikirim sebagai
+  lampiran `{ type: "text" }`; maksimal 6 lampiran, konteks dipotong di 180k karakter.
+- `dragstart` memancarkan `rnd:chat-open-request`; `WindowToolbar` meneruskannya ke toggle chat milik
+  `App`, jadi panel chat otomatis terbuka saat item diseret.
+- Node `space:` (placeholder Docmost) tidak bisa diseret.
+- Kartu tiket tetap memakai dnd-kit untuk pindah kolom. Drag ke chat memakai grip kecil di pojok
+  kartu yang `pointerdown`-nya di-`stopPropagation` agar sensor kanban tidak aktif, sehingga drag
+  HTML5 native bisa berjalan.
+
+### Kerjakan tiket
+
+Dialog detail tiket punya tombol **Kerjakan tiket**:
+
+1. dialog ditutup (dialog modal memblokir area chat),
+2. `rnd:chat-open-request` membuka panel chat,
+3. `rnd:auto-build` mengirim prompt `buildAutoBuildPrompt` (mode Build, sesi baru).
 
 ## Terminal panel
 

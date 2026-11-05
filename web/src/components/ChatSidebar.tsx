@@ -54,6 +54,17 @@ import {
   AUTO_BUILD_EVENT,
   type AutoBuildDetail,
 } from "@/lib/auto-build-events";
+import {
+  buildDocumentContext,
+  buildTicketContext,
+  type ChatContextAttachment,
+} from "@/lib/chat-context";
+import {
+  isChatDragType,
+  readChatDragData,
+  WORKSPACE_PATH_MIME,
+  type ChatDragPayload,
+} from "@/lib/chat-drag";
 import { CHAT_RESPONSE_EVENT, dispatchChangesApplied, dispatchReview } from "@/lib/review-events";
 import {
   AUTOSKILL_COMMAND,
@@ -219,6 +230,7 @@ export function ChatSidebar({
   const [entries, setEntries] = useState<Entry[]>([]);
   const [attachments, setAttachments] = useState<AttachmentDraft[]>([]);
   const [dragging, setDragging] = useState(false);
+  const [contextLoading, setContextLoading] = useState(false);
   const [resizing, setResizing] = useState(false);
   const [width, setWidth] = useState(readChatWidth);
   const [input, setInput] = useState("");
@@ -543,6 +555,47 @@ export function ChatSidebar({
       ];
     });
   }, []);
+
+  /** Tambahkan dokumen/tiket (hasil drag) sebagai lampiran teks. */
+  const addContextAttachment = (attachment: ChatContextAttachment) => {
+    setError(undefined);
+    if (attachments.some((item) => item.type === "text" && item.name === attachment.name)) {
+      return;
+    }
+    if (attachments.length >= MAX_ATTACHMENTS) {
+      setError(`Maksimal ${MAX_ATTACHMENTS} lampiran per pesan.`);
+      return;
+    }
+    setAttachments((current) => [
+      ...current,
+      {
+        id: crypto.randomUUID(),
+        name: attachment.name,
+        type: "text",
+        mime: "text/markdown",
+        data: attachment.text,
+      },
+    ]);
+  };
+
+  const addChatDragPayload = async (payload: ChatDragPayload) => {
+    if (!projectId) {
+      setError("Pilih project dulu.");
+      return;
+    }
+    setError(undefined);
+    setContextLoading(true);
+    try {
+      const attachment = payload.kind === "document"
+        ? await buildDocumentContext(projectId, payload)
+        : await buildTicketContext(projectId, payload);
+      addContextAttachment(attachment);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setContextLoading(false);
+    }
+  };
 
   const mergeStep = useCallback((step: ChatStep) => {
     setSteps((current) => {
@@ -960,10 +1013,15 @@ export function ChatSidebar({
       )}
       onDragOver={(event) => {
         const types = Array.from(event.dataTransfer.types);
-        if (!types.includes("Files") && !types.includes("application/x-rnd-workspace-path")) {
+        if (
+          !types.includes("Files") &&
+          !types.includes(WORKSPACE_PATH_MIME) &&
+          !isChatDragType(types)
+        ) {
           return;
         }
         event.preventDefault();
+        event.dataTransfer.dropEffect = "copy";
         setDragging(true);
       }}
       onDragLeave={(event) => {
@@ -972,7 +1030,12 @@ export function ChatSidebar({
       onDrop={(event) => {
         event.preventDefault();
         setDragging(false);
-        const workspacePath = event.dataTransfer.getData("application/x-rnd-workspace-path");
+        const payload = readChatDragData(event.dataTransfer);
+        if (payload) {
+          void addChatDragPayload(payload);
+          return;
+        }
+        const workspacePath = event.dataTransfer.getData(WORKSPACE_PATH_MIME);
         if (workspacePath) {
           handleWorkspacePath(workspacePath);
           return;
@@ -991,7 +1054,7 @@ export function ChatSidebar({
       {dragging
         ? (
           <div className="pointer-events-none absolute inset-2 z-10 flex items-center justify-center rounded-lg border-2 border-dashed border-primary/60 bg-background/85">
-            <p className="text-xs font-medium">Lepaskan file di sini</p>
+            <p className="text-xs font-medium">Lepaskan file, dokumen, atau tiket di sini</p>
           </div>
         )
         : null}
@@ -1045,8 +1108,9 @@ export function ChatSidebar({
         {entries.length === 0
           ? (
             <p className="text-muted-foreground">
-              Mulai chat dengan LLM. Lampirkan gambar/file teks atau seret file ke sini. Aplikasi
-              dapat membaca/menulis file di workspace — setiap edit akan meminta persetujuan Anda.
+              Mulai chat dengan LLM. Lampirkan gambar/file teks, atau seret file, dokumen, dan tiket
+              dari panel kiri ke sini sebagai konteks. Aplikasi dapat membaca/menulis file di
+              workspace — setiap edit akan meminta persetujuan Anda.
             </p>
           )
           : (
@@ -1211,6 +1275,13 @@ export function ChatSidebar({
             </div>
           )
           : null}
+
+        {contextLoading ? (
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <Spinner className="size-3" />
+            Membaca dokumen/tiket…
+          </div>
+        ) : null}
 
         {error ? <p className="text-xs text-destructive">{error}</p> : null}
 

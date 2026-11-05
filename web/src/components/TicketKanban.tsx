@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { ExternalLink } from "lucide-react";
+import { ExternalLink, GripVertical } from "lucide-react";
 import {
   Kanban,
   KanbanBoard,
@@ -11,6 +11,7 @@ import {
 } from "@/components/reui/kanban";
 import { Badge } from "@/components/ui/badge";
 import type { TicketSummary } from "@/lib/api";
+import { requestChatOpen, setChatDragData } from "@/lib/chat-drag";
 import { CANONICAL_COLUMNS, canonicalTicketColumn } from "@/lib/ticket-columns";
 import { cn } from "@/lib/utils";
 
@@ -117,9 +118,15 @@ export function TicketKanban({ tickets, onMove, onOpenDetail, onError }: Props) 
               {items.map((ticket) => (
                 <KanbanItem key={ticket.key} value={ticket.key}>
                   <KanbanItemHandle>
-                    <button
-                      type="button"
+                    <div
+                      role="button"
+                      tabIndex={0}
                       onClick={() => onOpenDetail(ticket)}
+                      onKeyDown={(event) => {
+                        if (event.key !== "Enter" && event.key !== " ") return;
+                        event.preventDefault();
+                        onOpenDetail(ticket);
+                      }}
                       className={cn(
                         "bg-card hover:bg-accent/40 flex w-full cursor-grab flex-col gap-2 rounded-md border p-3 text-left shadow-sm transition-colors active:cursor-grabbing",
                         "focus-visible:ring-ring outline-none focus-visible:ring-2",
@@ -129,23 +136,55 @@ export function TicketKanban({ tickets, onMove, onOpenDetail, onError }: Props) 
                         <span className="font-mono text-[11px] text-muted-foreground">
                           {ticket.key}
                         </span>
-                        <div className="flex max-w-[55%] flex-wrap justify-end gap-1">
-                          {ticket.source === "local" && ticket.syncStatus !== "synced" ? (
-                            <Badge
-                              variant={ticket.syncStatus === "error" ? "destructive" : "secondary"}
-                              className="h-5 px-1.5 text-[10px]"
-                            >
-                              {ticket.syncStatus === "error" ? "Sync error" : "Local"}
-                            </Badge>
-                          ) : null}
-                          {ticket.priority ? (
-                            <Badge
-                              variant="outline"
-                              className={cn("h-5 px-1.5 text-[10px]", priorityTone(ticket.priority))}
-                            >
-                              {ticket.priority}
-                            </Badge>
-                          ) : null}
+                        <div className="flex items-start gap-1">
+                          {/* Grip terpisah: pointerdown di-stop supaya dnd-kit kanban
+                              tidak aktif, sehingga drag HTML5 ke chat berjalan. */}
+                          <button
+                            type="button"
+                            draggable
+                            onPointerDown={(event) => event.stopPropagation()}
+                            onMouseDown={(event) => event.stopPropagation()}
+                            onDragStart={(event) => {
+                              event.stopPropagation();
+                              setChatDragData(event.dataTransfer, {
+                                kind: "ticket",
+                                key: ticket.key,
+                                title: ticket.summary,
+                                localId: ticket.localId,
+                                source: ticket.source,
+                              });
+                              requestChatOpen();
+                            }}
+                            onClick={(event) => event.stopPropagation()}
+                            aria-label={`Seret ${ticket.key} ke chat`}
+                            title="Seret ke chat"
+                            className="text-muted-foreground/60 hover:text-foreground -mt-0.5 -mr-1 shrink-0 cursor-grab rounded p-0.5 active:cursor-grabbing"
+                          >
+                            <GripVertical className="size-3.5" />
+                          </button>
+                          <div className="flex max-w-[55%] flex-wrap justify-end gap-1">
+                            {ticket.source === "local" && ticket.syncStatus !== "synced" ? (
+                              <Badge
+                                variant={ticket.syncStatus === "error"
+                                  ? "destructive"
+                                  : "secondary"}
+                                className="h-5 px-1.5 text-[10px]"
+                              >
+                                {ticket.syncStatus === "error" ? "Sync error" : "Local"}
+                              </Badge>
+                            ) : null}
+                            {ticket.priority ? (
+                              <Badge
+                                variant="outline"
+                                className={cn(
+                                  "h-5 px-1.5 text-[10px]",
+                                  priorityTone(ticket.priority),
+                                )}
+                              >
+                                {ticket.priority}
+                              </Badge>
+                            ) : null}
+                          </div>
                         </div>
                       </div>
                       <p className="line-clamp-3 text-xs leading-snug font-medium">
@@ -174,7 +213,7 @@ export function TicketKanban({ tickets, onMove, onOpenDetail, onError }: Props) 
                           <span className="shrink-0">Belum sync</span>
                         ) : null}
                       </div>
-                    </button>
+                    </div>
                   </KanbanItemHandle>
                 </KanbanItem>
               ))}

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ExternalLink, Pencil, Trash2, Upload } from "lucide-react";
+import { ExternalLink, Pencil, Play, Trash2, Upload } from "lucide-react";
 import { RichTextEditor } from "@/components/RichTextEditor";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -23,6 +23,8 @@ import {
 } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
 import { api, type TicketDetail, type TicketProvider, type TicketSource } from "@/lib/api";
+import { dispatchAutoBuild } from "@/lib/auto-build-events";
+import { requestChatOpen } from "@/lib/chat-drag";
 import { sanitizeHtml } from "@/lib/sanitize-html";
 import { cn } from "@/lib/utils";
 
@@ -42,6 +44,8 @@ interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onChanged?: () => void;
+  /** Override aksi "Kerjakan tiket" (default: buka chat + mulai auto build). */
+  onWorkOnTicket?: (ticket: TicketDetail) => void;
 }
 
 export function TicketDetailDialog({
@@ -53,6 +57,7 @@ export function TicketDetailDialog({
   open,
   onOpenChange,
   onChanged,
+  onWorkOnTicket,
 }: Props) {
   const [ticket, setTicket] = useState<TicketDetail | null>(null);
   const [loading, setLoading] = useState(false);
@@ -186,6 +191,27 @@ export function TicketDetailDialog({
     }
   };
 
+  /**
+   * "Kerjakan tiket": buka panel chat lalu kirim prompt auto-build untuk tiket
+   * ini. Dialog ditutup dulu supaya chat (yang bukan modal) terlihat, karena
+   * dialog ini memblokir interaksi di luarnya.
+   */
+  const workOnTicket = (value: TicketDetail) => {
+    if (onWorkOnTicket) {
+      onWorkOnTicket(value);
+      return;
+    }
+    if (!projectId) return;
+    onOpenChange(false);
+    requestChatOpen();
+    dispatchAutoBuild({
+      projectId,
+      key: value.key,
+      summary: value.summary,
+      description: value.description?.trim() || undefined,
+    });
+  };
+
   const isLocal = ticket?.source === "local";
   const canDelete = isLocal && ticket?.syncStatus !== "synced";
   const canSync = isLocal && ticket?.syncStatus !== "synced" && syncProviders.length > 0;
@@ -244,6 +270,15 @@ export function TicketDetailDialog({
           </DialogDescription>
           {!editing && ticket && !loading && !error ? (
             <div className="flex flex-wrap items-center gap-2 pt-1">
+              <Button
+                size="sm"
+                onClick={() => workOnTicket(ticket)}
+                data-icon="inline-start"
+                title="Buka chat dan mulai kerjakan tiket ini"
+              >
+                <Play />
+                Kerjakan tiket
+              </Button>
               {isLocal ? (
                 <Button
                   size="sm"

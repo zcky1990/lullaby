@@ -1,5 +1,7 @@
+import { useEffect, useRef } from "react";
 import { MessageSquare, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { CHAT_OPEN_REQUEST_EVENT } from "@/lib/chat-drag";
 import { cn } from "@/lib/utils";
 
 interface Props {
@@ -10,6 +12,24 @@ interface Props {
 }
 
 export function WindowToolbar({ projectName, workspace, chatOpen, onToggleChat }: Props) {
+  const chatOpenRef = useRef(chatOpen);
+  chatOpenRef.current = chatOpen;
+  const toggleChatRef = useRef(onToggleChat);
+  toggleChatRef.current = onToggleChat;
+
+  /**
+   * Panel chat bisa diminta terbuka dari komponen mana pun (drag dokumen/tiket,
+   * tombol "Kerjakan tiket"). Visibility tetap milik App, jadi request diteruskan
+   * lewat toggle yang sama dengan tombol toolbar.
+   */
+  useEffect(() => {
+    const handler = () => {
+      if (!chatOpenRef.current) toggleChatRef.current();
+    };
+    window.addEventListener(CHAT_OPEN_REQUEST_EVENT, handler);
+    return () => window.removeEventListener(CHAT_OPEN_REQUEST_EVENT, handler);
+  }, []);
+
   return (
     <div className="window-toolbar flex h-[52px] shrink-0 items-center justify-between border-b border-border/50 bg-[var(--activitybar)]/80 pr-3 backdrop-blur-2xl">
       <div className="flex min-w-0 items-center gap-3 px-3">

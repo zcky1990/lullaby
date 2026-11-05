@@ -84,7 +84,9 @@ export function TicketPanel({
         </div>
 
         <p className="text-xs leading-relaxed text-muted-foreground">
-          Tiket lokal dan Jira. Drag kartu antar kolom untuk mengubah status.
+          Tiket lokal dan Jira. Drag kartu antar kolom untuk mengubah status, atau seret grip di
+          kartu ke panel chat untuk menjadikannya konteks. Detail tiket punya tombol{" "}
+          <span className="font-medium">Kerjakan tiket</span>.
         </p>
       </div>
     </>
