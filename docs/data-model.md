@@ -37,6 +37,28 @@ Satu baris per `(project_id, kind)`.
 
 Sesi per project. Message menyimpan `role`, `content`, opsional `changes` JSON (diff setelah Review).
 
+Sesi dengan `source = 'cursor'` (atau `cursor_agent_id` terisi) adalah **mirror** agent Cursor: daftar
+agent di-import dari SDK Cursor setiap `GET /chat/sessions`.
+
+### `hidden_cursor_agents`
+
+Tombstone agent Cursor yang sudah dihapus user (`project_id`, `cursor_agent_id`, `hidden_at`). Tanpa
+FK ke `projects`; baris yatim dibersihkan saat bootstrap.
+
+Dipasang bersama tiga trigger di `src/db/chat-tombstones.ts` (bootstrap →
+`ensureChatSessionTombstones`):
+
+| Trigger | Kapan | Efek |
+| --- | --- | --- |
+| `chat_sessions_hide_cursor_agent` | `AFTER DELETE ON chat_sessions` (agent tidak null) | catat tombstone |
+| `chat_sessions_skip_hidden_cursor_agent` | `BEFORE INSERT ON chat_sessions` (agent sudah dihapus) | `RAISE(IGNORE)` → mirror tidak membuat ulang sesi |
+| `chat_sessions_unhide_cursor_agent` | `AFTER UPDATE OF cursor_agent_id` | hapus tombstone (agent dipakai lagi) |
+
+Tanpa tombstone ini, sesi Cursor yang dihapus muncul kembali pada refresh berikutnya (mirror ulang
+dari SDK). Limitasi: trigger tidak bisa membedakan insert dari mirror dengan insert dari restore
+backup, jadi restore sesi Cursor untuk agent yang pernah dihapus ikut diabaikan —
+`unhideCursorAgent(projectId, cursorAgentId)` memunculkannya lagi.
+
 ### `local_tickets`
 
 Backlog lokal: title, description (HTML disanitasi), status Kanban, priority, type, labels,  

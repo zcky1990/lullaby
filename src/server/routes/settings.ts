@@ -29,6 +29,8 @@ import {
   CHAT_AUTO_APPROVE_TOOLS_KEY,
   CHAT_DISABLED_TOOLS_KEY,
   CHAT_MAX_STEPS_KEY,
+  CHAT_WRITE_REVIEW_MODE_KEY,
+  normalizeWriteReviewMode,
   readChatToolsSettings,
 } from "../chat/settings.ts";
 import { normalizeMaxSteps } from "../chat/max-steps.ts";
@@ -175,6 +177,7 @@ export async function getChatToolsSettingsHandler(): Promise<Response> {
     disabledTools: settings.disabledTools,
     autoApproveTools: settings.autoApproveTools,
     maxSteps: settings.maxSteps,
+    writeReviewMode: settings.writeReviewMode,
     tools: CHAT_TOOL_CATALOG,
   });
 }
@@ -195,6 +198,9 @@ export async function saveChatToolsSettingsHandler(req: Request): Promise<Respon
   const maxSteps = parsed.data.maxSteps === undefined
     ? current.maxSteps
     : normalizeMaxSteps(parsed.data.maxSteps);
+  const writeReviewMode = parsed.data.writeReviewMode === undefined
+    ? current.writeReviewMode
+    : normalizeWriteReviewMode(parsed.data.writeReviewMode);
   await setAppSetting(
     AUTO_APPROVE_WRITES_KEY,
     parsed.data.autoApproveWrites ? "true" : "false",
@@ -202,17 +208,20 @@ export async function saveChatToolsSettingsHandler(req: Request): Promise<Respon
   await setAppSetting(CHAT_DISABLED_TOOLS_KEY, JSON.stringify(disabledTools));
   await setAppSetting(CHAT_AUTO_APPROVE_TOOLS_KEY, JSON.stringify(autoApproveTools));
   await setAppSetting(CHAT_MAX_STEPS_KEY, maxSteps == null ? "" : String(maxSteps));
+  await setAppSetting(CHAT_WRITE_REVIEW_MODE_KEY, writeReviewMode);
   await record("settings.chat_tools_updated", {
     autoApproveWrites: parsed.data.autoApproveWrites,
     disabled: disabledTools.length,
     autoApproveTools: autoApproveTools.length,
     maxSteps,
+    writeReviewMode,
   });
   return json({
     autoApproveWrites: parsed.data.autoApproveWrites,
     disabledTools,
     autoApproveTools,
     maxSteps,
+    writeReviewMode,
     tools: CHAT_TOOL_CATALOG,
   });
 }

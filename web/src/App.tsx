@@ -611,7 +611,7 @@ export default function App() {
           },
         ];
       });
-      setActiveTabId(id);
+      if (detail.focus !== false) setActiveTabId(id);
     };
     window.addEventListener(REVIEW_EVENT, handler);
     return () => window.removeEventListener(REVIEW_EVENT, handler);

@@ -66,6 +66,7 @@ import {
   WORKSPACE_PATH_MIME,
   type ChatDragPayload,
 } from "@/lib/chat-drag";
+import { describeDeferredReview, readDeferredReview } from "@/lib/chat-review";
 import { CHAT_RESPONSE_EVENT, dispatchChangesApplied, dispatchReview } from "@/lib/review-events";
 import {
   AUTOSKILL_COMMAND,
@@ -109,6 +110,11 @@ interface AttachmentDraft {
 interface PendingState {
   runId: string;
   items: ChatPending[];
+  changes: PendingFileChange[];
+}
+
+interface ReviewOffer {
+  runId: string;
   changes: PendingFileChange[];
 }
 
@@ -240,6 +246,7 @@ export function ChatSidebar({
   const [permissionBusy, setPermissionBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | undefined>();
   const [pending, setPending] = useState<PendingState | null>(null);
+  const [reviewOffer, setReviewOffer] = useState<ReviewOffer | null>(null);
   const [skills, setSkills] = useState<SkillInfo[]>([]);
   const [selectedSkill, setSelectedSkill] = useState<SkillOption | null>(null);
   const [skillMenuOpen, setSkillMenuOpen] = useState(false);
@@ -510,6 +517,7 @@ export function ChatSidebar({
     setEntries([]);
     setAttachments([]);
     setPending(null);
+    setReviewOffer(null);
     setSteps([]);
     setError(undefined);
     dispatchReview(null, null);
@@ -635,25 +643,35 @@ export function ChatSidebar({
     if (response.status === "done") {
       setPending(null);
       setSteps([]);
-      dispatchReview(null, null);
+      const deferred = readDeferredReview(response);
+      setReviewOffer(deferred);
+      if (deferred) {
+        dispatchReview(deferred.runId, deferred.changes, { applied: true, focus: false });
+      } else {
+        dispatchReview(null, null);
+      }
       if (response.changes?.length) {
         dispatchChangesApplied(response.changes.map((change) => change.path));
       }
       if (response.sessionId) setSessionId(response.sessionId);
-      setEntries((current) => [
-        ...current,
-        {
-          id: crypto.randomUUID(),
-          role: "assistant",
-          content: response.message,
-          changes: response.changes ?? [],
-        },
-      ]);
+      const message = response.message?.trim() ?? "";
+      if (message) {
+        setEntries((current) => [
+          ...current,
+          {
+            id: crypto.randomUUID(),
+            role: "assistant",
+            content: message,
+            changes: response.changes ?? [],
+          },
+        ]);
+      }
       refreshSessions().catch(console.error);
       return;
     }
     if (response.status === "approval_required") {
       setSteps([]);
+      setReviewOffer(null);
       if (response.sessionId) setSessionId(response.sessionId);
       setPending({
         runId: response.runId,
@@ -741,6 +759,7 @@ export function ChatSidebar({
         setAttachments([]);
         setSelectedSkill(null);
         setPending(null);
+        setReviewOffer(null);
         setSteps([]);
         setError(undefined);
         dispatchReview(null, null);
@@ -974,6 +993,7 @@ export function ChatSidebar({
       setEntries([]);
       setAttachments([]);
       setPending(null);
+      setReviewOffer(null);
       setSteps([]);
       setError(undefined);
       dispatchReview(null, null);
@@ -992,6 +1012,7 @@ export function ChatSidebar({
         })),
       );
       setPending(null);
+      setReviewOffer(null);
       setSteps([]);
       setError(undefined);
     } catch (e) {
@@ -1007,6 +1028,7 @@ export function ChatSidebar({
       setSessionId(null);
       setEntries([]);
       setPending(null);
+      setReviewOffer(null);
       setSteps([]);
       await refreshSessions();
     } catch (e) {
@@ -1121,7 +1143,8 @@ export function ChatSidebar({
             <p className="text-muted-foreground">
               Mulai chat dengan LLM. Lampirkan gambar/file teks, atau seret file, dokumen, dan tiket
               dari panel kiri ke sini sebagai konteks. Aplikasi dapat membaca/menulis file di
-              workspace — setiap edit akan meminta persetujuan Anda.
+              workspace — setiap edit langsung diterapkan lalu bisa di-review atau di-revert setelah
+              chat selesai.
             </p>
           )
           : (
@@ -1293,6 +1316,36 @@ export function ChatSidebar({
                 onClick={() => dispatchReview(pending.runId, pending.changes)}
               >
                 Buka review
+              </Button>
+            </div>
+          )
+          : null}
+
+        {reviewOffer && reviewOffer.changes.length > 0
+          ? (
+            <div className="flex flex-col gap-1.5 rounded-md border border-primary/30 bg-primary/5 p-3">
+              <div className="flex items-start justify-between gap-2">
+                <p className="text-xs font-medium">Perubahan sudah diterapkan</p>
+                <button
+                  type="button"
+                  className="text-muted-foreground hover:text-foreground"
+                  onClick={() => setReviewOffer(null)}
+                  aria-label="Tutup review perubahan"
+                >
+                  <X className="size-3" />
+                </button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {describeDeferredReview(reviewOffer.changes)} · chat tetap bisa dilanjutkan
+              </p>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 self-start text-xs"
+                onClick={() =>
+                  dispatchReview(reviewOffer.runId, reviewOffer.changes, { applied: true })}
+              >
+                Review &amp; revert
               </Button>
             </div>
           )

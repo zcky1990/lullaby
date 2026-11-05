@@ -269,7 +269,11 @@ export const McpServerInput = z
       });
     }
     if (value.transport === "http" && !value.url) {
-      ctx.addIssue({ code: "custom", message: "URL wajib untuk transport http.", path: ["url"] });
+      ctx.addIssue({
+        code: "custom",
+        message: "URL wajib untuk transport http.",
+        path: ["url"],
+      });
     }
   });
 export type McpServerInput = z.infer<typeof McpServerInput>;
@@ -358,6 +362,8 @@ export const ChatToolsSettingsInput = z.object({
   autoApproveTools: z.array(z.string().trim().min(1).max(80)).max(200).optional(),
   /** null/omit = unlimited agent steps (OpenCode-style). */
   maxSteps: z.number().int().min(1).max(200).nullable().optional(),
+  /** `end` = apply writes then review after the run (non-blocking). */
+  writeReviewMode: z.enum(["end", "before"]).optional(),
 });
 export type ChatToolsSettingsInput = z.infer<typeof ChatToolsSettingsInput>;
 

@@ -35,7 +35,7 @@ Implementasi: `src/server/backup.ts` + `src/server/routes/backup.ts` (didaftarka
   local_documents, chat_sessions, chat_messages, workflow_*).
 - Import `merge` memakai upsert per primary key; `replace` menghapus data scope tersebut lebih
   dulu. Import project selalu menyalin baris dengan id baru (tiket, sesi chat, workflow run) agar
-  tidak menimpa data yang ada; baris yatim (parent tidak ada) dilewati.
+  tidak menimpa data yang ada; baris yatim (parent tidak ada) diabaikan.
 - Rahasia dienkripsi ulang dengan master key mesin tujuan saat import.
 
 ## Settings (global)
@@ -55,6 +55,17 @@ Implementasi: `src/server/backup.ts` + `src/server/routes/backup.ts` (didaftarka
 | `GET`/`POST`   | `/api/roles`               | List / create role              |
 | `PUT`/`DELETE` | `/api/roles/:id`           | Update / hapus                  |
 | `POST`         | `/api/integrations/test`   | Health-check config             |
+
+### Chat tools (`/api/settings/chat-tools`)
+
+`GET`/`PUT` `{ autoApproveWrites, disabledTools, autoApproveTools, maxSteps, writeReviewMode }`
+(`null` `maxSteps` = unlimited). `writeReviewMode`:
+
+- `end` (default) — `write_file` langsung diterapkan; review dilakukan setelah run selesai
+  (respons `done` membawa `runId` + `pendingChanges` + `reviewDeferred: true`).
+- `before` — run berhenti dengan `status: "approval_required"` sampai hunk diputuskan.
+
+Field yang tidak dikirim saat `PUT` mempertahankan nilai tersimpan.
 
 ## Projects
 
@@ -147,14 +158,21 @@ Prefix: `/api/projects/:id/git/`
 
 | Method         | Path                                   | Keterangan                                             |
 | -------------- | -------------------------------------- | ------------------------------------------------------ |
-| `POST`         | `/api/projects/:id/chat`               | Start / lanjut agent                                   |
+| `POST`         | `/api/projects/:id/chat`               | Start / lanjut agent (NDJSON stream)                   |
 | `POST`         | `/api/projects/:id/autoskills`         | Jalankan `npx autoskills` di workspace (`{ dryRun? }`) |
-| `POST`         | `/api/chat/change`                     | Accept/reject satu hunk                                |
-| `POST`         | `/api/chat/change-all`                 | Accept/reject semua                                    |
+| `POST`         | `/api/chat/change`                     | Keep/revert satu hunk (`{ runId, callId, hunk, accept }`) |
+| `POST`         | `/api/chat/change-all`                 | Keep/revert semua                                      |
 | `GET`          | `/api/projects/:id/chat/sessions`      | List sesi                                              |
 | `GET`/`DELETE` | `/api/projects/:id/chat/sessions/:sid` | Detail / hapus                                         |
 
-Response chat umum: `done` | `approval_required` | `error` (+ `runId`, pending changes).
+Response chat: `done` | `approval_required` | `error` | `cancelled`.
+
+- `done` dengan mode review `end` dapat membawa `runId`, `pendingChanges`, dan
+  `reviewDeferred: true`. `pendingChanges[].applied = true` berarti perubahan sudah ditulis ke disk;
+  `POST /api/chat/change(-all)` dengan `accept: false` akan me-revert hunk/file tersebut (file baru
+  yang seluruhnya di-revert dihapus). Run disimpan 10 menit sejak `finishedAt` agar review masih
+  bisa dilakukan.
+- `approval_required` dipakai mode review `before` (agent menunggu keputusan sebelum menulis).
 
 ## Static
 

@@ -6,6 +6,14 @@ import { api, type PendingFileChange } from "@/lib/api";
 import { dispatchChatResponse } from "@/lib/review-events";
 import { cn } from "@/lib/utils";
 
+/** `pendingChanges[].applied` = perubahan sudah ditulis ke disk (review di akhir). */
+type ReviewFileChange = PendingFileChange & { applied?: boolean };
+
+function isAppliedReview(changes: PendingFileChange[]): boolean {
+  return changes.length > 0 &&
+    changes.every((change) => (change as ReviewFileChange).applied === true);
+}
+
 export function ReviewTab({
   runId,
   changes,
@@ -15,6 +23,7 @@ export function ReviewTab({
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | undefined>();
+  const applied = isAppliedReview(changes);
 
   const decide = async (callId: string, hunk: number, accept: boolean) => {
     setBusy(true);
@@ -54,15 +63,19 @@ export function ReviewTab({
     <div className="flex h-full flex-col">
       <div className="flex flex-wrap items-center justify-between gap-2 border-b px-4 py-2">
         <div className="flex min-w-0 flex-col">
-          <h1 className="text-xs font-semibold">Review perubahan AI</h1>
+          <h1 className="text-xs font-semibold">
+            {applied ? "Review perubahan AI (sudah diterapkan)" : "Review perubahan AI"}
+          </h1>
           <p className="text-xs text-muted-foreground">
-            {changes.length} file · accept/reject per hunk
+            {changes.length} file · {applied
+              ? "Keep untuk mempertahankan, Revert untuk mengembalikan file ke kondisi sebelum chat"
+              : "accept/reject per hunk"}
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-2">
           {busy ? <Spinner /> : null}
           <Button size="sm" onClick={() => decideAll(true)} disabled={busy}>
-            Accept all
+            {applied ? "Keep all" : "Accept all"}
           </Button>
           <Button size="sm" variant="outline" onClick={() => decideAll(false)} disabled={busy}>
             Revert all
@@ -102,7 +115,7 @@ export function ReviewTab({
                         disabled={busy || hunk.decision === "accepted"}
                         onClick={() => decide(change.callId, index, true)}
                       >
-                        Accept
+                        {applied ? "Keep" : "Accept"}
                       </Button>
                       <Button
                         size="sm"
@@ -111,7 +124,7 @@ export function ReviewTab({
                         disabled={busy || hunk.decision === "rejected"}
                         onClick={() => decide(change.callId, index, false)}
                       >
-                        Reject
+                        {applied ? "Revert" : "Reject"}
                       </Button>
                     </div>
                   </div>

@@ -7,7 +7,7 @@ export const runs = new Map<string, Run>();
 export function pruneRuns(): void {
   const now = Date.now();
   for (const [id, run] of runs) {
-    if (now - run.createdAt > RUN_TTL_MS) runs.delete(id);
+    if (now - (run.finishedAt ?? run.createdAt) > RUN_TTL_MS) runs.delete(id);
   }
 }
 

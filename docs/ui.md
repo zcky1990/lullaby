@@ -5,30 +5,31 @@ status bar.
 
 ## Activity bar
 
-| Menu | Panel / perilaku |
-| --- | --- |
-| Workspace | `WorkspacePanel` — daftar, buat, pilih, ganti nama (klik dua kali / ikon pensil), hapus project |
-| Explorer | `FileTreePanel` — butuh `workspace_path`; tombol buat file/folder; file yang belum disimpan ditebalkan |
-| Document | `DocumentPanel` — Local / Docmost / Notion / Confluence |
-| Ticket | `TicketPanel` — filter + create/refresh; board full-height dengan scroll per kolom |
-| Workflows | `WorkflowPanel` — daftar YAML, recent runs, create/refresh |
-| Cron | `CronPanel` — jadwal `schedule`/`on`, toggle enable, docs wiki |
-| Project Settings | `SettingsPanel` — section nav (Workspace, Integrations, Activity, Backup & Restore) |
-| Terminal | Toggle **bottom panel** (bukan tab utama) |
-| Git | `GitPanel` — branches / refresh |
-| Global Settings | `GlobalSettingsPanel` — section nav di aside (termasuk Backup & Restore) |
+| Menu             | Panel / perilaku                                                                                       |
+| ---------------- | ------------------------------------------------------------------------------------------------------ |
+| Workspace        | `WorkspacePanel` — daftar, buat, pilih, ganti nama (klik dua kali / ikon pensil), hapus project        |
+| Explorer         | `FileTreePanel` — butuh `workspace_path`; tombol buat file/folder; file yang belum disimpan ditebalkan |
+| Document         | `DocumentPanel` — Local / Docmost / Notion / Confluence                                                |
+| Ticket           | `TicketPanel` — filter + create/refresh; board full-height dengan scroll per kolom                     |
+| Workflows        | `WorkflowPanel` — daftar YAML, recent runs, create/refresh                                             |
+| Cron             | `CronPanel` — jadwal `schedule`/`on`, toggle enable, docs wiki                                         |
+| Project Settings | `SettingsPanel` — section nav (Workspace, Integrations, Activity, Backup & Restore)                    |
+| Terminal         | Toggle **bottom panel** (bukan tab utama)                                                              |
+| Git              | `GitPanel` — branches / refresh                                                                        |
+| Global Settings  | `GlobalSettingsPanel` — section nav di aside (termasuk Backup & Restore)                               |
 
 File dan dokumen terbuka sebagai **tab dinamis**. Menu Workspace / Ticket / Settings / Git / Global
 membuka **singleton tab**.
 
 ## Area utama (`TabsBar`)
 
-Jenis tab: `workspace` | `ticket` | `workflow` | `workflow-docs` | `cron` | `cron-docs` |
-`settings` | `global` | `document` | `file` | `review` | `git`.
+Jenis tab: `workspace` | `ticket` | `workflow` | `workflow-docs` | `cron` | `cron-docs` | `settings`
+| `global` | `document` | `file` | `review` | `git`.
 
 - **File**: Monaco (lazy), dirty flag, simpan tombol / `Cmd|Ctrl+S` → `PUT .../files/content`
 - **Document**: Markdown preview + Edit (lokal/Docmost); Notion/Confluence read-only
-- **Review**: accept/reject hunk dari chat `write_file`
+- **Review**: review perubahan `write_file` dari chat (accept/reject hunk, atau keep/revert bila
+  perubahan sudah diterapkan)
 - **Ticket**: Kanban board
 - **Git**: Changes + History
 - **Workflow**: editor YAML + DAG (React Flow) + run history/step logs
@@ -47,17 +48,17 @@ Explorer memakai flag itu untuk menandai file yang belum disimpan:
 - Nama file dirender `font-semibold` + `text-foreground` (ikon file ikut lebih terang) dan diberi
   dot kecil `bg-primary` di kanan; tooltip menjadi `nama — belum disimpan` plus teks `sr-only`
   “(belum disimpan)” untuk pembaca layar. Folder tidak pernah ditandai.
-- Penanda otomatis hilang setelah `Cmd|Ctrl+S` / tombol **Simpan** (`patchTab { dirty: false }`) atau
-  setelah isi file dibaca ulang dari disk (mis. `openFile(path, true)` dari daftar perubahan chat).
-- Sumber data: `web/src/lib/dirty-paths.ts`
-  (`collectDirtyPaths` → `Set<path>`, `isDirtyPath` untuk pencocokan, plus store kecil
-  `publishDirtyPaths` / `subscribeDirtyPaths`).
+- Penanda otomatis hilang setelah `Cmd|Ctrl+S` / tombol **Simpan** (`patchTab { dirty: false }`)
+  atau setelah isi file dibaca ulang dari disk (mis. `openFile(path, true)` dari daftar perubahan
+  chat).
+- Sumber data: `web/src/lib/dirty-paths.ts` (`collectDirtyPaths` → `Set<path>`, `isDirtyPath` untuk
+  pencocokan, plus store kecil `publishDirtyPaths` / `subscribeDirtyPaths`).
 - `useEditorTabs` mempublikasikan ringkasan path dirty setiap daftar tab berubah; `FileTreePanel`
   berlangganan lewat `web/src/hooks/useDirtyPaths.ts` (`useSyncExternalStore`), jadi tidak perlu
   prop dari `App.tsx`. Prop `dirtyPaths` masih tersedia sebagai override (mis. untuk test).
-- Perbandingan path dinormalkan (`\` → `/`, prefix `./` dibuang). Path relatif dan absolut dicocokkan
-  lewat suffix hanya bila tingkatannya berbeda, sehingga `src/a.ts` tidak dianggap sama dengan
-  `lib/src/a.ts`.
+- Perbandingan path dinormalkan (`\` → `/`, prefix `./` dibuang). Path relatif dan absolut
+  dicocokkan lewat suffix hanya bila tingkatannya berbeda, sehingga `src/a.ts` tidak dianggap sama
+  dengan `lib/src/a.ts`.
 
 ## Chat sidebar
 
@@ -76,18 +77,18 @@ Tombol **Chat** di header. Fitur:
 
 Semua sumber drag memakai kontrak di `web/src/lib/chat-drag.ts`:
 
-| Sumber | MIME | Hasil di chat |
-| --- | --- | --- |
-| File di `FileTreePanel` | `application/x-rnd-workspace-path` | lampiran `workspace` (path) |
-| Dokumen lokal di `DocumentPanel` | `application/x-rnd-chat-document` | lampiran teks berisi isi `.md` |
-| Dokumen Docmost/Notion/Confluence | `application/x-rnd-chat-document` | lampiran teks berisi konten halaman |
-| Kartu tiket (`TicketKanban`) | `application/x-rnd-chat-ticket` | lampiran teks berisi detail tiket |
-| File dari OS / clipboard | `Files` | lampiran gambar/teks |
+| Sumber                            | MIME                               | Hasil di chat                       |
+| --------------------------------- | ---------------------------------- | ----------------------------------- |
+| File di `FileTreePanel`           | `application/x-rnd-workspace-path` | lampiran `workspace` (path)         |
+| Dokumen lokal di `DocumentPanel`  | `application/x-rnd-chat-document`  | lampiran teks berisi isi `.md`      |
+| Dokumen Docmost/Notion/Confluence | `application/x-rnd-chat-document`  | lampiran teks berisi konten halaman |
+| Kartu tiket (`TicketKanban`)      | `application/x-rnd-chat-ticket`    | lampiran teks berisi detail tiket   |
+| File dari OS / clipboard          | `Files`                            | lampiran gambar/teks                |
 
 - Isi dokumen/tiket diambil saat **drop** (`web/src/lib/chat-context.ts`) lalu dikirim sebagai
   lampiran `{ type: "text" }`; maksimal 6 lampiran, konteks dipotong di 180k karakter.
-- `dragstart` memancarkan `rnd:chat-open-request`; `WindowToolbar` meneruskannya ke toggle chat milik
-  `App`, jadi panel chat otomatis terbuka saat item diseret.
+- `dragstart` memancarkan `rnd:chat-open-request`; `WindowToolbar` meneruskannya ke toggle chat
+  milik `App`, jadi panel chat otomatis terbuka saat item diseret.
 - Node `space:` (placeholder Docmost) tidak bisa diseret.
 - Kartu tiket tetap memakai dnd-kit untuk pindah kolom. Drag ke chat memakai grip kecil di pojok
   kartu yang `pointerdown`-nya di-`stopPropagation` agar sensor kanban tidak aktif, sehingga drag
@@ -117,8 +118,42 @@ menampilkan collapsible **Perubahan file** — komponen `web/src/components/Chat
   dipertahankan, angka memakai kondisi akhir file).
 - Daftar juga tampil saat sesi lama dibuka, karena `changes` per pesan disimpan di DB
   (`GET /api/projects/:id/chat/sessions/:sessionId`).
-- Perubahan yang masih menunggu persetujuan tidak masuk daftar ini (pakai tombol **Buka review** /
-  tombol accept di langkah chat).
+- Perubahan yang masih menunggu persetujuan (mode review **Sebelum diterapkan**) tidak masuk daftar
+  ini; pakai tombol **Buka review** di chat.
+
+## Review perubahan AI
+
+Global Settings → Tools punya dua pengaturan yang menentukan kapan `write_file` direview
+(`src/server/chat/settings.ts`, `app_settings`):
+
+| `auto_approve_writes` | `chat_write_review_mode` | Perilaku                                                                                                             |
+| --------------------- | ------------------------ | -------------------------------------------------------------------------------------------------------------------- |
+| on                    | —                        | tulis langsung ke disk, tanpa Review tab                                                                             |
+| off                   | `end` (**default**)      | tulis langsung selama agent bekerja, semua perubahan dikumpulkan lalu direview saat chat selesai — **tidak memblok** |
+| off                   | `before`                 | agent berhenti (`status: approval_required`) dan menunggu accept/reject per hunk sebelum menulis                     |
+
+Mode `end` (deferred review):
+
+- Selama run, setiap `write_file` langsung diterapkan ke disk dan dicatat sebagai entri review
+  (`run.pendingChanges`, `applied: true`, semua hunk sudah `accepted`). Langkah chat menampilkan
+  “Diterapkan: `<path>`”.
+- Saat run selesai, respons `done` membawa `runId`, `pendingChanges`, dan `reviewDeferred: true`.
+  Run tetap disimpan di memori (TTL 10 menit, dihitung dari `finishedAt`) supaya review masih bisa
+  dilakukan setelah jawaban selesai.
+- Chat menampilkan kartu **Perubahan sudah diterapkan** (ringkasan file, mis.
+  `2 file (1 baru, 1 diubah) · +12 · −3`) dengan tombol **Review & revert**; tab Review dibuat di
+  latar belakang lewat event `rnd:chat-review` (tanpa merebut fokus tab aktif) dan bisa
+  dibuka/ditutup tanpa menghentikan chat.
+- Di tab Review, tombol berubah menjadi **Keep** / **Revert** (semua hunk sudah `accepted`).
+  **Revert** menulis ulang file dari `before` + hunk yang di-keep, jadi bisa revert sebagian hunk.
+  File baru yang seluruhnya di-revert akan dihapus.
+- Revert hanya dijalankan bila isi file di disk masih sama dengan hasil tulisan AI; bila file sudah
+  diubah manual setelahnya, revert dilewati dan alasannya dikirim sebagai pesan chat.
+- Beberapa `write_file` ke path yang sama digabung menjadi satu entri review (diff kumulatif dari
+  kondisi sebelum chat).
+- Bila masih ada entri yang belum direview, respons berikutnya juga bertanda `reviewDeferred`
+  sehingga tab Review tetap sinkron. Setelah semua hunk diputuskan, run dihapus dan tab Review
+  ditutup.
 
 ## Workspace (nama project)
 
@@ -133,10 +168,10 @@ menampilkan collapsible **Perubahan file** — komponen `web/src/components/Chat
 
 Dua tempat, komponen yang sama (`web/src/components/BackupSettings.tsx`):
 
-| Lokasi | Section | Cakupan |
-| --- | --- | --- |
-| Global Settings | Backup & Restore | Seluruh config (`app_settings`, LLM provider, role, integrasi) + database (project, tiket lokal, dokumen lokal, chat, workflow) |
-| Project Settings | Backup & Restore | Integration config project + data milik project tersebut |
+| Lokasi           | Section          | Cakupan                                                                                                                         |
+| ---------------- | ---------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| Global Settings  | Backup & Restore | Seluruh config (`app_settings`, LLM provider, role, integrasi) + database (project, tiket lokal, dokumen lokal, chat, workflow) |
+| Project Settings | Backup & Restore | Integration config project + data milik project tersebut                                                                        |
 
 Alur UI:
 

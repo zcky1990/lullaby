@@ -1,5 +1,5 @@
 import type { ChatChange } from "../../db/db.ts";
-import { readWorkspaceFile, writeWorkspaceFile } from "../../fs/workspace.ts";
+import { readWorkspaceFile, removeWorkspaceFile, writeWorkspaceFile } from "../../fs/workspace.ts";
 import { applyHunks, diffHunks, diffLines } from "../diff.ts";
 import { safeParse } from "./llm.ts";
 import { scheduleSkillLearn } from "./skill-learn.ts";
@@ -51,13 +51,14 @@ export async function prepareWriteChange(
   };
 }
 
-function serializePendingChanges(run: Run): PendingFileChange[] {
+export function pendingChangesPayload(run: Run): PendingFileChange[] {
   return [...run.pendingChanges.values()].map((change) => ({
     callId: change.call.id,
     path: change.path,
     action: change.action,
     added: change.added,
     removed: change.removed,
+    ...(change.applied ? { applied: true } : {}),
     hunks: change.hunks.map((hunk, index) => ({
       ...hunk,
       decision: change.decisions.has(index)
@@ -68,7 +69,7 @@ function serializePendingChanges(run: Run): PendingFileChange[] {
 }
 
 export function approvalResponse(run: Run): ChatResponse {
-  const changes = serializePendingChanges(run);
+  const changes = pendingChangesPayload(run);
   return {
     status: "approval_required",
     runId: run.id,
@@ -84,8 +85,132 @@ export function approvalResponse(run: Run): ChatResponse {
   };
 }
 
+function updateChangeEntry(
+  run: Run,
+  path: string,
+  action: "create" | "update",
+  before: string,
+  content: string,
+): void {
+  const diff = diffLines(before, content);
+  const index = run.changes.findIndex((item) => item.path === path);
+  if (diff.added === 0 && diff.removed === 0) {
+    if (index >= 0) run.changes.splice(index, 1);
+    return;
+  }
+  const entry: ChatChange = {
+    path,
+    action,
+    diff: diff.diff,
+    added: diff.added,
+    removed: diff.removed,
+  };
+  if (index >= 0) run.changes[index] = entry;
+  else run.changes.push(entry);
+}
+
+/**
+ * Record a write that was already applied to disk.
+ * When `deferReview` is set the change stays queued so the user can review it
+ * after the run finishes (reject = revert that hunk).
+ */
+export function recordAppliedWrite(
+  run: Run,
+  change: PendingChange,
+  deferReview: boolean,
+): void {
+  const previous = deferReview
+    ? [...run.pendingChanges.values()].find((item) => item.path === change.path)
+    : undefined;
+  if (previous) run.pendingChanges.delete(previous.call.id);
+  const before = previous?.before ?? change.before;
+  const action = previous?.action ?? change.action;
+  updateChangeEntry(run, change.path, action, before, change.after);
+  if (!deferReview) return;
+
+  const result = diffHunks(before, change.after);
+  if (result.hunks.length === 0) return;
+
+  const decisions = new Map<number, boolean>();
+  result.hunks.forEach((_, index) => decisions.set(index, true));
+  change.before = before;
+  change.action = action;
+  change.hunks = result.hunks;
+  change.added = result.added;
+  change.removed = result.removed;
+  change.decisions = decisions;
+  change.applied = true;
+  change.touched = false;
+  run.pendingChanges.set(change.call.id, change);
+}
+
+/** Final response for a finished run that still has review items to settle. */
+export function deferredReviewResponse(run: Run, message: string): ChatResponse {
+  return {
+    status: "done",
+    message,
+    sessionId: run.sessionId,
+    changes: run.changes,
+    createdTickets: run.createdTickets,
+    runId: run.id,
+    pendingChanges: pendingChangesPayload(run),
+    reviewDeferred: true,
+  };
+}
+
+async function settleAppliedChange(run: Run, change: PendingChange): Promise<string> {
+  if (!run.workspace) return "No workspace configured.";
+  const accepted = new Set(
+    [...change.decisions.entries()].filter(([, value]) => value).map(([index]) => index),
+  );
+  const content = applyHunks(
+    change.before,
+    change.hunks,
+    accepted,
+    change.after.endsWith("\n"),
+  );
+  if (content === change.after) return "";
+
+  let current: string | null = null;
+  try {
+    current = (await readWorkspaceFile(run.workspace, change.path)).content;
+  } catch {
+    current = null;
+  }
+  if (current !== change.after) {
+    return `Revert ${change.path} dilewati: file sudah berubah setelah perubahan AI.`;
+  }
+
+  try {
+    if (change.action === "create" && content.length === 0) {
+      await removeWorkspaceFile(run.workspace, change.path);
+      updateChangeEntry(run, change.path, change.action, change.before, content);
+      return `Revert ${change.path}: file baru dihapus.`;
+    }
+    await writeWorkspaceFile(run.workspace, change.path, content);
+    updateChangeEntry(run, change.path, change.action, change.before, content);
+    if (accepted.size === 0) {
+      return `Revert ${change.path}: kembali ke versi sebelum chat.`;
+    }
+    const reverted = change.hunks.length - accepted.size;
+    return `Revert sebagian ${change.path}: ${reverted} hunk dikembalikan.`;
+  } catch (error) {
+    return `Error: ${(error as Error).message}`;
+  }
+}
+
 async function settle(run: Run): Promise<ChatResponse> {
+  const notes: string[] = [];
+
   for (const change of [...run.pendingChanges.values()]) {
+    if (change.applied) {
+      if (!change.touched) continue;
+      if (change.decisions.size < change.hunks.length) continue;
+      const note = await settleAppliedChange(run, change);
+      if (note) notes.push(note);
+      run.pendingChanges.delete(change.call.id);
+      continue;
+    }
     if (change.decisions.size < change.hunks.length) continue;
     const accepted = new Set(
       [...change.decisions.entries()].filter(([, value]) => value).map(([index]) => index),
@@ -125,7 +250,23 @@ async function settle(run: Run): Promise<ChatResponse> {
     run.pendingChanges.delete(change.call.id);
   }
 
-  if (run.pendingChanges.size > 0) return approvalResponse(run);
+  const message = notes.join("\n");
+
+  if (run.pendingChanges.size > 0) {
+    if (run.finishedAt) return deferredReviewResponse(run, message);
+    return approvalResponse(run);
+  }
+
+  if (run.finishedAt) {
+    deleteRun(run.id);
+    return {
+      status: "done",
+      message,
+      sessionId: run.sessionId,
+      changes: run.changes,
+      createdTickets: run.createdTickets,
+    };
+  }
 
   for (const call of run.pendingBatch) {
     run.turns.push({
@@ -166,6 +307,7 @@ export async function decideChatChange(
     return { status: "error", error: "hunk_not_found" };
   }
   change.decisions.set(hunk, accept);
+  change.touched = true;
   return await settle(run);
 }
 
@@ -181,6 +323,7 @@ export async function decideAllChatChanges(
     for (let index = 0; index < change.hunks.length; index++) {
       change.decisions.set(index, accept);
     }
+    change.touched = true;
   }
   return await settle(run);
 }

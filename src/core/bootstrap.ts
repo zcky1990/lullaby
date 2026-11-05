@@ -1,4 +1,5 @@
 import { appendEvent, getDb, markInterruptedWorkflowRuns, pruneEvents } from "../db/db.ts";
+import { ensureChatSessionTombstones } from "../db/chat-tombstones.ts";
 import { migratePlaintextSecrets } from "../secrets/migrate.ts";
 import { syncConfiguredCursorModels } from "../server/chat/cursor-models.ts";
 import { installDefaultSkills } from "../server/skills.ts";
@@ -10,6 +11,13 @@ import { appDataDir, ensureAppDataDir } from "./paths.ts";
 export async function bootstrap(): Promise<void> {
   const dir = await ensureAppDataDir();
   await getDb();
+  try {
+    // Trigger tombstone: sesi chat Cursor yang dihapus user tidak di-import ulang
+    // dari SDK Cursor pada `GET /chat/sessions` berikutnya.
+    await ensureChatSessionTombstones();
+  } catch (error) {
+    log.warn("cursor chat tombstones skipped", { error: String(error) });
+  }
   try {
     await migratePlaintextSecrets();
   } catch (error) {

@@ -1,4 +1,9 @@
 import { equal } from "node:assert/strict";
+import {
+  ensureChatSessionTombstones,
+  listHiddenCursorAgents,
+  unhideCursorAgent,
+} from "../src/db/chat-tombstones.ts";
 
 const dataDir = await Deno.makeTempDir();
 Deno.env.set("RND_APP_DATA_DIR", dataDir);
@@ -12,11 +17,15 @@ const {
   createLocalTicket,
   createProject,
   createRole,
+  deleteChatSession,
   deleteLlmProvider,
+  findChatSessionByCursorAgentId,
   getLocalTicket,
   getRole,
+  listChatSessions,
   listLlmProviders,
   markLocalTicketSynced,
+  upsertImportedCursorSession,
 } = db;
 
 Deno.test("db: llm provider CRUD and role provider null-out", async () => {
@@ -60,6 +69,49 @@ Deno.test("db: local ticket sync sets jira_key", async () => {
   const synced = await getLocalTicket(ticket.id);
   equal(synced?.jira_key, "PROJ-42");
   equal(synced?.sync_status, "synced");
+});
+
+Deno.test("db: deleted Cursor session stays deleted (tombstone + trigger)", async () => {
+  // Dipasang sekali saat bootstrap; di test dipanggil eksplisit.
+  await ensureChatSessionTombstones();
+
+  const project = await createProject({
+    id: crypto.randomUUID(),
+    name: "Cursor Delete",
+  });
+  const agentId = `agent-${crypto.randomUUID()}`;
+
+  const session = await upsertImportedCursorSession({
+    projectId: project.id,
+    cursorAgentId: agentId,
+    title: "Cursor chat",
+  });
+  equal(session.source, "cursor");
+  equal(session.cursor_agent_id, agentId);
+
+  await deleteChatSession(session.id);
+  equal(await findChatSessionByCursorAgentId(project.id, agentId), null);
+  equal((await listHiddenCursorAgents(project.id)).includes(agentId), true);
+
+  // Mirror berikutnya (Agent.list → upsertImportedCursorSession) tidak boleh
+  // membuat sesi yang sama lagi.
+  const reimported = await upsertImportedCursorSession({
+    projectId: project.id,
+    cursorAgentId: agentId,
+    title: "Cursor chat",
+  });
+  equal(reimported, null);
+  equal((await listChatSessions(project.id)).length, 0);
+
+  // Escape hatch: agent bisa dimunculkan lagi (mirror meng-import ulang).
+  await unhideCursorAgent(project.id, agentId);
+  const again = await upsertImportedCursorSession({
+    projectId: project.id,
+    cursorAgentId: agentId,
+    title: "Cursor chat",
+  });
+  equal(again.cursor_agent_id, agentId);
+  equal((await listChatSessions(project.id)).length, 1);
 });
 
 Deno.test({

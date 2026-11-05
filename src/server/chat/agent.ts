@@ -15,10 +15,15 @@ import {
   type PromptSettings,
   readPromptSettings,
 } from "../prompts.ts";
-import { diffLines } from "../diff.ts";
 import type { CursorConversationMessage, CursorStreamEvent } from "./cursor.ts";
 import { complete, type CompleteResult, VARIANT_TEMPERATURE } from "./llm.ts";
-import { approvalResponse, prepareWriteChange, setAdvance } from "./review.ts";
+import {
+  approvalResponse,
+  deferredReviewResponse,
+  prepareWriteChange,
+  recordAppliedWrite,
+  setAdvance,
+} from "./review.ts";
 import { isFinalMaxStep, shouldContinueSteps, toolsForStep, turnsForStep } from "./max-steps.ts";
 import { addAutoApprovedTool, readChatToolsSettings } from "./settings.ts";
 import { scheduleSkillLearn } from "./skill-learn.ts";
@@ -463,6 +468,29 @@ function cancelledResponse(run: Run): ChatResponse {
   return { status: "cancelled", message: "Chat dihentikan.", sessionId: run.sessionId };
 }
 
+/**
+ * Ends a run. When writes were applied with end-of-run review enabled, the run
+ * stays in memory (with its pending changes) so the Review tab can still revert
+ * them after the answer is complete.
+ */
+function finishRun(run: Run, response: ChatResponse): ChatResponse {
+  if (response.status === "done" && run.pendingChanges.size > 0) {
+    emitChatStep(run, {
+      id: "review-deferred",
+      kind: "approval",
+      status: "done",
+      title: `${run.pendingChanges.size} perubahan diterapkan`,
+      detail: "Semua perubahan sudah ditulis. Review/revert kapan saja di tab Review.",
+    });
+    run.finishedAt = Date.now();
+    run.emit = undefined;
+    setRun(run);
+    return deferredReviewResponse(run, response.message);
+  }
+  deleteRun(run.id);
+  return response;
+}
+
 export async function advance(run: Run): Promise<ChatResponse> {
   try {
     if (isCancelled(run)) return cancelledResponse(run);
@@ -474,6 +502,8 @@ export async function advance(run: Run): Promise<ChatResponse> {
       ...toolsFor(run.workspace, run.mode, run.skills.size > 0, disabledTools),
       ...mcp.defs,
     ];
+    const deferReview = settings.writeReviewMode === "end";
+    const applyWrites = settings.autoApproveWrites || deferReview;
     const maxSteps = settings.maxSteps;
     for (let step = 0; shouldContinueSteps(step, maxSteps); step++) {
       if (isCancelled(run)) return cancelledResponse(run);
@@ -540,14 +570,13 @@ export async function advance(run: Run): Promise<ChatResponse> {
           title: "Selesai",
         });
         if (run.mode === "build") scheduleSkillLearn(run);
-        deleteRun(run.id);
-        return {
+        return finishRun(run, {
           status: "done",
           message,
           sessionId: run.sessionId,
           changes: run.mode === "plan" ? [] : run.changes,
           createdTickets: run.mode === "plan" ? [] : run.createdTickets,
-        };
+        });
       }
 
       if (run.mode === "plan") {
@@ -647,22 +676,22 @@ export async function advance(run: Run): Promise<ChatResponse> {
           } else if (WRITE_TOOLS.has(call.name)) {
             const prepared = await prepareWriteChange(run, call);
             if (prepared.change) {
-              if (settings.autoApproveWrites) {
+              if (applyWrites) {
                 if (!run.workspace) {
                   result = "No workspace configured.";
                 } else {
                   result = await applyWriteFile(run.workspace, call);
-                  const diff = diffLines(prepared.change.before, prepared.change.after);
-                  const applied = {
-                    path: prepared.change.path,
-                    action: prepared.change.action,
-                    diff: diff.diff,
-                    added: diff.added,
-                    removed: diff.removed,
-                  };
-                  const index = run.changes.findIndex((item) => item.path === applied.path);
-                  if (index >= 0) run.changes[index] = applied;
-                  else run.changes.push(applied);
+                  recordAppliedWrite(run, prepared.change, deferReview);
+                  if (deferReview) {
+                    emitChatStep(run, {
+                      id: `applied-${call.id}`,
+                      kind: "approval",
+                      status: "done",
+                      title: `Diterapkan: ${prepared.change.path}`,
+                      toolName: call.name,
+                      detail: "Perubahan bisa di-review atau di-revert di tab Review.",
+                    });
+                  }
                 }
               } else {
                 run.pendingChanges.set(call.id, prepared.change);
@@ -729,14 +758,13 @@ export async function advance(run: Run): Promise<ChatResponse> {
       title: "Selesai",
     });
     scheduleSkillLearn(run);
-    deleteRun(run.id);
-    return {
+    return finishRun(run, {
       status: "done",
       message,
       sessionId: run.sessionId,
       changes: run.changes,
       createdTickets: run.createdTickets,
-    };
+    });
   } catch (error) {
     if (isCancelled(run)) return cancelledResponse(run);
     emitChatStep(run, {

@@ -60,6 +60,8 @@ export interface PendingFileChange {
   added: number;
   removed: number;
   hunks: PendingHunk[];
+  /** true = change already written to disk; review can only revert it. */
+  applied?: boolean;
 }
 
 export type ChatResponse =
@@ -69,6 +71,10 @@ export type ChatResponse =
     sessionId: string;
     changes: ChatChange[];
     createdTickets: CreatedTicket[];
+    /** Present when the finished run still offers an end-of-run review. */
+    runId?: string;
+    pendingChanges?: PendingFileChange[];
+    reviewDeferred?: boolean;
   }
   | {
     status: "approval_required";
@@ -126,6 +132,8 @@ export interface Run {
   mcpTools: Map<string, McpToolBinding>;
   createdTickets: CreatedTicket[];
   createdAt: number;
+  /** Set when the run completed but keeps pending changes for end-of-run review. */
+  finishedAt?: number;
   emit?: (step: ChatStep) => void;
   abort?: AbortController;
   cancelled?: boolean;
@@ -147,4 +155,8 @@ export interface PendingChange {
   added: number;
   removed: number;
   decisions: Map<number, boolean>;
+  /** Written to disk already (end-of-run review); reject reverts the hunk. */
+  applied?: boolean;
+  /** User acted on a hunk; untouched deferred changes stay in review. */
+  touched?: boolean;
 }

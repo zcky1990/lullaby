@@ -329,12 +329,15 @@ export interface ChatToolCatalogEntry {
   requiresApproval: boolean;
 }
 
+export type WriteReviewMode = "end" | "before";
+
 export interface ChatToolsSettingsResponse {
   autoApproveWrites: boolean;
   disabledTools: string[];
   autoApproveTools: string[];
   /** null = unlimited (OpenCode-style). */
   maxSteps: number | null;
+  writeReviewMode: WriteReviewMode;
   tools: ChatToolCatalogEntry[];
 }
 
@@ -542,6 +545,10 @@ export type ChatResponse =
     sessionId: string;
     changes: FileChange[];
     createdTickets: CreatedTicket[];
+    /** Present when the finished run still offers an end-of-run review. */
+    runId?: string;
+    pendingChanges?: PendingFileChange[];
+    reviewDeferred?: boolean;
   }
   | {
     status: "approval_required";
@@ -1164,6 +1171,7 @@ export const api = {
     disabledTools: string[];
     autoApproveTools?: string[];
     maxSteps?: number | null;
+    writeReviewMode?: WriteReviewMode;
   }) =>
     request<ChatToolsSettingsResponse>(
       "/api/settings/chat-tools",

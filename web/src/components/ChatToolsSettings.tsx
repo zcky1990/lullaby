@@ -3,13 +3,32 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
-import { api, type ChatToolCatalogEntry, type ChatToolsSettingsResponse } from "@/lib/api";
+import {
+  api,
+  type ChatToolCatalogEntry,
+  type ChatToolsSettingsResponse,
+  type WriteReviewMode,
+} from "@/lib/api";
+
+const REVIEW_MODES: Array<{ id: WriteReviewMode; label: string }> = [
+  { id: "end", label: "Setelah selesai" },
+  { id: "before", label: "Sebelum diterapkan" },
+];
 
 export function ChatToolsSettings() {
   const [autoApproveWrites, setAutoApproveWrites] = useState(false);
+  const [writeReviewMode, setWriteReviewMode] = useState<WriteReviewMode>("end");
   const [disabledTools, setDisabledTools] = useState<string[]>([]);
   const [autoApproveTools, setAutoApproveTools] = useState<string[]>([]);
   const [maxSteps, setMaxSteps] = useState<number | null>(null);
@@ -42,6 +61,7 @@ export function ChatToolsSettings() {
 
   const applyResponse = (res: ChatToolsSettingsResponse) => {
     setAutoApproveWrites(res.autoApproveWrites);
+    setWriteReviewMode(res.writeReviewMode ?? "end");
     setDisabledTools(res.disabledTools);
     setAutoApproveTools(res.autoApproveTools);
     setMaxSteps(res.maxSteps);
@@ -54,16 +74,19 @@ export function ChatToolsSettings() {
     nextDisabled: string[],
     nextMaxSteps: number | null,
     nextAutoTools: string[] = autoApproveTools,
+    nextReviewMode: WriteReviewMode = writeReviewMode,
   ) => {
     setBusy(true);
     setError(undefined);
     try {
-      const res = await api.saveChatToolsSettings({
+      const payload = {
         autoApproveWrites: nextAuto,
         disabledTools: nextDisabled,
         autoApproveTools: nextAutoTools,
         maxSteps: nextMaxSteps,
-      });
+        writeReviewMode: nextReviewMode,
+      };
+      const res = await api.saveChatToolsSettings(payload);
       applyResponse(res);
     } catch (e) {
       setError((e as Error).message);
@@ -101,8 +124,8 @@ export function ChatToolsSettings() {
           Tools
         </h2>
         <p className="text-xs text-muted-foreground">
-          Atur auto-approve untuk write file di chat Build, batas langkah agent, dan enable/disable
-          tool. Perubahan hanya berlaku untuk chat interaktif (bukan workflow agent).
+          Atur auto-approve dan cara review write file di chat Build, batas langkah agent, dan
+          enable/disable tool. Perubahan hanya berlaku untuk chat interaktif (bukan workflow agent).
         </p>
         <Separator />
       </div>
@@ -131,6 +154,53 @@ export function ChatToolsSettings() {
                 aria-label="Auto-approve file writes"
               />
             </div>
+
+            {!autoApproveWrites
+              ? (
+                <div className="flex flex-col gap-2 rounded-md border p-4">
+                  <Label htmlFor="chat-write-review-mode" className="text-xs font-medium">
+                    Review perubahan AI
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    <span className="font-medium">Setelah selesai</span> (default): perubahan
+                    langsung diterapkan selama agent bekerja, lalu semua file dikumpulkan di tab
+                    Review ketika chat selesai — chat tidak terblokir.{" "}
+                    <span className="font-medium">Sebelum diterapkan</span>: agent berhenti dan
+                    menunggu persetujuan per hunk sebelum menulis ke disk.
+                  </p>
+                  <Select
+                    value={writeReviewMode}
+                    onValueChange={(value) =>
+                      void save(
+                        autoApproveWrites,
+                        disabledTools,
+                        maxSteps,
+                        autoApproveTools,
+                        value === "before" ? "before" : "end",
+                      )}
+                    disabled={busy}
+                  >
+                    <SelectTrigger
+                      id="chat-write-review-mode"
+                      size="sm"
+                      className="h-8 w-full text-xs"
+                      aria-label="Mode review perubahan"
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectGroup>
+                        {REVIEW_MODES.map((mode) => (
+                          <SelectItem key={mode.id} value={mode.id} className="text-xs">
+                            {mode.label}
+                          </SelectItem>
+                        ))}
+                      </SelectGroup>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )
+              : null}
 
             <div className="flex flex-col gap-2 rounded-md border p-4">
               <Label htmlFor="chat-max-steps" className="text-xs font-medium">
@@ -248,7 +318,11 @@ export function ChatToolsSettings() {
                           <span className="font-mono text-xs">{tool.name}</span>
                           {tool.requiresApproval && (
                             <Badge variant="secondary" className="text-[10px]">
-                              {autoApproveWrites ? "Auto-approve on" : "Needs approval"}
+                              {autoApproveWrites
+                                ? "Auto-approve on"
+                                : writeReviewMode === "end"
+                                ? "Review di akhir"
+                                : "Needs approval"}
                             </Badge>
                           )}
                         </div>

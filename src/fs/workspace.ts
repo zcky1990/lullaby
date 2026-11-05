@@ -157,6 +157,14 @@ export async function writeWorkspaceFile(
   await Deno.writeTextFile(file, content);
 }
 
+export async function removeWorkspaceFile(root: string, rel: string): Promise<void> {
+  const file = resolveWithin(root, rel);
+  if (!file) throw new Error("Path di luar workspace.");
+  const stat = await Deno.stat(file).catch(() => null);
+  if (!stat?.isFile) throw new Error("File tidak ditemukan.");
+  await Deno.remove(file);
+}
+
 const INVALID_NAME = /[\\/]|^\.+$/;
 
 export function joinWorkspacePath(parent: string, name: string): string {
