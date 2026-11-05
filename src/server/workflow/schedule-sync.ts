@@ -1,15 +1,11 @@
 import {
   deleteWorkflowSchedule,
   getWorkflowSchedule,
-  type WorkflowScheduleRow,
   upsertWorkflowSchedule,
+  type WorkflowScheduleRow,
 } from "../../db/db.ts";
 import { nextCronRun } from "./cron.ts";
-import type {
-  WorkflowDefinition,
-  WorkflowEventTrigger,
-  WorkflowScheduleInfo,
-} from "./types.ts";
+import type { WorkflowDefinition, WorkflowEventTrigger, WorkflowScheduleInfo } from "./types.ts";
 
 export function scheduleInfoFromRow(
   row: WorkflowScheduleRow | null | undefined,

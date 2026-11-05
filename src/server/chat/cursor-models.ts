@@ -1,8 +1,4 @@
-import {
-  getLlmProvider,
-  listLlmProviders,
-  updateLlmProviderConfig,
-} from "../../db/db.ts";
+import { getLlmProvider, listLlmProviders, updateLlmProviderConfig } from "../../db/db.ts";
 import { log } from "../../core/logger.ts";
 import { type CursorModelInfo, listCursorModels } from "./cursor.ts";
 

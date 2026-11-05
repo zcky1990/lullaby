@@ -1,6 +1,7 @@
 import { McpServerInput } from "../../config/schema.ts";
 import { getAppSetting } from "../../db/db.ts";
 import { log } from "../../core/logger.ts";
+import { decryptMcpServers } from "../../secrets/fields.ts";
 import { callMcpTool, listMcpTools, type McpTool } from "../mcp.ts";
 import type { McpToolBinding, ToolDef } from "./types.ts";
 
@@ -63,8 +64,9 @@ async function readMcpServers(): Promise<{
   try {
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return { enabled, servers: [], disabledTools };
+    const decrypted = await decryptMcpServers(parsed);
     const servers: McpServerInput[] = [];
-    for (const item of parsed) {
+    for (const item of decrypted) {
       const result = McpServerInput.safeParse(item);
       if (result.success) servers.push(result.data);
     }

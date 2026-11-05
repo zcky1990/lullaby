@@ -397,8 +397,7 @@ export async function completeCursor(
       const agentId = typeof agent.agentId === "string" ? agent.agentId : undefined;
 
       if (cloud) {
-        const note =
-          "Cloud agent berjalan di VM Cursor (bukan workspace lokal); " +
+        const note = "Cloud agent berjalan di VM Cursor (bukan workspace lokal); " +
           "perubahan file tidak diajukan ke Review lokal.";
         return {
           text: [result.result ?? "", note].filter(Boolean).join("\n\n"),

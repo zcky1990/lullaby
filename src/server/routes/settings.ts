@@ -15,6 +15,16 @@ import {
 import { log } from "../../core/logger.ts";
 import { getAppSetting, getProject, setAppSetting } from "../../db/db.ts";
 import {
+  decryptMcpServers,
+  encryptMcpServers,
+  maskMcpServers,
+  maskNotificationChannels,
+  type McpServerSecrets,
+  type NotificationChannelSecrets,
+  mergeMcpServerSecrets,
+  mergeNotificationChannelSecrets,
+} from "../../secrets/fields.ts";
+import {
   AUTO_APPROVE_WRITES_KEY,
   CHAT_DISABLED_TOOLS_KEY,
   readChatToolsSettings,
@@ -24,10 +34,7 @@ import { json, readJson, record } from "../http.ts";
 import { lspPresets, probeLspCommand, readLspSettings, writeLspSettings } from "../lsp.ts";
 import { clearMcpToolsCache, listMcpTools } from "../mcp.ts";
 import { testNotificationChannels } from "../notifications/send.ts";
-import {
-  readNotificationSettings,
-  writeNotificationSettings,
-} from "../notifications/settings.ts";
+import { readNotificationSettings, writeNotificationSettings } from "../notifications/settings.ts";
 import {
   builtinSkillsDir,
   globalSkillsDir,
@@ -55,25 +62,35 @@ function parseStringArray(raw: string | null): string[] {
   }
 }
 
-export async function getMcpSettingsHandler(): Promise<Response> {
+async function readStoredMcpServers(): Promise<McpServerSecrets[]> {
   const raw = await getAppSetting(MCP_SETTINGS_KEY);
-  let servers: unknown = [];
-  if (raw) {
-    try {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) servers = parsed;
-    } catch (error) {
-      log.debug("corrupt mcp_servers JSON", { error: String(error) });
-      servers = [];
-    }
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return await decryptMcpServers(parsed as McpServerSecrets[]);
+  } catch (error) {
+    log.debug("corrupt mcp_servers JSON", { error: String(error) });
+    return [];
   }
+}
+
+export async function getMcpSettingsHandler(): Promise<Response> {
+  const servers = maskMcpServers(await readStoredMcpServers());
   const enabled = (await getAppSetting("mcp_enabled")) !== "false";
   const disabledTools = parseStringArray(await getAppSetting("mcp_disabled_tools"));
   return json({ servers, enabled, disabledTools });
 }
 
 export async function saveMcpSettingsHandler(req: Request): Promise<Response> {
-  const parsed = McpSettingsInput.safeParse(await readJson(req));
+  const body = await readJson(req);
+  const existing = await readStoredMcpServers();
+  const incoming = (body as { servers?: McpServerSecrets[] } | null)?.servers;
+  const mergedBody = {
+    ...(body as Record<string, unknown>),
+    servers: Array.isArray(incoming) ? mergeMcpServerSecrets(incoming, existing) : incoming,
+  };
+  const parsed = McpSettingsInput.safeParse(mergedBody);
   if (!parsed.success) {
     return json({ error: "invalid_input", issues: parsed.error.issues }, 400);
   }
@@ -81,7 +98,8 @@ export async function saveMcpSettingsHandler(req: Request): Promise<Response> {
     ...server,
     id: server.id ?? crypto.randomUUID(),
   }));
-  await setAppSetting(MCP_SETTINGS_KEY, JSON.stringify(servers));
+  const encrypted = await encryptMcpServers(servers);
+  await setAppSetting(MCP_SETTINGS_KEY, JSON.stringify(encrypted));
   await setAppSetting("mcp_enabled", parsed.data.enabled ? "true" : "false");
   await setAppSetting("mcp_disabled_tools", JSON.stringify(parsed.data.disabledTools));
   clearMcpToolsCache();
@@ -90,7 +108,7 @@ export async function saveMcpSettingsHandler(req: Request): Promise<Response> {
     enabled: parsed.data.enabled,
   });
   return json({
-    servers,
+    servers: maskMcpServers(servers),
     enabled: parsed.data.enabled,
     disabledTools: parsed.data.disabledTools,
   });
@@ -98,7 +116,10 @@ export async function saveMcpSettingsHandler(req: Request): Promise<Response> {
 
 export async function listMcpToolsHandler(req: Request): Promise<Response> {
   const body = (await readJson(req)) as { server?: unknown };
-  const parsed = McpServerInput.safeParse(body?.server);
+  const existing = await readStoredMcpServers();
+  const incoming = body?.server as McpServerSecrets | undefined;
+  const merged = incoming ? mergeMcpServerSecrets([incoming], existing)[0] : undefined;
+  const parsed = McpServerInput.safeParse(merged);
   if (!parsed.success) {
     return json({ error: "invalid_input", issues: parsed.error.issues }, 400);
   }
@@ -199,11 +220,28 @@ export async function saveAutomationSettingsHandler(req: Request): Promise<Respo
 }
 
 export async function getNotificationSettingsHandler(): Promise<Response> {
-  return json({ settings: await readNotificationSettings() });
+  const settings = await readNotificationSettings();
+  return json({
+    settings: {
+      channels: maskNotificationChannels(settings.channels),
+    },
+  });
 }
 
 export async function saveNotificationSettingsHandler(req: Request): Promise<Response> {
-  const parsed = NotificationSettingsInput.safeParse(await readJson(req));
+  const body = await readJson(req);
+  const existing = await readNotificationSettings();
+  const incoming = (body as { channels?: unknown } | null)?.channels;
+  const mergedBody = {
+    ...(body as Record<string, unknown>),
+    channels: Array.isArray(incoming)
+      ? mergeNotificationChannelSecrets(
+        incoming as NotificationChannelSecrets[],
+        existing.channels,
+      )
+      : incoming,
+  };
+  const parsed = NotificationSettingsInput.safeParse(mergedBody);
   if (!parsed.success) {
     return json({ error: "invalid_input", issues: parsed.error.issues }, 400);
   }
@@ -211,7 +249,11 @@ export async function saveNotificationSettingsHandler(req: Request): Promise<Res
   await record("settings.notifications_updated", {
     channels: settings.channels.length,
   });
-  return json({ settings });
+  return json({
+    settings: {
+      channels: maskNotificationChannels(settings.channels),
+    },
+  });
 }
 
 export async function testNotificationSettingsHandler(req: Request): Promise<Response> {

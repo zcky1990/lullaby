@@ -17,7 +17,8 @@ Notifikasi **tidak** otomatis di akhir run; hanya dikirim jika ada step notifica
 2. Tambah channel: nama, tipe, Incoming Webhook URL
 3. Opsional: **Test** per channel
 
-Disimpan di `app_settings.notifications` sebagai `{ channels: [...] }`.
+Disimpan di `app_settings.notifications` sebagai `{ channels: [...] }` (`webhookUrl`
+terenkripsi at-rest; di-mask di API). Lihat [data-model.md](../data-model.md#secrets-at-rest).
 
 Nama channel dipakai di YAML (`with.channel`). Id channel juga diterima.
 

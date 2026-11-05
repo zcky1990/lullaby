@@ -113,7 +113,10 @@ export function markdownToNotionBlocks(markdown: string): Record<string, unknown
     }
     const para: string[] = [line];
     i += 1;
-    while (i < lines.length && lines[i].trim() && !/^#{1,3}\s|^\s*[-*]|\d+\.\s|^```|^>|^---+$/.test(lines[i])) {
+    while (
+      i < lines.length && lines[i].trim() &&
+      !/^#{1,3}\s|^\s*[-*]|\d+\.\s|^```|^>|^---+$/.test(lines[i])
+    ) {
       para.push(lines[i]);
       i += 1;
     }
@@ -144,9 +147,11 @@ export function markdownToConfluenceStorage(markdown: string): string {
         body.push(lines[i]);
         i += 1;
       }
-      parts.push(`<ac:structured-macro ac:name="code"><ac:plain-text-body><![CDATA[${
-        body.join("\n")
-      }]]></ac:plain-text-body></ac:structured-macro>`);
+      parts.push(
+        `<ac:structured-macro ac:name="code"><ac:plain-text-body><![CDATA[${
+          body.join("\n")
+        }]]></ac:plain-text-body></ac:structured-macro>`,
+      );
       i += 1;
       continue;
     }
@@ -189,7 +194,9 @@ export function markdownToConfluenceStorage(markdown: string): string {
     }
     const para: string[] = [line];
     i += 1;
-    while (i < lines.length && lines[i].trim() && !/^#{1,6}\s|^\s*[-*]|\d+\.\s|^```/.test(lines[i])) {
+    while (
+      i < lines.length && lines[i].trim() && !/^#{1,6}\s|^\s*[-*]|\d+\.\s|^```/.test(lines[i])
+    ) {
       para.push(lines[i]);
       i += 1;
     }

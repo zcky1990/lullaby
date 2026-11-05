@@ -21,9 +21,11 @@ Test koneksi: `POST /api/integrations/test` → `src/integrations/index.ts`.
 ## Kredensial
 
 - Diisi sebagai teks biasa di form
-- Disimpan di JSON `config` / `llm_providers.api_key`
+- Disimpan terenkripsi at-rest di SQLite (`enc:v1:` + AES-256-GCM) untuk field secret di
+  `project_integrations.config`, `llm_providers.api_key`, MCP `env`/`headers`, dan
+  notification `webhookUrl` — lihat [data-model.md](../data-model.md#secrets-at-rest)
 - Di-mask saat dikirim ke renderer (`••••`)
-- Merge secret saat update: field kosong tidak menimpa token tersimpan
+- Merge secret saat update: field kosong / mask tidak menimpa token tersimpan
 
 ## Catatan
 

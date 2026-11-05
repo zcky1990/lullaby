@@ -50,6 +50,9 @@ import { TicketPanel } from "@/components/TicketPanel";
 import { TicketDetailDialog } from "@/components/TicketDetailDialog";
 import { TicketKanban } from "@/components/TicketKanban";
 import { useTheme } from "@/components/ThemeProvider";
+import { CronDocsTab } from "@/components/CronDocsTab";
+import { CronPanel } from "@/components/CronPanel";
+import { CronTab } from "@/components/CronTab";
 import { WorkflowDocsTab } from "@/components/WorkflowDocsTab";
 import { WorkflowPanel } from "@/components/WorkflowPanel";
 import { WindowToolbar } from "@/components/WindowToolbar";
@@ -374,6 +377,15 @@ export default function App() {
       id: `workflow-docs:${currentId}`,
       kind: "workflow-docs",
       title: "Workflow Docs",
+    });
+  }, [currentId, focusTab]);
+
+  const openCronDocs = useCallback(() => {
+    if (!currentId) return;
+    focusTab({
+      id: `cron-docs:${currentId}`,
+      kind: "cron-docs",
+      title: "Cron Docs",
     });
   }, [currentId, focusTab]);
 
@@ -827,7 +839,9 @@ export default function App() {
     }
     if (menu === "ticket") loadTickets(currentId).catch(console.error);
     if (menu === "git") loadGit(currentId).catch(console.error);
-    if (menu === "workflow") loadWorkflows(currentId).catch(console.error);
+    if (menu === "workflow" || menu === "cron") {
+      loadWorkflows(currentId).catch(console.error);
+    }
   }, [
     menu,
     currentId,
@@ -869,6 +883,7 @@ export default function App() {
     else if (next === "git") openSingleton("git", "Git");
     else if (next === "find") setMenu("find");
     else if (next === "workflow") openSingleton("workflow", "Workflows");
+    else if (next === "cron") openSingleton("cron", "Cron");
     else if (next === "settings") openSingleton("settings", "Project Settings");
     else setMenu(next);
   };
@@ -1135,6 +1150,20 @@ export default function App() {
         );
       case "workflow-docs":
         return <WorkflowDocsTab />;
+      case "cron-docs":
+        return <CronDocsTab />;
+      case "cron":
+        return (
+          <CronTab
+            projectId={currentId}
+            workflows={workflows}
+            loading={workflowLoading}
+            error={workflowError}
+            onRefresh={() => currentId && void loadWorkflows(currentId)}
+            onOpenWorkflow={openWorkflow}
+            onScheduleChanged={() => currentId && void loadWorkflows(currentId)}
+          />
+        );
       case "workflow":
         return (
           <Suspense fallback={<Skeleton className="h-full w-full rounded-none" />}>
@@ -1212,6 +1241,7 @@ export default function App() {
         menu === "ticket" ||
         menu === "git" ||
         menu === "workflow" ||
+        menu === "cron" ||
         menu === "global") && (
         <aside
           style={{ width: panelWidth }}
@@ -1260,6 +1290,16 @@ export default function App() {
               onOpenDocs={openWorkflowDocs}
               onSelect={openWorkflow}
               onOpenRun={openWorkflow}
+            />
+          )}
+          {menu === "cron" && (
+            <CronPanel
+              workflows={workflows}
+              loading={workflowLoading}
+              error={workflowError}
+              onRefresh={() => currentId && void loadWorkflows(currentId)}
+              onOpenDocs={openCronDocs}
+              onSelect={openWorkflow}
             />
           )}
           {menu === "git" && (
@@ -1336,6 +1376,8 @@ export default function App() {
               activeTab?.kind === "git" ||
               activeTab?.kind === "workflow" ||
               activeTab?.kind === "workflow-docs" ||
+              activeTab?.kind === "cron" ||
+              activeTab?.kind === "cron-docs" ||
               activeTab?.kind === "document" ||
               activeTab?.kind === "ticket" ||
               activeTab?.kind === "settings" ||

@@ -2,6 +2,12 @@ import { DatabaseSync } from "node:sqlite";
 import { sanitizeHtml } from "../core/html.ts";
 import type { IntegrationKind, IntegrationMode } from "../config/schema.ts";
 import { dbPath, ensureAppDataDir } from "../core/paths.ts";
+import {
+  decryptConfigSecrets,
+  decryptSecretValue,
+  encryptConfigSecrets,
+  encryptSecretValue,
+} from "../secrets/fields.ts";
 
 export interface ProjectRow {
   id: string;
@@ -448,13 +454,33 @@ export async function deleteProject(id: string): Promise<boolean> {
   return true;
 }
 
+async function decodeIntegrationRow(
+  row: IntegrationRow | null | undefined,
+): Promise<IntegrationRow | null> {
+  if (!row) return null;
+  let config: Record<string, unknown> = {};
+  try {
+    config = JSON.parse(row.config) as Record<string, unknown>;
+  } catch {
+    return row;
+  }
+  const decrypted = await decryptConfigSecrets(config);
+  return { ...row, config: JSON.stringify(decrypted) };
+}
+
 export async function listIntegrations(projectId: string): Promise<IntegrationRow[]> {
   const db = await getDb();
-  return rows<IntegrationRow>(
+  const list = rows<IntegrationRow>(
     db.prepare("SELECT * FROM project_integrations WHERE project_id = ? ORDER BY kind").all(
       projectId,
     ),
   );
+  const out: IntegrationRow[] = [];
+  for (const row of list) {
+    const decoded = await decodeIntegrationRow(row);
+    if (decoded) out.push(decoded);
+  }
+  return out;
 }
 
 export async function getIntegration(
@@ -465,7 +491,7 @@ export async function getIntegration(
   const row = db.prepare(
     "SELECT * FROM project_integrations WHERE project_id = ? AND kind = ?",
   ).get(projectId, kind);
-  return (row as IntegrationRow | undefined) ?? null;
+  return await decodeIntegrationRow(row as IntegrationRow | undefined);
 }
 
 export interface UpsertIntegrationInput {
@@ -480,6 +506,7 @@ export async function upsertIntegration(
   input: UpsertIntegrationInput,
 ): Promise<IntegrationRow> {
   const db = await getDb();
+  const encryptedConfig = await encryptConfigSecrets(input.config);
   db.prepare(
     `INSERT INTO project_integrations (id, project_id, kind, mode, config, updated_at)
      VALUES (?, ?, ?, ?, ?, datetime('now'))
@@ -492,7 +519,7 @@ export async function upsertIntegration(
     input.projectId,
     input.kind,
     input.mode,
-    JSON.stringify(input.config),
+    JSON.stringify(encryptedConfig),
   );
   const saved = await getIntegration(input.projectId, input.kind);
   return saved!;
@@ -520,17 +547,33 @@ export async function pruneEvents(keep = 1000): Promise<void> {
   ).run(keep);
 }
 
+async function decodeLlmRow(
+  row: LlmProviderRow | null | undefined,
+): Promise<LlmProviderRow | null> {
+  if (!row) return null;
+  return {
+    ...row,
+    api_key: await decryptSecretValue(row.api_key),
+  };
+}
+
 export async function listLlmProviders(): Promise<LlmProviderRow[]> {
   const db = await getDb();
-  return rows<LlmProviderRow>(
+  const list = rows<LlmProviderRow>(
     db.prepare("SELECT * FROM llm_providers ORDER BY created_at").all(),
   );
+  const out: LlmProviderRow[] = [];
+  for (const row of list) {
+    const decoded = await decodeLlmRow(row);
+    if (decoded) out.push(decoded);
+  }
+  return out;
 }
 
 export async function getLlmProvider(id: string): Promise<LlmProviderRow | null> {
   const db = await getDb();
   const row = db.prepare("SELECT * FROM llm_providers WHERE id = ?").get(id);
-  return (row as LlmProviderRow | undefined) ?? null;
+  return await decodeLlmRow(row as LlmProviderRow | undefined);
 }
 
 export interface LlmProviderInputRow {
@@ -545,6 +588,7 @@ export interface LlmProviderInputRow {
 
 export async function createLlmProvider(input: LlmProviderInputRow): Promise<LlmProviderRow> {
   const db = await getDb();
+  const apiKey = await encryptSecretValue(input.apiKey ?? null);
   db.prepare(
     `INSERT INTO llm_providers
        (id, name, provider, model, base_url, api_key, mode, config)
@@ -555,7 +599,7 @@ export async function createLlmProvider(input: LlmProviderInputRow): Promise<Llm
     input.provider,
     input.model ?? null,
     input.baseUrl ?? null,
-    input.apiKey ?? null,
+    apiKey,
     input.mode,
   );
   return (await getLlmProvider(input.id))!;
@@ -566,6 +610,7 @@ export async function updateLlmProvider(
   input: Omit<LlmProviderInputRow, "id">,
 ): Promise<LlmProviderRow | null> {
   const db = await getDb();
+  const apiKey = await encryptSecretValue(input.apiKey ?? null);
   db.prepare(
     `UPDATE llm_providers SET
        name = ?, provider = ?, model = ?, base_url = ?, api_key = ?, mode = ?,
@@ -576,7 +621,7 @@ export async function updateLlmProvider(
     input.provider,
     input.model ?? null,
     input.baseUrl ?? null,
-    input.apiKey ?? null,
+    apiKey,
     input.mode,
     id,
   );

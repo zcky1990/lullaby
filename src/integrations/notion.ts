@@ -320,9 +320,7 @@ export async function createDocument(
       "Parent page Notion wajib (pilih halaman induk atau isi parentPageId di integrasi).",
     );
   }
-  const children = input.content?.trim()
-    ? markdownToNotionBlocks(input.content)
-    : undefined;
+  const children = input.content?.trim() ? markdownToNotionBlocks(input.content) : undefined;
   const res = await notionRequest("/v1/pages", token, {
     method: "POST",
     body: JSON.stringify({

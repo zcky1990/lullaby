@@ -13,6 +13,8 @@ export const PANEL_FOR_KIND: Record<TabKind, Menu> = {
   file: "files",
   workflow: "workflow",
   "workflow-docs": "workflow",
+  cron: "cron",
+  "cron-docs": "cron",
 };
 
 export function useEditorTabs(setMenu: (menu: Menu) => void, currentId: string | null) {

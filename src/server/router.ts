@@ -3,8 +3,10 @@ import {
   ChatChangeAllInput,
   ChatChangeInput,
   ChatInput,
+  ClickUpConfig,
   ConfluenceConfig,
   CreateDocumentInput,
+  CreateWorkspacePathInput,
   DocmostConfig,
   DocumentSource,
   type DocumentSource as DocumentSourceType,
@@ -23,7 +25,6 @@ import {
   LocalDocumentInput,
   LocalDocumentSyncInput,
   LocalDocumentUpdateInput,
-  ClickUpConfig,
   LocalTicketInput,
   LocalTicketSyncInput,
   LocalTicketUpdateInput,
@@ -34,14 +35,13 @@ import {
   type TicketProvider,
   TicketTransitionInput,
   UpdateDocumentInput,
-  CreateWorkspacePathInput,
   UpdateFileInput,
 } from "../config/schema.ts";
 import { log } from "../core/logger.ts";
 import {
+  appendChatMessage,
   createLocalTicket,
   createProject,
-  appendChatMessage,
   deleteChatSession,
   deleteLocalTicket,
   deleteProject,
@@ -103,11 +103,11 @@ import {
   unstagePaths as gitUnstage,
 } from "../integrations/git.ts";
 import {
-  findInWorkspace,
-  listDirectory,
   createWorkspaceDir,
   createWorkspaceFile,
+  findInWorkspace,
   joinWorkspacePath,
+  listDirectory,
   listWorkspaceFiles,
   readWorkspaceFile,
   writeWorkspaceFile,
@@ -130,22 +130,14 @@ import {
   listDocuments as listNotionDocuments,
   updateDocument as updateNotionDocument,
 } from "../integrations/notion.ts";
-import {
-  localDocumentPayload,
-  syncLocalDocumentToTarget,
-} from "./chat/document-tools.ts";
+import { localDocumentPayload, syncLocalDocumentToTarget } from "./chat/document-tools.ts";
 import {
   createTicket as createClickUpTicket,
   getTicket as getClickUpTicket,
   listTickets as listClickUpTickets,
   transitionTicket as transitionClickUpTicket,
 } from "../integrations/clickup.ts";
-import {
-  createTicket,
-  getTicket,
-  listTickets,
-  transitionTicket,
-} from "../integrations/jira.ts";
+import { createTicket, getTicket, listTickets, transitionTicket } from "../integrations/jira.ts";
 import {
   decideAllChatChanges,
   decideChatChange,

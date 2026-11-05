@@ -26,7 +26,10 @@ import {
   listTickets,
   transitionTicket,
 } from "../src/integrations/jira.ts";
-import { markdownToConfluenceStorage, markdownToNotionBlocks } from "../src/integrations/markdown.ts";
+import {
+  markdownToConfluenceStorage,
+  markdownToNotionBlocks,
+} from "../src/integrations/markdown.ts";
 import {
   createDocument as createNotionDocument,
   getDocument as getNotionDocument,

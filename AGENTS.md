@@ -48,13 +48,13 @@ finishing a change.
   `POST /generate-tickets` (`generateTicketsFromDocument`) which uses the first LLM provider and
   only the `create_ticket` tool.
 - **Tickets**: `local_tickets` (SQLite) are created locally (UI `TicketCreateDialog` + AI tool
-  `create_ticket`); `GET /tickets` merges unsynced local tickets with Jira and/or ClickUp.
-  Local tickets are editable from `TicketDetailDialog` (`PATCH /local-tickets/:id`, rich text
-  description) and can be deleted only while unsynced (`DELETE` rejects tickets with `jira_key`).
-  Syncing is manual (`POST /local-tickets/:id/sync` with optional `{ provider: "jira"|"clickup" }`)
-  and sets `jira_key` / `sync_provider` / `sync_status`. ClickUp needs `apiToken` + `listId` in
-  project integrations. Global Automation (`auto_build_on_in_progress`, default off) starts a new
-  Build chat when a Kanban card moves To Do → In Progress; see `docs/automation.md`.
+  `create_ticket`); `GET /tickets` merges unsynced local tickets with Jira and/or ClickUp. Local
+  tickets are editable from `TicketDetailDialog` (`PATCH /local-tickets/:id`, rich text description)
+  and can be deleted only while unsynced (`DELETE` rejects tickets with `jira_key`). Syncing is
+  manual (`POST /local-tickets/:id/sync` with optional `{ provider: "jira"|"clickup" }`) and sets
+  `jira_key` / `sync_provider` / `sync_status`. ClickUp needs `apiToken` + `listId` in project
+  integrations. Global Automation (`auto_build_on_in_progress`, default off) starts a new Build chat
+  when a Kanban card moves To Do → In Progress; see `docs/automation.md`.
 - **Skills**: `src/server/skills.ts` discovers `SKILL.md` folders (frontmatter `name`/`description`)
   from `<workspace>/.agents/skills` (highest), `appDataDir()/<project-slug>/skills` (auto from Build
   chats), `appDataDir()/skills` (global), and `src/skills/builtin` (bundled, lowest priority). On
@@ -116,9 +116,11 @@ finishing a change.
   retry/timeout/cancel, capped step logs). Agent steps use `src/server/chat/headless.ts` (tool loop,
   writes auto-applied). Runs live in `workflow_runs` / `workflow_run_steps`;
   `src/server/routes/workflows.ts` exposes CRUD + run/history/cancel. UI: `WorkflowPanel` (sidebar)
-  - `WorkflowTab` (Monaco YAML + React Flow + logs). Runs: manual UI, optional YAML `schedule.cron`
-  (in-process ticker) and `on` event triggers (`src/server/workflow/scheduler.ts`); AI must not
-  auto-run workflows.
+  - `WorkflowTab` (Monaco YAML + React Flow + logs); menu **Cron** (`CronPanel` + `CronTab`) lists
+    schedules and toggles enable; wiki in-app `web/src/docs/wiki-cron.md` (`cron-docs` tab). Runs:
+    manual UI, optional YAML `schedule.cron` (in-process ticker) and `on` event triggers
+    (`src/server/workflow/scheduler.ts`); AI must not auto-run workflows. Docs:
+    `docs/features/workflow-cron.md`.
 - **MCP**: global server config (`McpSettings`) is stored in `app_settings` (`mcp_servers` JSON;
   stdio command/args/env or http url/headers) plus `mcp_enabled` and `mcp_disabled_tools`.
   `POST /api/settings/mcp/tools` connects with `initialize` + `tools/list` (`src/server/mcp.ts`,
@@ -128,27 +130,29 @@ finishing a change.
 - **Automation**: global `auto_build_on_in_progress` in `app_settings` (GET/PUT
   `/api/settings/automation`). UI: Global Settings → Automation. When on, Kanban To Do → In Progress
   opens Chat Build with a ticket prompt (`docs/automation.md`).
-- **Notifications**: global channel registry in `app_settings.notifications` (`{ channels }` —
-  Slack / Google Chat / Discord / webhook URL). GET/PUT `/api/settings/notifications`, test via
+- **Notifications**: global channel registry in `app_settings.notifications` (`{ channels }` — Slack
+  / Google Chat / Discord / webhook URL). GET/PUT `/api/settings/notifications`, test via
   `POST .../notifications/test`. Workflows send via step `action: notification` with
   `with.channel` + `with.message` (`src/server/workflow/runner.ts` →
   `src/server/notifications/send.ts`). UI: Global Settings → Notifications
   (`docs/features/notifications.md`).
 - **List/menus**: `ActivityBar` (left rail) opens tabs in the main area (`TabsBar`).
-  Workspace/Explorer/Document/Project Settings/Ticket keep a **separate** side panel in `<aside>`
-  (`WorkspacePanel`, `FileTreePanel`, `DocumentPanel`, `SettingsPanel`, `TicketPanel`);
-  files/documents open as their own tabs. Global Settings has no outer panel — its
-  `GlobalSettingsPanel` lives inside the tab. In Project Settings each form/section is a
-  **`Collapsible`** (`CollapsibleSection`).
+  Workspace/Explorer/Document/Project Settings/Ticket/Workflows/Cron keep a **separate** side panel
+  in `<aside>` (`WorkspacePanel`, `FileTreePanel`, `DocumentPanel`, `SettingsPanel`, `TicketPanel`,
+  `WorkflowPanel`, `CronPanel`); files/documents open as their own tabs. Global Settings has no
+  outer panel — its `GlobalSettingsPanel` lives inside the tab. In Project Settings each
+  form/section is a **`Collapsible`** (`CollapsibleSection`).
 - **Search**: `Cmd/Ctrl+P` opens `QuickOpen` (fuzzy file-name palette) backed by
   `GET /api/projects/:id/files/index`; the **Find** activity item / `Cmd/Ctrl+Shift+F` opens a
   `FindTab` for workspace text search (`GET .../files/find?q=&case=&regex=`) and opens results at
   the matching line. Backend helpers live in `src/fs/workspace.ts`; tests in `test/files.test.ts`.
 - UI build outputs are embedded (`scripts/build-assets.ts` -> `src/ui/assets.generated.ts`) so the
   desktop binary is self-contained; never read UI files from disk at runtime.
-- Integration credentials (API token/key) are entered as normal text and stored **in the integration
-  `config`** (and `llm_providers.api_key`). They are local to this desktop app; do not log them or
-  send them to the renderer unnecessarily.
+- Integration credentials (API token/key) are entered as normal text and stored **encrypted at
+  rest** in integration `config`, `llm_providers.api_key`, MCP `env`/`headers`, and notification
+  `webhookUrl` (`enc:v1:` AES-256-GCM via `src/secrets/`; master key in macOS Keychain or
+  `{appDataDir}/.master.key`, override `RND_SECRETS_KEY`). Decrypt at the DB/settings boundary; mask
+  for the renderer. Do not log secrets.
 - Validate all API inputs and integration configs with Zod (`src/config/schema.ts`).
 - Desktop-only globals: `deno check --desktop main.ts` loads `lib.deno.desktop.d.ts`; prefer that
   over casts. `src/desktop/window.ts` guards `Deno.BrowserWindow` at runtime so `deno run` still
@@ -190,7 +194,7 @@ finishing a change.
 - `src/config` — Zod schemas (`schema.ts`).
 - `src/db` — SQLite access.
 - `src/fs` — workspace file tree + file reader.
-- `src/secrets` — legacy env/keychain helper (unused; kept for reference/tests).
+- `src/secrets` — master key + AES-GCM encrypt/decrypt + one-shot plaintext migration.
 - `src/integrations` — docmost/jira/github/llm clients + health-check.
 - `src/server` — router, SSE, event bus, static asset serving, chat agent engine (`chat.ts`:
   tool-calling, plan/build modes, per-hunk write review, chat sessions, diff tracking, image/text

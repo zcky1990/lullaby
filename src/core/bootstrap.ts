@@ -1,4 +1,5 @@
 import { appendEvent, getDb, markInterruptedWorkflowRuns, pruneEvents } from "../db/db.ts";
+import { migratePlaintextSecrets } from "../secrets/migrate.ts";
 import { syncConfiguredCursorModels } from "../server/chat/cursor-models.ts";
 import { installDefaultSkills } from "../server/skills.ts";
 import { startWorkflowScheduler } from "../server/workflow/scheduler.ts";
@@ -8,6 +9,11 @@ import { appDataDir, ensureAppDataDir } from "./paths.ts";
 export async function bootstrap(): Promise<void> {
   const dir = await ensureAppDataDir();
   await getDb();
+  try {
+    await migratePlaintextSecrets();
+  } catch (error) {
+    log.warn("secrets migration skipped", { error: String(error) });
+  }
   await pruneEvents(1000);
   await markInterruptedWorkflowRuns();
   const installedSkills = await installDefaultSkills();

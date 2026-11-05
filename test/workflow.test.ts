@@ -274,7 +274,10 @@ steps:
   equal(rspec.routeGate?.routerId, "rubocop_router");
   const lintFailed = definition.steps.find((step) => step.id === "lint_failed")!;
   equal(lintFailed.routeGate?.routerId, "rubocop_router");
-  equal(definition.steps.find((step) => step.id === "workflow_success")?.routeGate?.routerId, "rspec_router");
+  equal(
+    definition.steps.find((step) => step.id === "workflow_success")?.routeGate?.routerId,
+    "rspec_router",
+  );
 });
 
 Deno.test("parseWorkflow supports loop-back routes and next", () => {
@@ -377,8 +380,7 @@ steps:
         { type: "image", name: "a.png", mime: "image/png", data: "data:image/png;base64,xx" },
       ]),
     },
-    (value) =>
-      value.replace(/\$\{params\.TASK\}/g, "do the thing"),
+    (value) => value.replace(/\$\{params\.TASK\}/g, "do the thing"),
   );
   equal(selection.providerKey, "prov-1");
   equal(selection.model, "composer-2");

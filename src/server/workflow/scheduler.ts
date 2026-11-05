@@ -8,7 +8,7 @@ import {
   type WorkflowScheduleRow,
 } from "../../db/db.ts";
 import { log } from "../../core/logger.ts";
-import { onBus, type BusEvent } from "../bus.ts";
+import { type BusEvent, onBus } from "../bus.ts";
 import { nextCronRun } from "./cron.ts";
 import { parseWorkflow } from "./parse.ts";
 import { startWorkflowRun } from "./runner.ts";

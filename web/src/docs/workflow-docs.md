@@ -1,7 +1,8 @@
 # Dokumentasi Workflow
 
 Workflow engine lokal dengan definisi **YAML**, dependency graph (DAG), eksekusi shell paralel,
-step AI, retry/timeout, log per step, dan riwayat run. Semua run dijalankan **manual** dari UI.
+step AI, retry/timeout, log per step, dan riwayat run. Run bisa **manual** (tombol Run),
+**cron** (`schedule`), atau **event** (`on`). Detail jadwal: menu **Cron** / wiki cron.
 
 ## Lokasi file
 
@@ -24,9 +25,29 @@ tombol **Workflow baru** atau ditulis langsung di folder tersebut.
 | `timeout_sec` | number | Timeout default semua step (bisa dioverride per step / `defaults`). |
 | `llm` | object | Konfigurasi default step AI (`provider`, `model`, `role`, `session`, `system`, `temperature`). |
 | `defaults` | object | Default semua step: `env`, `working_dir`, `retry_policy`, `timeout_sec`. |
+| `schedule` | object | Jadwal cron: `cron`, `enabled?`, `timezone?`. |
+| `on` | array | Pemicu event (`string` atau `{ event, status? }`). |
 | `steps` | array | Daftar step (wajib, minimal 1). |
 
 Field lain ditolak saat validasi.
+
+## Schedule & event
+
+```yaml
+schedule:
+  cron: "0 2 * * *"
+  enabled: true
+  timezone: Asia/Jakarta
+on:
+  - ticket.transitioned
+  - event: ticket.transitioned
+    status: In Progress
+```
+
+- Cron: 5 field; ticker in-process (±30s) saat app berjalan; `trigger` run = `cron`.
+- Event: cocokkan nama event bus (+ filter `status` opsional); `trigger` = `event:<nama>`.
+- Toggle enable tanpa edit YAML: menu **Cron** atau `PATCH .../workflows/:slug/schedule`.
+- AI tidak boleh auto-run; lihat wiki cron di menu Cron → Dokumentasi.
 
 ## Step shell
 
@@ -302,6 +323,7 @@ steps:
 | --- | --- | --- |
 | `GET/POST` | `/api/projects/:id/workflows` | List / create |
 | `GET/PUT/DELETE` | `/api/projects/:id/workflows/:slug` | Detail / save / delete |
+| `PATCH` | `/api/projects/:id/workflows/:slug/schedule` | `{ enabled }` toggle |
 | `POST` | `/api/projects/:id/workflows/:slug/run` | Mulai run → `{ runId }` |
 | `GET` | `/api/projects/:id/workflow-runs` | Riwayat run |
 | `GET` | `/api/projects/:id/workflow-runs/:runId` | Detail + step + log |
@@ -311,7 +333,7 @@ steps:
 
 - Perintah shell dijalankan dengan hak user di `workspace_path` — perlakukan file workflow sebagai kode.
 - `working_dir` divalidasi agar tetap di dalam workspace (termasuk symlink).
-- Run **hanya** lewat tombol Run/manual; AI tidak bisa menjalankan workflow otomatis.
+- Run lewat tombol Run, cron, atau event terdaftar; AI tidak bisa menjalankan workflow otomatis.
 - Jangan simpan secret langsung di YAML; gunakan environment/secret provider yang tersedia.
 
 ## Troubleshooting

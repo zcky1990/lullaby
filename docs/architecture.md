@@ -14,6 +14,7 @@
 | Core | `src/core/` | paths, logger, bootstrap, HTML sanitize |
 | Config | `src/config/schema.ts` | Zod: semua input API & config integrasi |
 | DB | `src/db/db.ts` | SQLite (`node:sqlite`), migrasi `ensureColumn` |
+| Secrets | `src/secrets/` | Master key (Keychain / file / env) + AES-GCM at-rest |
 | FS | `src/fs/workspace.ts`, `documents.ts` | File workspace (guarded) + dokumen lokal `.md` |
 | Integrations | `src/integrations/` | Docmost, Notion, Confluence, Jira, GitHub, Git CLI, HTTP helper |
 | Server | `src/server/` | router, session, static, SSE, chat, terminal, skills, MCP, routes |
@@ -53,6 +54,8 @@ Build: `npm --prefix web run build` → `scripts/build-assets.ts` embed ke gener
 - Semua `/api/*` kecuali `GET /api/health` butuh cookie atau header `x-app-token`
 - Path workspace: wajib lewat `src/fs/workspace.ts` (tolak `..`, symlink escape, batas ukuran baca)
 - Secret di-mask saat serialisasi ke renderer (`SECRET_CONFIG_KEYS`)
+- Token/API key di SQLite dienkripsi AES-256-GCM; master key di macOS Keychain (fallback
+  `{appDataDir}/.master.key`, override `RND_SECRETS_KEY`) — `src/secrets/`
 
 ## Global vs per-project
 

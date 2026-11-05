@@ -1,5 +1,6 @@
 import {
   BookOpen,
+  Clock,
   File as FileIcon,
   FileText,
   GitBranch,
@@ -23,7 +24,9 @@ export type TabKind =
   | "review"
   | "git"
   | "workflow"
-  | "workflow-docs";
+  | "workflow-docs"
+  | "cron"
+  | "cron-docs";
 
 export interface EditorTab {
   id: string;
@@ -55,6 +58,8 @@ const ICONS: Record<TabKind, typeof FileIcon> = {
   git: GitBranch,
   workflow: Workflow,
   "workflow-docs": BookOpen,
+  cron: Clock,
+  "cron-docs": BookOpen,
 };
 
 interface Props {

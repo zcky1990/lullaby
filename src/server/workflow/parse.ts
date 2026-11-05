@@ -3,8 +3,8 @@ import { z } from "zod";
 import { CronError, isValidTimezone, parseCron } from "./cron.ts";
 import {
   type WorkflowDefinition,
-  type WorkflowEventTrigger,
   WorkflowError,
+  type WorkflowEventTrigger,
   type WorkflowParam,
   type WorkflowSchedule,
   type WorkflowStep,

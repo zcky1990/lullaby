@@ -1,4 +1,5 @@
 import {
+  Clock,
   FileText,
   FolderTree,
   GitBranch,
@@ -23,6 +24,7 @@ export type Menu =
   | "document"
   | "ticket"
   | "workflow"
+  | "cron"
   | "settings"
   | "global";
 
@@ -57,6 +59,14 @@ const ITEMS: {
     id: "workflow",
     label: "Workflows",
     icon: Workflow,
+    requiresProject: true,
+    requiresWorkspace: true,
+    group: "main",
+  },
+  {
+    id: "cron",
+    label: "Cron",
+    icon: Clock,
     requiresProject: true,
     requiresWorkspace: true,
     group: "main",

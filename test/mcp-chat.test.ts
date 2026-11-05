@@ -1,9 +1,6 @@
 import { equal } from "node:assert/strict";
 import { formatMcpToolResult } from "../src/server/mcp.ts";
-import {
-  isMcpChatTool,
-  mcpChatToolName,
-} from "../src/server/chat/mcp-tools.ts";
+import { isMcpChatTool, mcpChatToolName } from "../src/server/chat/mcp-tools.ts";
 
 Deno.test("mcpChatToolName stays within OpenAI name limits", () => {
   const name = mcpChatToolName(

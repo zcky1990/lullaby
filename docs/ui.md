@@ -12,6 +12,7 @@ status bar.
 | Document | `DocumentPanel` — Local / Docmost / Notion / Confluence |
 | Ticket | `TicketPanel` — filter + create/refresh; board full-height dengan scroll per kolom |
 | Workflows | `WorkflowPanel` — daftar YAML, recent runs, create/refresh |
+| Cron | `CronPanel` — jadwal `schedule`/`on`, toggle enable, docs wiki |
 | Project Settings | `SettingsPanel` — section nav |
 | Terminal | Toggle **bottom panel** (bukan tab utama) |
 | Git | `GitPanel` — branches / refresh |
@@ -22,8 +23,8 @@ membuka **singleton tab**.
 
 ## Area utama (`TabsBar`)
 
-Jenis tab: `workspace` | `ticket` | `workflow` | `settings` | `global` | `document` | `file` |
-`review` | `git`.
+Jenis tab: `workspace` | `ticket` | `workflow` | `workflow-docs` | `cron` | `cron-docs` |
+`settings` | `global` | `document` | `file` | `review` | `git`.
 
 - **File**: Monaco (lazy), dirty flag, simpan tombol / `Cmd|Ctrl+S` → `PUT .../files/content`
 - **Document**: Markdown preview + Edit (lokal/Docmost); Notion/Confluence read-only
@@ -31,9 +32,10 @@ Jenis tab: `workspace` | `ticket` | `workflow` | `settings` | `global` | `docume
 - **Ticket**: Kanban board
 - **Git**: Changes + History
 - **Workflow**: editor YAML + DAG (React Flow) + run history/step logs
+- **Cron**: daftar jadwal + toggle; **Cron Docs** / **Workflow Docs** = wiki markdown in-app
 
 Menu Workflows membuka tab home; klik file workflow di panel membuka tab `workflow:<project>:<slug>`
-(dinamis).
+(dinamis). Menu Cron membuka singleton `cron` + panel jadwal.
 
 State tab: `web/src/hooks/useEditorTabs.ts`, dikelola dari `App.tsx`.
 

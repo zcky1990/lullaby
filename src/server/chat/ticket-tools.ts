@@ -10,9 +10,9 @@ import {
   getIntegration,
   getLocalTicket,
   listLocalTickets,
+  type LocalTicketRow,
   markLocalTicketSynced,
   markLocalTicketSyncError,
-  type LocalTicketRow,
   updateLocalTicket,
 } from "../../db/db.ts";
 import {
@@ -21,12 +21,7 @@ import {
   listTickets as listClickUpTickets,
   transitionTicket as transitionClickUpTicket,
 } from "../../integrations/clickup.ts";
-import {
-  createTicket,
-  getTicket,
-  listTickets,
-  transitionTicket,
-} from "../../integrations/jira.ts";
+import { createTicket, getTicket, listTickets, transitionTicket } from "../../integrations/jira.ts";
 
 const MAX_RESULT = 60_000;
 
@@ -225,9 +220,7 @@ export async function getTicketTool(
     return clip({ ticket: localTicketDetail(ticket, bases) });
   }
 
-  const preferred = args.source === "clickup" || args.source === "jira"
-    ? args.source
-    : undefined;
+  const preferred = args.source === "clickup" || args.source === "jira" ? args.source : undefined;
   const provider = await resolveTicketProvider(projectId, preferred, idOrKey);
   if (!provider) return "Error: Integrasi Jira/ClickUp belum dikonfigurasi.";
 
@@ -360,9 +353,7 @@ export async function transitionTicketTool(
   const status = typeof args.status === "string" ? args.status.trim() : "";
   if (!key) return "Error: key tiket remote wajib.";
   if (!status) return "Error: status wajib.";
-  const preferred = args.source === "clickup" || args.source === "jira"
-    ? args.source
-    : undefined;
+  const preferred = args.source === "clickup" || args.source === "jira" ? args.source : undefined;
   const provider = await resolveTicketProvider(projectId, preferred, key);
   if (!provider) return "Error: Integrasi Jira/ClickUp belum dikonfigurasi.";
 

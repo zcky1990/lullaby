@@ -289,7 +289,9 @@ export async function createDocument(
     spaceKey = String(space?.key ?? "");
   }
   if (!spaceKey) {
-    throw new Error("Space key Confluence wajib (isi di integrasi atau pilih space/halaman induk).");
+    throw new Error(
+      "Space key Confluence wajib (isi di integrasi atau pilih space/halaman induk).",
+    );
   }
 
   const payload: Record<string, unknown> = {

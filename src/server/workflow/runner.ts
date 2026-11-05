@@ -96,16 +96,18 @@ export async function startWorkflowRun(input: {
     runId: run.id,
     trigger: input.trigger ?? "manual",
   });
-  void execute(run.id, active, input.project, input.definition, input.params).catch(async (error) => {
-    activeRuns.delete(run.id);
-    await updateWorkflowRun(run.id, "failed", (error as Error).message);
-    await record("workflow.run.failed", {
-      projectId: input.projectId,
-      slug: input.slug,
-      runId: run.id,
-      error: (error as Error).message,
-    });
-  });
+  void execute(run.id, active, input.project, input.definition, input.params).catch(
+    async (error) => {
+      activeRuns.delete(run.id);
+      await updateWorkflowRun(run.id, "failed", (error as Error).message);
+      await record("workflow.run.failed", {
+        projectId: input.projectId,
+        slug: input.slug,
+        runId: run.id,
+        error: (error as Error).message,
+      });
+    },
+  );
   return run.id;
 }
 
@@ -274,15 +276,13 @@ async function execute(
   ): Promise<boolean> => {
     const runs = runCounts.get(startId) ?? 0;
     if (runs >= maxLoops) {
-      loopError =
-        `Loop pada "${startId}" melebihi max_loops=${maxLoops} (${reason}).`;
+      loopError = `Loop pada "${startId}" melebihi max_loops=${maxLoops} (${reason}).`;
       return false;
     }
     const toReset = descendantsOf(startId);
     for (const id of toReset) {
       const step = stepById.get(id)!;
-      const note =
-        `\n[loop reset ← ${reason} · next attempt ${runs + 1}/${maxLoops}]\n`;
+      const note = `\n[loop reset ← ${reason} · next attempt ${runs + 1}/${maxLoops}]\n`;
       logs.set(id, `${logs.get(id) ?? ""}${note}`);
       statuses.delete(id);
       outputs.delete(id);
@@ -396,9 +396,7 @@ async function execute(
     }
 
     for (const nextId of step.next) {
-      const gateRouter = step.routeGate
-        ? stepById.get(step.routeGate.routerId)
-        : undefined;
+      const gateRouter = step.routeGate ? stepById.get(step.routeGate.routerId) : undefined;
       const maxLoops = gateRouter?.router?.maxLoops ??
         (step.kind === "router" ? (step.router?.maxLoops ?? 10) : 10);
       const ok = await resetFrom(
@@ -546,7 +544,16 @@ async function runStep(
   params: Record<string, string>,
 ): Promise<StepResult> {
   if (step.kind === "router") {
-    return await runRouterStep(runId, definition, step, logPrefix, stepRowId, outputs, namedByStep, params);
+    return await runRouterStep(
+      runId,
+      definition,
+      step,
+      logPrefix,
+      stepRowId,
+      outputs,
+      namedByStep,
+      params,
+    );
   }
   if (step.kind === "llm") {
     return await runLlmStep(
@@ -843,8 +850,7 @@ async function runLlmStep(
 ): Promise<StepResult> {
   const writer = createLogWriter(runId, step.id, logPrefix, stepRowId);
   const config = step.with ?? {};
-  const ix = (value: string) =>
-    interpolate(value, outputs, definition.env, namedByStep, params);
+  const ix = (value: string) => interpolate(value, outputs, definition.env, namedByStep, params);
   try {
     const sessionName = config.session ?? definition.llm?.session;
     const session = sessionName ? await getOrCreateWorkflowSession(project.id, sessionName) : null;
@@ -907,12 +913,10 @@ async function runLlmStep(
     }
 
     const temperature = config.temperature ?? definition.llm?.temperature;
-    const userContent = config.prompt
-      ? ix(config.prompt)
-      : (config.messages ?? [])
-        .filter((message) => message.role === "user")
-        .map((message) => ix(message.content))
-        .join("\n\n");
+    const userContent = config.prompt ? ix(config.prompt) : (config.messages ?? [])
+      .filter((message) => message.role === "user")
+      .map((message) => ix(message.content))
+      .join("\n\n");
     writer.append(
       `[llm] ${effective.name} · ${effective.model ?? "-"}` +
         `${sessionName ? ` · session=${sessionName}` : ""}\n`,
@@ -950,8 +954,7 @@ async function runAgentStep(
 ): Promise<StepResult> {
   const writer = createLogWriter(runId, step.id, logPrefix, stepRowId);
   const config = step.with ?? {};
-  const ix = (value: string) =>
-    interpolate(value, outputs, definition.env, namedByStep, params);
+  const ix = (value: string) => interpolate(value, outputs, definition.env, namedByStep, params);
   try {
     const sessionName = config.session ?? definition.llm?.session;
     const session = sessionName ? await getOrCreateWorkflowSession(project.id, sessionName) : null;
@@ -1010,12 +1013,10 @@ async function runAgentStep(
       });
     }
 
-    const userContent = config.prompt
-      ? ix(config.prompt)
-      : (config.messages ?? [])
-        .filter((message) => message.role === "user")
-        .map((message) => ix(message.content))
-        .join("\n\n");
+    const userContent = config.prompt ? ix(config.prompt) : (config.messages ?? [])
+      .filter((message) => message.role === "user")
+      .map((message) => ix(message.content))
+      .join("\n\n");
 
     const mode = config.mode ?? "build";
     const systemRaw = config.system ?? definition.llm?.system;

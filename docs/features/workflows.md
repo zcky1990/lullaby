@@ -46,6 +46,8 @@ lain ditolak.
 
 ## Schedule & event
 
+Panduan penuh (menu Cron, contoh, troubleshooting): [workflow-cron.md](workflow-cron.md).
+
 ```yaml
 name: nightly-test
 schedule:
@@ -65,7 +67,7 @@ steps:
 - Event memakai bus internal (`record` / `publish`); `trigger` = `event:<nama>`.
   Contoh: `ticket.transitioned` (payload `projectId`, `key`, `status`).
 - Satu run aktif per slug tetap berlaku; jika bentrok, schedule dilewati (next cron tetap maju).
-- Toggle enable tanpa edit YAML: `PATCH .../workflows/:slug/schedule` `{ enabled }`.
+- Toggle enable tanpa edit YAML: menu **Cron** atau `PATCH .../workflows/:slug/schedule`.
 - AI/chat **tidak** boleh auto-run workflow; hanya tombol Run, cron, atau event terdaftar.
 
 Step `action: notification` mengirim pesan ke channel yang didaftarkan di Global Settings →
@@ -241,6 +243,8 @@ steps:
 - Menu **Workflows** (activity bar) → `WorkflowPanel` di sidebar: daftar file, status run terakhir,
   recent runs, tombol **Workflow baru**, dan **Dokumentasi** (ikon buku / link) yang membuka tab
   **Workflow Docs** berisi panduan YAML lengkap di dalam aplikasi.
+- Menu **Cron** → `CronPanel` + tab `Cron`: daftar jadwal, toggle enable, next/last run;
+  **Dokumentasi** membuka wiki cron in-app (`wiki-cron.md`). Lihat [workflow-cron.md](workflow-cron.md).
 - Tab `WorkflowTab`:
   - Editor YAML Monaco (dirty, Save)
   - Graph React Flow (node per step, edge dependency, warna status)

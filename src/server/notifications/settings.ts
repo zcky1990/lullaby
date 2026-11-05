@@ -4,6 +4,11 @@ import {
 } from "../../config/schema.ts";
 import { log } from "../../core/logger.ts";
 import { getAppSetting, setAppSetting } from "../../db/db.ts";
+import {
+  decryptNotificationChannels,
+  encryptNotificationChannels,
+  type NotificationChannelSecrets,
+} from "../../secrets/fields.ts";
 
 export const NOTIFICATIONS_KEY = "notifications";
 
@@ -20,7 +25,11 @@ export async function readNotificationSettings(): Promise<NotificationSettings> 
     const candidate = parsedJson && typeof parsedJson === "object" && !Array.isArray(parsedJson)
       ? { channels: (parsedJson as { channels?: unknown }).channels ?? [] }
       : { channels: [] };
-    const parsed = NotificationSettingsInput.safeParse(candidate);
+    const channelsRaw = Array.isArray(candidate.channels)
+      ? (candidate.channels as NotificationChannelSecrets[])
+      : [];
+    const decrypted = await decryptNotificationChannels(channelsRaw);
+    const parsed = NotificationSettingsInput.safeParse({ channels: decrypted });
     if (!parsed.success) {
       log.debug("corrupt notifications JSON", { issues: parsed.error.issues.length });
       return { channels: [] };
@@ -45,7 +54,8 @@ export async function writeNotificationSettings(
     id: channel.id ?? crypto.randomUUID(),
   }));
   const next: NotificationSettings = { channels };
-  await setAppSetting(NOTIFICATIONS_KEY, JSON.stringify(next));
+  const encrypted = await encryptNotificationChannels(channels);
+  await setAppSetting(NOTIFICATIONS_KEY, JSON.stringify({ channels: encrypted }));
   return next;
 }
 

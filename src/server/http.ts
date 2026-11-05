@@ -1,10 +1,14 @@
 import { appendEvent } from "../db/db.ts";
+import {
+  isMaskedSecret as isMaskedSecretValue,
+  SECRET_CONFIG_KEYS,
+  SECRET_MASK,
+} from "../secrets/constants.ts";
 import { publish } from "./bus.ts";
 import { APP_TOKEN_COOKIE, APP_TOKEN_HEADER, appToken } from "./session.ts";
 
 const MAX_BODY_BYTES = 26_000_000;
-export const SECRET_MASK = "••••••••";
-export const SECRET_CONFIG_KEYS = new Set(["apiKey", "apiToken", "token", "password", "secret"]);
+export { SECRET_CONFIG_KEYS, SECRET_MASK };
 
 export class HttpError extends Error {
   constructor(
@@ -50,7 +54,7 @@ export function isAuthorized(req: Request): boolean {
 }
 
 export function isMaskedSecret(value: unknown): boolean {
-  return value === undefined || value === null || value === "" || value === SECRET_MASK;
+  return isMaskedSecretValue(value);
 }
 
 export function maskConfigSecrets(config: Record<string, unknown>): Record<string, unknown> {

@@ -25,6 +25,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
 import {
   api,
+  SECRET_MASK,
   type NotificationChannel,
   type NotificationChannelType,
   type NotificationSettings,
@@ -139,7 +140,7 @@ export function NotificationSettings() {
       setError("Nama channel wajib diisi.");
       return;
     }
-    if (!/^https?:\/\//i.test(webhookUrl)) {
+    if (webhookUrl !== SECRET_MASK && !/^https?:\/\//i.test(webhookUrl)) {
       setError("Webhook URL harus http(s).");
       return;
     }
@@ -290,7 +291,9 @@ export function NotificationSettings() {
                         : null}
                     </div>
                     <p className="truncate font-mono text-[11px] text-muted-foreground">
-                      {channel.webhookUrl}
+                      {channel.webhookUrl === SECRET_MASK
+                        ? "Webhook tersimpan"
+                        : channel.webhookUrl}
                     </p>
                   </div>
                   <Switch

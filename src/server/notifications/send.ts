@@ -120,9 +120,7 @@ export async function testNotificationChannels(
 ): Promise<ChannelSendResult[]> {
   const settings = await readNotificationSettings();
   const channels = settings.channels.filter((channel) => channel.enabled && channel.webhookUrl);
-  const targets = channelId
-    ? channels.filter((channel) => channel.id === channelId)
-    : channels;
+  const targets = channelId ? channels.filter((channel) => channel.id === channelId) : channels;
   const payload: NotifyMessagePayload = {
     text: "Test notifikasi dari Lullaby (Global Settings → Notifications).",
   };

@@ -189,8 +189,7 @@ const DOC_READ_TOOLS: ToolDef[] = [
 const DOC_WRITE_TOOLS: ToolDef[] = [
   {
     name: "create_document",
-    description:
-      "Create a local markdown document or a Docmost/Notion/Confluence page " +
+    description: "Create a local markdown document or a Docmost/Notion/Confluence page " +
       "(source local|docmost|notion|confluence).",
     parameters: {
       type: "object",
@@ -211,8 +210,7 @@ const DOC_WRITE_TOOLS: ToolDef[] = [
   },
   {
     name: "update_document",
-    description:
-      "Update local (path) or remote (pageId) document title/content for " +
+    description: "Update local (path) or remote (pageId) document title/content for " +
       "local|docmost|notion|confluence.",
     parameters: {
       type: "object",

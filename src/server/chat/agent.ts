@@ -41,7 +41,9 @@ export async function syncCursorConversation(
   if (!conversation?.length) return;
   const stored = await listChatMessages(sessionId);
   const existing = new Set(
-    stored.filter((message) => message.role === "assistant").map((message) => message.content.trim()),
+    stored.filter((message) => message.role === "assistant").map((message) =>
+      message.content.trim()
+    ),
   );
   for (const text of excludeTexts) {
     if (text.trim()) existing.add(text.trim());

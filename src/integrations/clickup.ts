@@ -178,7 +178,9 @@ export async function testClickUp(cfg: ClickUpConfig): Promise<TestResult> {
   }
 }
 
-export async function listTickets(cfg: ClickUpConfig): Promise<Array<TicketSummary & { source: "clickup" }>> {
+export async function listTickets(
+  cfg: ClickUpConfig,
+): Promise<Array<TicketSummary & { source: "clickup" }>> {
   const headers = authHeaders(cfg);
   if (!headers) throw new Error("API token ClickUp belum diisi.");
   if (!cfg.listId) throw new Error("List ID ClickUp belum diisi.");
@@ -187,7 +189,9 @@ export async function listTickets(cfg: ClickUpConfig): Promise<Array<TicketSumma
   let page = 0;
   for (;;) {
     const res = await request(
-      `${apiRoot(cfg)}/list/${encodeURIComponent(cfg.listId)}/task?archived=false&page=${page}&subtasks=true`,
+      `${apiRoot(cfg)}/list/${
+        encodeURIComponent(cfg.listId)
+      }/task?archived=false&page=${page}&subtasks=true`,
       { method: "GET", headers },
     );
     if (!res.ok) throw new Error(`${statusMessage(res.status)} ${truncate(res.text, 200)}`);

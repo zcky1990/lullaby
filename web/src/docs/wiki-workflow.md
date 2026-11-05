@@ -1,7 +1,8 @@
 # Cara Pakai Workflow
 
 Panduan langkah demi langkah menjalankan workflow di aplikasi ini. Workflow adalah rangkaian
-perintah yang ditulis sebagai file **YAML** dan dijalankan secara **manual** dari tab Workflows.
+perintah yang ditulis sebagai file **YAML**. Run bisa **manual** dari tab Workflows, atau
+otomatis lewat **Cron** / event — lihat wiki Cron.
 
 ## Sebelum mulai
 
@@ -27,6 +28,11 @@ workspace project.
 
 Satu workflow hanya boleh memiliki satu run aktif. Jika menjalankan lagi, akan muncul konflik —
 tunggu run selesai atau **Cancel** run yang sedang berjalan.
+
+## Jadwal otomatis (cron / event)
+
+Buka menu **Cron** di activity bar untuk melihat jadwal, next run, dan toggle enable. Tambahkan
+blok `schedule` / `on` di YAML lalu Save. Panduan lengkap: dokumentasi di panel Cron.
 
 ## Membaca hasil run
 
