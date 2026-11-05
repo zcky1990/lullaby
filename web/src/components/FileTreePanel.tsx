@@ -14,11 +14,15 @@ import { Input } from "@/components/ui/input";
 import { PanelHeader } from "@/components/PanelHeader";
 import { Spinner } from "@/components/ui/spinner";
 import { api, type FileEntry } from "@/lib/api";
+import { isDirtyPath } from "@/lib/dirty-paths";
+import { useDirtyPaths } from "@/hooks/useDirtyPaths";
 import { cn } from "@/lib/utils";
 
 interface Props {
   projectId: string | null;
   selectedPath: string | null;
+  /** Override opsional; default memakai store dari `useDirtyPaths`. */
+  dirtyPaths?: ReadonlySet<string>;
   onOpenFile: (path: string) => void;
 }
 
@@ -31,7 +35,7 @@ function parentOf(path: string | null | undefined): string {
   return index <= 0 ? "" : normalized.slice(0, index);
 }
 
-export function FileTreePanel({ projectId, selectedPath, onOpenFile }: Props) {
+export function FileTreePanel({ projectId, selectedPath, dirtyPaths, onOpenFile }: Props) {
   const [rootEntries, setRootEntries] = useState<FileEntry[]>([]);
   const [children, setChildren] = useState<Record<string, FileEntry[]>>({});
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -45,6 +49,10 @@ export function FileTreePanel({ projectId, selectedPath, onOpenFile }: Props) {
   const [createBusy, setCreateBusy] = useState(false);
   const [createError, setCreateError] = useState<string | undefined>();
   const createInputRef = useRef<HTMLInputElement>(null);
+
+  // File yang tab editornya punya perubahan belum disimpan → nama ditebalkan.
+  const storedDirtyPaths = useDirtyPaths();
+  const activeDirtyPaths = dirtyPaths ?? storedDirtyPaths;
 
   const createParent = useMemo(() => {
     if (focusType === "dir" && focusPath) return focusPath;
@@ -243,6 +251,7 @@ export function FileTreePanel({ projectId, selectedPath, onOpenFile }: Props) {
         const isDir = entry.type === "dir";
         const isOpen = expanded.has(entry.path);
         const focused = focusPath === entry.path;
+        const dirty = !isDir && isDirtyPath(activeDirtyPaths, entry.path);
         return (
           <div key={entry.path}>
             <button
@@ -268,7 +277,7 @@ export function FileTreePanel({ projectId, selectedPath, onOpenFile }: Props) {
                 "flex w-full items-center gap-1.5 rounded-md py-1 pr-2 text-left text-xs transition-colors hover:bg-accent",
                 (entry.path === selectedPath || focused) && "bg-accent",
               )}
-              title={entry.name}
+              title={dirty ? `${entry.name} — belum disimpan` : entry.name}
               aria-expanded={isDir ? isOpen : undefined}
               aria-level={depth + 1}
             >
@@ -289,9 +298,22 @@ export function FileTreePanel({ projectId, selectedPath, onOpenFile }: Props) {
                   <Folder className="size-4 shrink-0 text-info" />
                 )
               ) : (
-                <File className="size-4 shrink-0 text-muted-foreground" />
+                <File
+                  className={cn(
+                    "size-4 shrink-0",
+                    dirty ? "text-foreground" : "text-muted-foreground",
+                  )}
+                />
               )}
-              <span className="truncate">{entry.name}</span>
+              <span className={cn("truncate", dirty && "font-semibold text-foreground")}>
+                {entry.name}
+              </span>
+              {dirty ? (
+                <>
+                  <span aria-hidden="true" className="size-1.5 shrink-0 rounded-full bg-primary" />
+                  <span className="sr-only">(belum disimpan)</span>
+                </>
+              ) : null}
             </button>
             {isDir && isOpen && children[entry.path]
               ? renderNodes(children[entry.path], depth + 1, entry.path)

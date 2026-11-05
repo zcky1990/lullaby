@@ -1,6 +1,7 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { Menu } from "@/components/ActivityBar";
 import type { EditorTab, TabKind } from "@/components/TabsBar";
+import { collectDirtyPaths, publishDirtyPaths, resolveDirtyFlag } from "@/lib/dirty-paths";
 
 export const PANEL_FOR_KIND: Record<TabKind, Menu> = {
   workspace: "workspace",
@@ -22,6 +23,14 @@ export function useEditorTabs(setMenu: (menu: Menu) => void, currentId: string |
   const [activeTabId, setActiveTabId] = useState<string | null>(null);
   const tabsRef = useRef(tabs);
   tabsRef.current = tabs;
+  /** Isi terakhir yang diketahui berasal dari disk, per tab id. */
+  const diskContentRef = useRef(new Map<string, string>());
+
+  // Explorer menebalkan file yang belum disimpan; ringkasannya dipublikasikan ke store
+  // supaya panel file tidak perlu menerima prop dari `App.tsx`.
+  useEffect(() => {
+    publishDirtyPaths(collectDirtyPaths(tabs));
+  }, [tabs]);
 
   const focusTab = useCallback(
     (tab: EditorTab, keepMenu = false) => {
@@ -37,13 +46,19 @@ export function useEditorTabs(setMenu: (menu: Menu) => void, currentId: string |
   );
 
   const patchTab = useCallback((id: string, patch: Partial<EditorTab>) => {
-    setTabs((current) => current.map((tab) => (tab.id === id ? { ...tab, ...patch } : tab)));
+    const diskContent = diskContentRef.current;
+    const { dirty, baseline } = resolveDirtyFlag(patch, diskContent.get(id));
+    if (baseline !== undefined) diskContent.set(id, baseline);
+
+    const changes: Partial<EditorTab> = dirty === undefined ? patch : { ...patch, dirty };
+    setTabs((current) => current.map((tab) => (tab.id === id ? { ...tab, ...changes } : tab)));
   }, []);
 
   const closeTab = useCallback(
     (id: string) => {
       const index = tabs.findIndex((tab) => tab.id === id);
       if (index === -1) return;
+      diskContentRef.current.delete(id);
       const next = tabs.filter((tab) => tab.id !== id);
       setTabs(next);
       if (activeTabId === id) {

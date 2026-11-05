@@ -8,7 +8,7 @@ status bar.
 | Menu | Panel / perilaku |
 | --- | --- |
 | Workspace | `WorkspacePanel` — daftar, buat, pilih, ganti nama (klik dua kali / ikon pensil), hapus project |
-| Explorer | `FileTreePanel` — butuh `workspace_path`; tombol buat file/folder |
+| Explorer | `FileTreePanel` — butuh `workspace_path`; tombol buat file/folder; file yang belum disimpan ditebalkan |
 | Document | `DocumentPanel` — Local / Docmost / Notion / Confluence |
 | Ticket | `TicketPanel` — filter + create/refresh; board full-height dengan scroll per kolom |
 | Workflows | `WorkflowPanel` — daftar YAML, recent runs, create/refresh |
@@ -38,6 +38,26 @@ Menu Workflows membuka tab home; klik file workflow di panel membuka tab `workfl
 (dinamis). Menu Cron membuka singleton `cron` + panel jadwal.
 
 State tab: `web/src/hooks/useEditorTabs.ts`, dikelola dari `App.tsx`.
+
+## Explorer — penanda file belum disimpan
+
+Tab editor file punya flag `dirty` (di-set saat Monaco `onChange`, dibersihkan saat simpan).
+Explorer memakai flag itu untuk menandai file yang belum disimpan:
+
+- Nama file dirender `font-semibold` + `text-foreground` (ikon file ikut lebih terang) dan diberi
+  dot kecil `bg-primary` di kanan; tooltip menjadi `nama — belum disimpan` plus teks `sr-only`
+  “(belum disimpan)” untuk pembaca layar. Folder tidak pernah ditandai.
+- Penanda otomatis hilang setelah `Cmd|Ctrl+S` / tombol **Simpan** (`patchTab { dirty: false }`) atau
+  setelah isi file dibaca ulang dari disk (mis. `openFile(path, true)` dari daftar perubahan chat).
+- Sumber data: `web/src/lib/dirty-paths.ts`
+  (`collectDirtyPaths` → `Set<path>`, `isDirtyPath` untuk pencocokan, plus store kecil
+  `publishDirtyPaths` / `subscribeDirtyPaths`).
+- `useEditorTabs` mempublikasikan ringkasan path dirty setiap daftar tab berubah; `FileTreePanel`
+  berlangganan lewat `web/src/hooks/useDirtyPaths.ts` (`useSyncExternalStore`), jadi tidak perlu
+  prop dari `App.tsx`. Prop `dirtyPaths` masih tersedia sebagai override (mis. untuk test).
+- Perbandingan path dinormalkan (`\` → `/`, prefix `./` dibuang). Path relatif dan absolut dicocokkan
+  lewat suffix hanya bila tingkatannya berbeda, sehingga `src/a.ts` tidak dianggap sama dengan
+  `lib/src/a.ts`.
 
 ## Chat sidebar
 
