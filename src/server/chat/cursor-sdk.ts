@@ -1,11 +1,13 @@
 /**
- * Deno cannot run Cursor local-agent bidi streams over fetch (`connect-web`):
- * "The fetch API does not support streaming request bodies".
+ * Deno cannot run Cursor local-agent HTTP/2 bidi over `connect-web` fetch
+ * ("The fetch API does not support streaming request bodies").
  *
- * Mitigations:
- * 1. Force HTTP/1.1 + SSE for local agents (`useHttp1ForAgent`).
- * 2. Prefer the Node `connect-node` / `node:http2` transport by hiding the
- *    `Deno` global from the SDK's runtime check while RPC is in flight.
+ * Prefer the Node `connect-node` / `node:http2` transport by hiding the `Deno`
+ * global from the SDK runtime check while RPC is in flight.
+ *
+ * Do NOT force `useHttp1ForAgent: true` for local agents — HTTP/1.1 cannot
+ * carry the bidi stream the local runtime needs, and `send()`/`wait()` hang
+ * until our timeout (see Cursor forum reports).
  */
 
 type CursorSdk = typeof import("@cursor/sdk");
@@ -24,9 +26,10 @@ export async function loadCursorSdk(): Promise<CursorSdk> {
   const sdk = await sdkPromise;
   if (!configured) {
     configured = true;
+    // Explicitly clear any previous HTTP/1.1 force so local agents use HTTP/2.
     if (isDenoRuntime()) {
       sdk.configureCursorSdk({
-        local: { useHttp1ForAgent: true },
+        local: { useHttp1ForAgent: null },
       });
     }
   }
@@ -37,9 +40,15 @@ export function rewriteCursorTransportError(error: unknown): Error {
   const message = error instanceof Error ? error.message : String(error);
   if (/fetch API does not support streaming request bodies/i.test(message)) {
     return new Error(
-      "Cursor local agent membutuhkan HTTP streaming yang tidak didukung Deno fetch. " +
-        "Coba lagi (app memaksa HTTP/1.1 SSE / Node transport); " +
+      "Cursor local agent membutuhkan HTTP/2 streaming. " +
+        "App mencoba transport Node (node:http2); restart app lalu coba lagi, " +
         "atau gunakan cloud agent (id bc-…).",
+    );
+  }
+  if (/timeout|timed out|stalled|hang/i.test(message)) {
+    return new Error(
+      `${message} Local Cursor agent di Deno bisa hang jika transport HTTP/2 gagal. ` +
+        "Coba pesan lebih pendek, restart app, atau gunakan provider LLM biasa / cloud agent.",
     );
   }
   return error instanceof Error ? error : new Error(message);

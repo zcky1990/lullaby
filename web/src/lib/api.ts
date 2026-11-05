@@ -553,6 +553,37 @@ export type ChatResponse =
   }
   | { status: "error"; error: string; sessionId?: string };
 
+export type ChatStepKind = "thinking" | "tool" | "approval" | "assistant";
+
+export interface ChatStep {
+  id: string;
+  kind: ChatStepKind;
+  status: "running" | "done" | "error";
+  title: string;
+  detail?: string;
+  toolName?: string;
+  ts: number;
+  runId?: string;
+  projectId?: string;
+  sessionId?: string;
+}
+
+export interface ChatRequestPayload {
+  providerId?: string;
+  model?: string;
+  sessionId?: string;
+  roleId?: string;
+  skillName?: string;
+  variant?: string;
+  mode?: ChatMode;
+  messages: { role: string; content: string; attachments?: ChatAttachment[] }[];
+}
+
+export interface ChatStreamOptions {
+  onStep?: (step: ChatStep) => void;
+  signal?: AbortSignal;
+}
+
 export interface ChatSession {
   id: string;
   title: string;
@@ -866,29 +897,71 @@ export const api = {
     request<{ provider: LlmProvider }>(`/api/llm/${id}`, jsonInit("PUT", payload)),
   deleteLlm: (id: string) =>
     request<{ ok: boolean }>(`/api/llm/${id}`, { method: "DELETE" }),
-  chat: (
+  chatStream: async (
     projectId: string,
-    payload: {
-      providerId?: string;
-      model?: string;
-      sessionId?: string;
-      roleId?: string;
-      skillName?: string;
-      variant?: string;
-      mode?: ChatMode;
-      messages: { role: string; content: string; attachments?: ChatAttachment[] }[];
-    },
-  ) =>
-    request<ChatResponse>(
-      `/api/projects/${projectId}/chat`,
-      jsonInit("POST", payload, { timeoutMs: 180_000 }),
-    ),
+    payload: ChatRequestPayload,
+    options: ChatStreamOptions = {},
+  ): Promise<ChatResponse> => {
+    const res = await fetch(`/api/projects/${projectId}/chat`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(payload),
+      signal: options.signal,
+    });
+    if (!res.ok || !res.body) {
+      let data: unknown = null;
+      try {
+        data = await res.json();
+      } catch {
+        data = null;
+      }
+      const error = (data as { error?: string } | null)?.error ?? `HTTP ${res.status}`;
+      throw new ApiError(res.status, error, data);
+    }
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let result: ChatResponse | null = null;
+
+    const handleLine = (line: string) => {
+      const trimmed = line.trim();
+      if (!trimmed) return;
+      let message: {
+        type?: string;
+        step?: ChatStep;
+        result?: ChatResponse;
+      };
+      try {
+        message = JSON.parse(trimmed);
+      } catch {
+        return;
+      }
+      if (message.type === "step" && message.step) options.onStep?.(message.step);
+      else if (message.type === "result" && message.result) result = message.result;
+    };
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      let index = buffer.indexOf("\n");
+      while (index >= 0) {
+        handleLine(buffer.slice(0, index));
+        buffer = buffer.slice(index + 1);
+        index = buffer.indexOf("\n");
+      }
+    }
+    if (buffer.trim()) handleLine(buffer);
+    if (!result) throw new ApiError(500, "chat_stream_incomplete", null);
+    return result;
+  },
   chatChange: (payload: { runId: string; callId: string; hunk: number; accept: boolean }) =>
-    request<ChatResponse>("/api/chat/change", jsonInit("POST", payload, { timeoutMs: 180_000 })),
+    request<ChatResponse>("/api/chat/change", jsonInit("POST", payload, { timeoutMs: 900_000 })),
   chatChangeAll: (payload: { runId: string; accept: boolean }) =>
     request<ChatResponse>(
       "/api/chat/change-all",
-      jsonInit("POST", payload, { timeoutMs: 180_000 }),
+      jsonInit("POST", payload, { timeoutMs: 900_000 }),
     ),
   listChatSessions: (projectId: string) =>
     request<{ sessions: ChatSession[] }>(`/api/projects/${projectId}/chat/sessions`),

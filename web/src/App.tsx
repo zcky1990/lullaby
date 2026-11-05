@@ -863,7 +863,7 @@ export default function App() {
     source.onmessage = (message) => {
       try {
         const event = JSON.parse(message.data) as ActivityEvent;
-        if (event.type.startsWith("workflow.step.")) return;
+        if (event.type.startsWith("workflow.step.") || event.type === "chat.step") return;
         setActivity((current) => [event, ...current].slice(0, 50));
       } catch {
         // ignore malformed events

@@ -8,7 +8,18 @@ import {
   useState,
   type PointerEvent as ReactPointerEvent,
 } from "react";
-import { FileCode2, FileText, Paperclip, Plus, Send, Sparkles, Trash2, X } from "lucide-react";
+import {
+  Check,
+  CircleAlert,
+  FileCode2,
+  FileText,
+  Paperclip,
+  Plus,
+  Send,
+  Sparkles,
+  Trash2,
+  X,
+} from "lucide-react";
 import { SkillMentionMenu, type SkillOption } from "@/components/SkillMentionMenu";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -30,6 +41,7 @@ import {
   type ChatPending,
   type ChatResponse,
   type ChatSession,
+  type ChatStep,
   type CursorModel,
   type FileChange,
   type LlmProvider,
@@ -210,6 +222,7 @@ export function ChatSidebar({
   const [width, setWidth] = useState(readChatWidth);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
+  const [steps, setSteps] = useState<ChatStep[]>([]);
   const [error, setError] = useState<string | undefined>();
   const [pending, setPending] = useState<PendingState | null>(null);
   const [skills, setSkills] = useState<SkillInfo[]>([]);
@@ -397,7 +410,7 @@ export function ChatSidebar({
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
-  }, [entries, sending, pending]);
+  }, [entries, sending, pending, steps]);
 
   const refreshSessions = useCallback(async () => {
     if (!projectId) {
@@ -471,6 +484,7 @@ export function ChatSidebar({
     setEntries([]);
     setAttachments([]);
     setPending(null);
+    setSteps([]);
     setError(undefined);
     dispatchReview(null, null);
     refreshSessions().catch(console.error);
@@ -520,12 +534,23 @@ export function ChatSidebar({
     });
   }, []);
 
+  const mergeStep = useCallback((step: ChatStep) => {
+    setSteps((current) => {
+      const index = current.findIndex((item) => item.id === step.id);
+      if (index < 0) return [...current, step];
+      const next = current.slice();
+      next[index] = { ...next[index], ...step };
+      return next;
+    });
+  }, []);
+
   const handleResponse = (response: ChatResponse) => {
     if (response.status !== "error" && response.createdTickets?.length) {
       onTicketsChanged?.();
     }
     if (response.status === "done") {
       setPending(null);
+      setSteps([]);
       dispatchReview(null, null);
       if (response.changes?.length) {
         dispatchChangesApplied(response.changes.map((change) => change.path));
@@ -544,6 +569,7 @@ export function ChatSidebar({
       return;
     }
     if (response.status === "approval_required") {
+      setSteps([]);
       if (response.sessionId) setSessionId(response.sessionId);
       setPending({
         runId: response.runId,
@@ -554,6 +580,7 @@ export function ChatSidebar({
       refreshSessions().catch(console.error);
       return;
     }
+    setSteps([]);
     setError(response.error);
   };
 
@@ -585,6 +612,28 @@ export function ChatSidebar({
   }, []);
 
   useEffect(() => {
+    const source = new EventSource("/api/events");
+    source.onmessage = (message) => {
+      try {
+        const event = JSON.parse(message.data) as { type?: string; payload?: ChatStep };
+        if (event.type !== "chat.step" || !event.payload) return;
+        const activeProjectId = projectIdRef.current;
+        if (
+          event.payload.projectId &&
+          activeProjectId &&
+          event.payload.projectId !== activeProjectId
+        ) {
+          return;
+        }
+        mergeStep(event.payload);
+      } catch {
+        // ignore malformed events
+      }
+    };
+    return () => source.close();
+  }, [mergeStep]);
+
+  useEffect(() => {
     const handler = (event: Event) => {
       const detail = (event as CustomEvent<AutoBuildDetail>).detail;
       if (!detail) return;
@@ -608,6 +657,7 @@ export function ChatSidebar({
         setAttachments([]);
         setSelectedSkill(null);
         setPending(null);
+        setSteps([]);
         setError(undefined);
         dispatchReview(null, null);
 
@@ -621,13 +671,13 @@ export function ChatSidebar({
         setEntries(next);
         setSending(true);
         try {
-          const response = await api.chat(activeProjectId, {
+          const response = await api.chatStream(activeProjectId, {
             providerId: providerIdRef.current || undefined,
             roleId: roleIdRef.current ?? undefined,
             variant: variantRef.current,
             mode: "build",
             messages: [{ role: "user", content }],
-          });
+          }, { onStep: mergeStep });
           responseRef.current(response);
         } catch (e) {
           setError((e as Error).message);
@@ -768,9 +818,10 @@ export function ChatSidebar({
       },
     ];
     setEntries(next);
+    setSteps([]);
     setSending(true);
     try {
-      const response = await api.chat(projectId, {
+      const response = await api.chatStream(projectId, {
         providerId: providerId || undefined,
         model: activeProvider?.provider === "cursor" ? cursorModelId || undefined : undefined,
         sessionId: sessionId ?? undefined,
@@ -783,7 +834,7 @@ export function ChatSidebar({
           content: entry.content,
           ...(index === next.length - 1 && outgoing.length ? { attachments: outgoing } : {}),
         })),
-      });
+      }, { onStep: mergeStep });
       handleResponse(response);
     } catch (e) {
       setError((e as Error).message);
@@ -798,6 +849,7 @@ export function ChatSidebar({
       setEntries([]);
       setAttachments([]);
       setPending(null);
+      setSteps([]);
       setError(undefined);
       dispatchReview(null, null);
       return;
@@ -815,6 +867,7 @@ export function ChatSidebar({
         })),
       );
       setPending(null);
+      setSteps([]);
       setError(undefined);
     } catch (e) {
       setError((e as Error).message);
@@ -829,6 +882,7 @@ export function ChatSidebar({
       setSessionId(null);
       setEntries([]);
       setPending(null);
+      setSteps([]);
       await refreshSessions();
     } catch (e) {
       setError((e as Error).message);
@@ -1000,11 +1054,41 @@ export function ChatSidebar({
                     : <span className="whitespace-pre-wrap">{entry.content}</span>}
                 </div>
               ))}
-              {sending
+              {steps.length > 0 || sending
                 ? (
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                    <Spinner />
-                    Bekerja…
+                  <div className="flex flex-col gap-1.5 rounded-md border border-border/50 bg-muted/20 p-2">
+                    {steps.map((step) => (
+                      <div key={step.id} className="flex items-start gap-2 text-xs">
+                        {step.status === "running"
+                          ? <Spinner className="mt-0.5 size-3 shrink-0" />
+                          : step.status === "error"
+                          ? <CircleAlert className="mt-0.5 size-3 shrink-0 text-destructive" />
+                          : <Check className="mt-0.5 size-3 shrink-0 text-emerald-500" />}
+                        <div className="min-w-0">
+                          <p
+                            className={cn(
+                              "font-medium",
+                              step.status === "done" && "text-muted-foreground",
+                            )}
+                          >
+                            {step.title}
+                          </p>
+                          {step.detail
+                            ? (
+                              <p className="break-words text-muted-foreground/80">{step.detail}</p>
+                            )
+                            : null}
+                        </div>
+                      </div>
+                    ))}
+                    {sending && steps.length === 0
+                      ? (
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                          <Spinner />
+                          Bekerja…
+                        </div>
+                      )
+                      : null}
                   </div>
                 )
                 : null}

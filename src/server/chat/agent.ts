@@ -22,6 +22,7 @@ import { approvalResponse, prepareWriteChange, setAdvance } from "./review.ts";
 import { isFinalMaxStep, shouldContinueSteps, toolsForStep, turnsForStep } from "./max-steps.ts";
 import { readChatToolsSettings } from "./settings.ts";
 import { scheduleSkillLearn } from "./skill-learn.ts";
+import { describeToolCall, emitChatStep, summarizeToolResult } from "./steps.ts";
 import { deleteRun, pruneRuns, setRun } from "./state.ts";
 import { loadMcpChatTools } from "./mcp-tools.ts";
 import {
@@ -32,7 +33,7 @@ import {
   toolsFor,
   WRITE_TOOLS,
 } from "./tools.ts";
-import type { ChatResponse, Run, VisibleMessage } from "./types.ts";
+import type { ChatResponse, ChatStep, Run, VisibleMessage } from "./types.ts";
 
 export async function syncCursorConversation(
   sessionId: string,
@@ -127,18 +128,43 @@ export async function advance(run: Run): Promise<ChatResponse> {
     const maxSteps = settings.maxSteps;
     for (let step = 0; shouldContinueSteps(step, maxSteps); step++) {
       const finalStep = isFinalMaxStep(step, maxSteps);
-      const response = await complete(
-        run.provider,
-        turnsForStep(run.turns, finalStep),
-        toolsForStep(tools, finalStep),
-        run.temperature,
-        undefined,
-        {
-          workspace: run.workspace,
-          cursorAgentId: run.cursorAgentId,
-          mode: run.mode,
-        },
-      );
+      const thinkingId = crypto.randomUUID();
+      emitChatStep(run, {
+        id: thinkingId,
+        kind: "thinking",
+        status: "running",
+        title: step === 0 ? "Menganalisis permintaan…" : "Melanjutkan ke langkah berikutnya…",
+      });
+      let response: CompleteResult;
+      try {
+        response = await complete(
+          run.provider,
+          turnsForStep(run.turns, finalStep),
+          toolsForStep(tools, finalStep),
+          run.temperature,
+          undefined,
+          {
+            workspace: run.workspace,
+            cursorAgentId: run.cursorAgentId,
+            mode: run.mode,
+          },
+        );
+      } catch (error) {
+        emitChatStep(run, {
+          id: thinkingId,
+          kind: "thinking",
+          status: "error",
+          title: "Gagal menghubungi model",
+          detail: (error as Error).message,
+        });
+        throw error;
+      }
+      emitChatStep(run, {
+        id: thinkingId,
+        kind: "thinking",
+        status: "done",
+        title: "Analisis selesai",
+      });
       await rememberCursorResult(run, response);
 
       if (finalStep || response.toolCalls.length === 0) {
@@ -148,6 +174,12 @@ export async function advance(run: Run): Promise<ChatResponse> {
             : "(selesai)");
         run.turns.push({ role: "assistant", content: message });
         await appendChatMessage(run.sessionId, "assistant", message, run.changes);
+        emitChatStep(run, {
+          id: "assistant-final",
+          kind: "assistant",
+          status: "done",
+          title: "Selesai",
+        });
         if (run.mode === "build") scheduleSkillLearn(run);
         deleteRun(run.id);
         return {
@@ -173,6 +205,15 @@ export async function advance(run: Run): Promise<ChatResponse> {
           "get_ticket",
         ]);
         for (const call of response.toolCalls) {
+          const stepId = `tool-${call.id}`;
+          const label = describeToolCall(call);
+          emitChatStep(run, {
+            id: stepId,
+            kind: "tool",
+            status: "running",
+            title: label,
+            toolName: call.name,
+          });
           let result: string;
           if (disabledTools.has(call.name)) {
             result = `Tool "${call.name}" dinonaktifkan di Global Settings → Tools.`;
@@ -185,6 +226,14 @@ export async function advance(run: Run): Promise<ChatResponse> {
               result = `Error: ${(error as Error).message}`;
             }
           }
+          emitChatStep(run, {
+            id: stepId,
+            kind: "tool",
+            status: result.startsWith("Error:") ? "error" : "done",
+            title: label,
+            toolName: call.name,
+            detail: summarizeToolResult(result),
+          });
           run.turns.push({ role: "tool", toolCallId: call.id, content: result });
         }
         continue;
@@ -202,6 +251,15 @@ export async function advance(run: Run): Promise<ChatResponse> {
       let hasReviews = false;
 
       for (const call of batch) {
+        const stepId = `tool-${call.id}`;
+        const label = describeToolCall(call);
+        emitChatStep(run, {
+          id: stepId,
+          kind: "tool",
+          status: "running",
+          title: label,
+          toolName: call.name,
+        });
         let result: string;
         try {
           if (disabledTools.has(call.name)) {
@@ -229,6 +287,14 @@ export async function advance(run: Run): Promise<ChatResponse> {
               } else {
                 run.pendingChanges.set(call.id, prepared.change);
                 hasReviews = true;
+                emitChatStep(run, {
+                  id: stepId,
+                  kind: "approval",
+                  status: "done",
+                  title: `Menunggu persetujuan: ${prepared.change.path}`,
+                  toolName: call.name,
+                  detail: "Buka Review untuk menerima atau menolak perubahan.",
+                });
                 continue;
               }
             } else {
@@ -247,10 +313,21 @@ export async function advance(run: Run): Promise<ChatResponse> {
         } catch (error) {
           result = `Error: ${(error as Error).message}`;
         }
+        emitChatStep(run, {
+          id: stepId,
+          kind: "tool",
+          status: result.startsWith("Error:") ? "error" : "done",
+          title: label,
+          toolName: call.name,
+          detail: summarizeToolResult(result),
+        });
         run.batchResults.set(call.id, result);
       }
 
-      if (hasReviews) return approvalResponse(run);
+      if (hasReviews) {
+        run.emit = undefined;
+        return approvalResponse(run);
+      }
 
       for (const call of batch) {
         run.turns.push({
@@ -264,6 +341,12 @@ export async function advance(run: Run): Promise<ChatResponse> {
     }
     const message = "(selesai)";
     await appendChatMessage(run.sessionId, "assistant", message, run.changes);
+    emitChatStep(run, {
+      id: "assistant-final",
+      kind: "assistant",
+      status: "done",
+      title: "Selesai",
+    });
     scheduleSkillLearn(run);
     deleteRun(run.id);
     return {
@@ -274,6 +357,13 @@ export async function advance(run: Run): Promise<ChatResponse> {
       createdTickets: run.createdTickets,
     };
   } catch (error) {
+    emitChatStep(run, {
+      id: "run-error",
+      kind: "thinking",
+      status: "error",
+      title: "Terjadi kesalahan",
+      detail: (error as Error).message,
+    });
     deleteRun(run.id);
     return { status: "error", error: (error as Error).message, sessionId: run.sessionId };
   }
@@ -289,6 +379,7 @@ export async function startChat(
   mode: "plan" | "build" = "build",
   rolePersona?: string,
   skillName?: string,
+  emit?: (step: ChatStep) => void,
 ): Promise<ChatResponse> {
   pruneRuns();
 
@@ -383,6 +474,7 @@ export async function startChat(
     mcpTools: new Map(),
     createdTickets: [],
     createdAt: Date.now(),
+    emit,
   };
   setRun(run);
   return await advance(run);

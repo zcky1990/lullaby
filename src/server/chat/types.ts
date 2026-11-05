@@ -87,6 +87,24 @@ export interface PendingApproval {
   summary: string;
 }
 
+export type ChatStepKind = "thinking" | "tool" | "approval" | "assistant";
+
+export interface ChatStep {
+  id: string;
+  kind: ChatStepKind;
+  status: "running" | "done" | "error";
+  title: string;
+  detail?: string;
+  toolName?: string;
+  ts: number;
+}
+
+export interface ChatStepEvent extends ChatStep {
+  runId: string;
+  projectId: string;
+  sessionId: string;
+}
+
 export interface Run {
   id: string;
   provider: LlmProviderRow;
@@ -105,6 +123,7 @@ export interface Run {
   mcpTools: Map<string, McpToolBinding>;
   createdTickets: CreatedTicket[];
   createdAt: number;
+  emit?: (step: ChatStep) => void;
 }
 
 export interface PendingChange {

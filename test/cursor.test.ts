@@ -191,7 +191,7 @@ Deno.test("rewriteCursorTransportError explains Deno fetch streaming limit", () 
   const rewritten = rewriteCursorTransportError(
     new Error("[unknown] The fetch API does not support streaming request bodies"),
   );
-  equal(rewritten.message.includes("HTTP/1.1 SSE"), true);
+  equal(rewritten.message.includes("HTTP/2"), true);
   equal(rewritten.message.includes("bc-"), true);
 });
 

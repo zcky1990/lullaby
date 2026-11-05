@@ -5,7 +5,10 @@ import { loadCursorSdk, withCursorConnectTransport } from "./cursor-sdk.ts";
 import type { ChatTurn, ToolCall } from "./types.ts";
 
 const CURSOR_DEFAULT_MODEL = "composer-2";
-const CURSOR_TIMEOUT_MS = 180_000;
+/** Wall-clock cap for an entire local/cloud run (Build can take several minutes). */
+const CURSOR_RUN_TIMEOUT_MS = 15 * 60_000;
+/** Fail fast if `agent.send()` never returns a run handle (SDK connect stall). */
+const CURSOR_SEND_TIMEOUT_MS = 180_000;
 const CURSOR_BUILD_TOOLS = ["read", "grep", "glob", "ls", "edit", "task"] as const;
 const CURSOR_PLAN_TOOLS = ["read", "grep", "glob", "ls", "task"] as const;
 const MAX_FILES = 3000;
@@ -282,6 +285,45 @@ function localAgentOptions(workspace: string | null, mode: "plan" | "build") {
   };
 }
 
+type CursorRunHandle = {
+  wait: () => Promise<{
+    status: string;
+    result?: string;
+    error?: { message?: string };
+  }>;
+  cancel?: () => void | Promise<void>;
+};
+
+/** Single `wait()` with wall-clock timeout — do not also drain `stream()` (can hang). */
+async function waitForCursorRun(
+  run: CursorRunHandle,
+): Promise<Awaited<ReturnType<CursorRunHandle["wait"]>>> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      run.wait(),
+      new Promise<never>((_resolve, reject) => {
+        timer = setTimeout(() => {
+          void (async () => {
+            try {
+              await run.cancel?.();
+            } catch {
+              // ignore
+            }
+            reject(
+              new Error(
+                `Cursor run timeout setelah ${Math.round(CURSOR_RUN_TIMEOUT_MS / 1000)} detik.`,
+              ),
+            );
+          })();
+        }, CURSOR_RUN_TIMEOUT_MS);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 export async function completeCursor(
   provider: LlmProviderRow,
   turns: ChatTurn[],
@@ -360,11 +402,25 @@ export async function completeCursor(
       const images = imageParts(turns);
       let run: Awaited<ReturnType<typeof agent.send>>;
       try {
-        run = await agent.send({
-          text: prompt,
-          ...(images.length ? { images } : {}),
-          ...(mode === "plan" ? { mode: "plan" } : {}),
-        });
+        run = await Promise.race([
+          agent.send({
+            text: prompt,
+            ...(images.length ? { images } : {}),
+            ...(mode === "plan" ? { mode: "plan" } : {}),
+          }),
+          new Promise<never>((_resolve, reject) => {
+            setTimeout(
+              () =>
+                reject(
+                  new Error(
+                    `Cursor send timeout setelah ${CURSOR_SEND_TIMEOUT_MS / 1000} detik ` +
+                      "(koneksi SDK macet sebelum run mulai).",
+                  ),
+                ),
+              CURSOR_SEND_TIMEOUT_MS,
+            );
+          }),
+        ]);
       } catch (error) {
         await disposeAgent(agent);
         if (error instanceof CursorAgentError) {
@@ -373,16 +429,8 @@ export async function completeCursor(
         throw error;
       }
 
-      let timer: ReturnType<typeof setTimeout> | undefined;
-      const timeout = new Promise<never>((_, reject) => {
-        timer = setTimeout(() => {
-          void run.cancel?.().catch(() => {});
-          reject(new Error(`Cursor run timeout setelah ${CURSOR_TIMEOUT_MS / 1000} detik.`));
-        }, CURSOR_TIMEOUT_MS);
-      });
-
       try {
-        const result = await Promise.race([run.wait(), timeout]);
+        const result = await waitForCursorRun(run as CursorRunHandle);
         if (result.status !== "finished") {
           throw new Error(result.error?.message ?? `Cursor run ${result.status}.`);
         }
@@ -438,7 +486,6 @@ export async function completeCursor(
           conversation,
         };
       } finally {
-        if (timer) clearTimeout(timer);
         await disposeAgent(agent);
       }
     } catch (error) {

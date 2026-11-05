@@ -111,7 +111,7 @@ async function completeOpenAi(
       Authorization: `Bearer ${provider.api_key ?? ""}`,
     },
     body: JSON.stringify(body),
-  }, 120_000);
+  }, 300_000);
   if (!res.ok) throw new Error(`LLM HTTP ${res.status}: ${res.text.slice(0, 300)}`);
   const json = JSON.parse(res.text || "{}") as {
     choices?: Array<{
@@ -223,7 +223,7 @@ async function completeAnthropic(
       "anthropic-version": "2023-06-01",
     },
     body: JSON.stringify(body),
-  }, 120_000);
+  }, 300_000);
   if (!res.ok) throw new Error(`LLM HTTP ${res.status}: ${res.text.slice(0, 300)}`);
   const json = JSON.parse(res.text || "{}") as {
     content?: Array<{ type?: string; text?: string; id?: string; name?: string; input?: unknown }>;

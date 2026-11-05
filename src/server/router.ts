@@ -459,33 +459,77 @@ async function chatHandler(projectId: string, req: Request): Promise<Response> {
       attachments: message.attachments,
     }));
 
-  const result = await startChat(
-    projectId,
-    provider,
-    project.workspace_path ?? null,
-    messages,
-    parsed.data.sessionId,
-    parsed.data.variant,
-    parsed.data.mode,
-    role?.persona,
-    parsed.data.skillName,
-  );
-  if (result.status === "error" && result.error === "unknown_skill") {
-    return json(
-      {
-        error: "unknown_skill",
-        message: `Skill tidak ditemukan: ${parsed.data.skillName}`,
-        skillName: parsed.data.skillName,
-      },
-      400,
-    );
-  }
   await record("chat.message", {
     projectId,
     providerId: provider.id,
     skillName: parsed.data.skillName ?? null,
   });
-  return json(result);
+
+  const encoder = new TextEncoder();
+  let heartbeat: ReturnType<typeof setInterval> | undefined;
+  let closed = false;
+  const stream = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      const send = (value: unknown) => {
+        if (closed) return;
+        try {
+          controller.enqueue(encoder.encode(`${JSON.stringify(value)}\n`));
+        } catch {
+          closed = true;
+        }
+      };
+      const sendStep = (step: unknown) => send({ type: "step", step });
+      heartbeat = setInterval(() => {
+        if (closed) return;
+        try {
+          controller.enqueue(encoder.encode("\n"));
+        } catch {
+          closed = true;
+        }
+      }, 15_000);
+      try {
+        const result = await startChat(
+          projectId,
+          provider,
+          project.workspace_path ?? null,
+          messages,
+          parsed.data.sessionId,
+          parsed.data.variant,
+          parsed.data.mode,
+          role?.persona,
+          parsed.data.skillName,
+          sendStep,
+        );
+        send({ type: "result", result });
+      } catch (error) {
+        send({
+          type: "result",
+          result: { status: "error", error: (error as Error).message },
+        });
+      } finally {
+        if (heartbeat !== undefined) clearInterval(heartbeat);
+        closed = true;
+        try {
+          controller.close();
+        } catch {
+          // already closed
+        }
+      }
+    },
+    cancel() {
+      closed = true;
+      if (heartbeat !== undefined) clearInterval(heartbeat);
+    },
+  });
+
+  return new Response(stream, {
+    headers: {
+      "content-type": "application/x-ndjson; charset=utf-8",
+      "cache-control": "no-cache",
+      connection: "keep-alive",
+      "x-accel-buffering": "no",
+    },
+  });
 }
 
 async function chatChangeHandler(req: Request): Promise<Response> {
