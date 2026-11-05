@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { getLlmProvider } from "../db/db.ts";
 import {
   ClickUpConfig,
   ConfluenceConfig,
@@ -17,16 +18,22 @@ import { testJira } from "./jira.ts";
 import { testNotion } from "./notion.ts";
 import { testCursor } from "../server/chat/cursor.ts";
 
-const LlmConfig = z.object({
-  baseUrl: z
+const optionalBaseUrl = z.preprocess(
+  (value) => (value === "" || value == null ? undefined : value),
+  z
     .string()
     .trim()
     .url()
     .refine((v) => /^https?:\/\//i.test(v), { message: "URL harus http(s)" })
     .optional(),
+);
+
+const LlmConfig = z.object({
+  baseUrl: optionalBaseUrl,
   provider: z.string().optional(),
   model: z.string().optional(),
   apiKey: z.string().optional(),
+  providerId: z.string().optional(),
 });
 
 function invalid(error: z.ZodError): TestResult {
@@ -41,9 +48,20 @@ function invalid(error: z.ZodError): TestResult {
 async function testLlm(cfg: z.infer<typeof LlmConfig>): Promise<TestResult> {
   const started = performance.now();
   const elapsed = () => Math.round(performance.now() - started);
-  if ((cfg.provider ?? "openai").toLowerCase() === "cursor") {
+  let apiKey = cfg.apiKey?.trim() || "";
+  if (!apiKey && cfg.providerId) {
     try {
-      const result = await testCursor(cfg.apiKey ?? "");
+      apiKey = (await getLlmProvider(cfg.providerId))?.api_key?.trim() || "";
+    } catch {
+      apiKey = "";
+    }
+  }
+  if ((cfg.provider ?? "openai").toLowerCase() === "cursor") {
+    if (!apiKey) {
+      return { ok: false, message: "Cursor API key belum diisi.", latencyMs: elapsed() };
+    }
+    try {
+      const result = await testCursor(apiKey);
       return {
         ok: result.ok,
         message: result.message,
@@ -63,7 +81,7 @@ async function testLlm(cfg: z.infer<typeof LlmConfig>): Promise<TestResult> {
   const base = cfg.baseUrl.replace(/\/+$/, "");
   try {
     const headers: Record<string, string> = { Accept: "application/json" };
-    if (cfg.apiKey) headers.Authorization = `Bearer ${cfg.apiKey}`;
+    if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
     const res = await request(`${base}/models`, { method: "GET", headers });
     if (res.ok) {
       return {

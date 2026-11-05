@@ -965,10 +965,10 @@ export default function App() {
         kind: "llm",
         mode: payload.mode,
         config: {
-          baseUrl: payload.baseUrl ?? "",
+          ...(payload.baseUrl?.trim() ? { baseUrl: payload.baseUrl.trim() } : {}),
           provider: payload.provider,
           model: payload.model ?? "",
-          apiKey: payload.apiKey ?? "",
+          ...(payload.apiKey?.trim() ? { apiKey: payload.apiKey } : {}),
           ...(providerId ? { providerId } : {}),
         },
       })
