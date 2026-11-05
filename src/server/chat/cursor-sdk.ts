@@ -54,21 +54,40 @@ export function rewriteCursorTransportError(error: unknown): Error {
   return error instanceof Error ? error : new Error(message);
 }
 
+let transportDepth = 0;
+let nativeGetOwnPropertyDescriptor: typeof Object.getOwnPropertyDescriptor | null = null;
+
+function installDenoHiding(): void {
+  if (transportDepth === 0) {
+    nativeGetOwnPropertyDescriptor = Object.getOwnPropertyDescriptor;
+    const descriptor = Object.getOwnPropertyDescriptor;
+    Object.getOwnPropertyDescriptor = ((target: object, prop: PropertyKey) => {
+      if (target === globalThis && prop === "Deno") return undefined;
+      return descriptor.call(Object, target, prop);
+    }) as typeof Object.getOwnPropertyDescriptor;
+  }
+  transportDepth += 1;
+}
+
+function uninstallDenoHiding(): void {
+  transportDepth -= 1;
+  if (transportDepth > 0) return;
+  if (nativeGetOwnPropertyDescriptor) {
+    Object.getOwnPropertyDescriptor = nativeGetOwnPropertyDescriptor;
+  }
+  nativeGetOwnPropertyDescriptor = null;
+}
+
 /** Run Cursor SDK work with Node-like Connect transport on Deno. */
 export async function withCursorConnectTransport<T>(fn: () => Promise<T>): Promise<T> {
   if (!isDenoRuntime()) return await fn();
 
-  const original = Object.getOwnPropertyDescriptor;
-  Object.getOwnPropertyDescriptor = ((target: object, prop: PropertyKey) => {
-    if (target === globalThis && prop === "Deno") return undefined;
-    return original.call(Object, target, prop);
-  }) as typeof Object.getOwnPropertyDescriptor;
-
+  installDenoHiding();
   try {
     return await fn();
   } catch (error) {
     throw rewriteCursorTransportError(error);
   } finally {
-    Object.getOwnPropertyDescriptor = original;
+    uninstallDenoHiding();
   }
 }

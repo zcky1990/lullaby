@@ -476,8 +476,22 @@ export async function completeCursor(
 
   if (opts.signal?.aborted) throw cancellationError();
 
+  const notifyStatus = (status: string, message?: string) => {
+    if (!opts.onEvent) return;
+    try {
+      opts.onEvent({ type: "status", status, message });
+    } catch {
+      // progress callbacks must never break the run
+    }
+  };
+
   const snapshot = !cloud && workspace && mode === "build"
-    ? await snapshotWorkspaceFiles(workspace)
+    ? await (async () => {
+      notifyStatus("snapshot", "Menyiapkan snapshot workspace…");
+      const files = await snapshotWorkspaceFiles(workspace);
+      notifyStatus("snapshot-done", `${files.size} file`);
+      return files;
+    })()
     : null;
 
   const { Agent, CursorAgentError } = await loadCursorSdk();
@@ -499,6 +513,7 @@ export async function completeCursor(
     let resumed = false;
 
     try {
+      notifyStatus("setup", resumed ? "Melanjutkan agent Cursor…" : "Menyiapkan agent Cursor…");
       if (opts.cursorAgentId) {
         try {
           agent = await Agent.resume(opts.cursorAgentId, agentOptions);
@@ -511,6 +526,7 @@ export async function completeCursor(
               }`,
             );
           }
+          resumed = false;
           agent = await Agent.create(agentOptions);
         }
       } else {
@@ -525,6 +541,7 @@ export async function completeCursor(
 
       const images = imageParts(turns);
       const onEvent = opts.onEvent;
+      notifyStatus("starting", "Menghubungkan ke Cursor…");
       let run: Awaited<ReturnType<typeof agent.send>>;
       try {
         run = await Promise.race([
@@ -535,8 +552,12 @@ export async function completeCursor(
             ...(onEvent
               ? {
                 onDelta: (args: { update: unknown }) => {
-                  const event = mapCursorDelta(args.update);
-                  if (event) onEvent(event);
+                  try {
+                    const event = mapCursorDelta(args.update);
+                    if (event) onEvent(event);
+                  } catch {
+                    // progress callbacks must never break the SDK stream
+                  }
                 },
               }
               : {}),
@@ -561,6 +582,7 @@ export async function completeCursor(
         }
         throw error;
       }
+      notifyStatus("running", "Run Cursor berjalan");
 
       try {
         const result = await waitForCursorRun(run as CursorRunHandle, opts.signal);

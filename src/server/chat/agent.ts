@@ -150,7 +150,12 @@ function describeCursorTool(name: string | undefined, args: unknown): string {
 
 function cursorResultDetail(result: unknown): string | undefined {
   if (result === undefined || result === null) return undefined;
-  const text = typeof result === "string" ? result : JSON.stringify(result);
+  let text: string;
+  try {
+    text = typeof result === "string" ? result : JSON.stringify(result);
+  } catch {
+    text = String(result);
+  }
   if (!text) return undefined;
   const collapsed = text.replace(/\s+/g, " ").trim();
   return collapsed.length > 160 ? `${collapsed.slice(0, 160)}…` : collapsed;
@@ -170,6 +175,8 @@ function createCursorProgress(
   let assistantText = "";
   let lastThinkingEmit = 0;
   let lastAssistantEmit = 0;
+  let lastEventAt = Date.now();
+  let stalled = false;
   const lastToolEmit = new Map<string, number>();
   const startedAt = Date.now();
   const markActive = () => {
@@ -183,17 +190,96 @@ function createCursorProgress(
     });
   };
   const timer = setInterval(() => {
-    if (activity || isCancelled(run)) return;
+    if (isCancelled(run)) return;
+    const now = Date.now();
+    if (!activity) {
+      emitChatStep(run, {
+        id: thinkingId,
+        kind: "thinking",
+        status: "running",
+        title: "Cursor sedang bekerja…",
+        detail: `${Math.round((now - startedAt) / 1000)} detik`,
+      });
+      return;
+    }
+    if (now - lastEventAt < 60_000) return;
+    stalled = true;
     emitChatStep(run, {
-      id: thinkingId,
+      id: "cursor-stall",
       kind: "thinking",
       status: "running",
-      title: "Cursor sedang bekerja…",
-      detail: `${Math.round((Date.now() - startedAt) / 1000)} detik`,
+      title: "Cursor belum mengirim progres…",
+      detail: `${Math.round((now - lastEventAt) / 1000)} detik tanpa update — ` +
+        "masih menunggu, atau klik Stop untuk membatalkan.",
     });
   }, 5_000);
   return {
     onEvent: (event) => {
+      lastEventAt = Date.now();
+      if (stalled) {
+        stalled = false;
+        emitChatStep(run, {
+          id: "cursor-stall",
+          kind: "thinking",
+          status: "done",
+          title: "Progres Cursor kembali",
+        });
+      }
+      if (event.type === "status") {
+        switch (event.status) {
+          case "setup":
+            emitChatStep(run, {
+              id: "cursor-setup",
+              kind: "thinking",
+              status: "running",
+              title: event.message || "Menyiapkan agent Cursor…",
+            });
+            return;
+          case "starting":
+            emitChatStep(run, {
+              id: "cursor-setup",
+              kind: "thinking",
+              status: "running",
+              title: event.message || "Menghubungkan ke Cursor…",
+            });
+            return;
+          case "running":
+            emitChatStep(run, {
+              id: "cursor-setup",
+              kind: "thinking",
+              status: "done",
+              title: "Agent Cursor berjalan",
+            });
+            return;
+          case "snapshot":
+            emitChatStep(run, {
+              id: "cursor-snapshot",
+              kind: "thinking",
+              status: "running",
+              title: event.message || "Menyiapkan snapshot workspace…",
+            });
+            return;
+          case "snapshot-done":
+            emitChatStep(run, {
+              id: "cursor-snapshot",
+              kind: "thinking",
+              status: "done",
+              title: event.message ? `Snapshot siap (${event.message})` : "Snapshot siap",
+            });
+            return;
+          case "requests":
+            emitChatStep(run, {
+              id: "cursor-requests",
+              kind: "thinking",
+              status: "running",
+              title: "Menyiapkan tool…",
+              detail: event.message,
+            });
+            return;
+          default:
+            return;
+        }
+      }
       if (event.type === "tool_call") {
         markActive();
         const id = `cursor-tool-${event.callId ?? crypto.randomUUID()}`;
@@ -266,18 +352,6 @@ function createCursorProgress(
           title: "Menulis jawaban…",
           detail: assistantText ? deltaDetail(assistantText) : undefined,
         });
-        return;
-      }
-      if (event.type === "status") {
-        if (event.status === "requests") {
-          emitChatStep(run, {
-            id: "cursor-requests",
-            kind: "thinking",
-            status: "running",
-            title: "Menyiapkan tool…",
-            detail: event.message,
-          });
-        }
         return;
       }
       if (event.type === "summary") {

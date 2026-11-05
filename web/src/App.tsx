@@ -931,6 +931,11 @@ export default function App() {
     setCurrentId(project.id);
   };
 
+  const renameProject = async (id: string, name: string) => {
+    const { project } = await api.updateProject(id, { name });
+    setProjects((current) => current.map((item) => (item.id === id ? project : item)));
+  };
+
   const removeProject = async (id: string) => {
     await api.deleteProject(id);
     setProjects((current) => {
@@ -1253,6 +1258,7 @@ export default function App() {
               currentId={currentId}
               onSelect={setCurrentId}
               onCreate={createProject}
+              onRename={renameProject}
               onDelete={removeProject}
             />
           )}
