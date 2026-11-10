@@ -12,7 +12,7 @@ Dua cara mencari di workspace, mirip VS Code.
 - Folder yang diabaikan: `.git`, `node_modules`, `dist`, `build`, `target`, `.venv`, `__pycache__`,
   `.next`, `.nuxt`, `.svelte-kit`, dan cache umum lain. Maksimal 5000 file / 12 level.
 
-## Find — menu Find atau `Cmd/Ctrl+Shift+F`
+## Find — menu Find
 
 - **Find** tampil sebagai sidebar kiri (bukan tab) berisi pencarian teks seluruh workspace.
 - Opsi **Match case** dan **Regex**.
@@ -20,6 +20,8 @@ Dua cara mencari di workspace, mirip VS Code.
 - Klik hasil → file dibuka pada baris tersebut (Monaco `revealLine`).
 - Batas: 3000 file / 8 MB teks per pencarian, 200 hasil. Jika terpotong, UI menampilkan indikator.
 - File biner dan file > 200 KB (dipotong `readWorkspaceFile`) dilewati/dicari pada bagian awal.
+- `Cmd/Ctrl+F` tetap membuka find-in-file Monaco. `Cmd/Ctrl+Shift+F` **dipakai untuk layout deep
+  work** (lihat `docs/ui.md`), jadi panel Find dibuka dari activity bar.
 
 ## API
 

@@ -42,11 +42,30 @@ Mode disimpan di localStorage (`rnd.chatMode:v1`).
 
 Event UI: `web/src/lib/review-events.ts`.
 
+## Permission prompt
+
+Selain Review, chat punya mekanisme izin per tool (`run.pendingPermission`, tombol *Allow once /
+Always allow / No* di langkah chat). Kebijakannya terpusat di `src/server/chat/approval.ts`
+(`needsToolPermission`) dan **tidak** memblok perubahan file:
+
+- `write_file` tidak pernah meminta izin per panggilan; gating-nya sepenuhnya lewat
+  `auto_approve_writes` + `chat_write_review_mode` (lihat `docs/ui.md` → Review perubahan AI).
+- Tool read-only (`read_file`, `list_files`, `get_*`, `use_skill`) juga tidak meminta izin, jadi
+  chat berjalan sampai selesai walaupun auto-approve mati.
+- Izin hanya diminta untuk tool yang di katalog (`CHAT_TOOL_CATALOG`) bertanda
+  `requiresApproval: true` **dan** bukan write tool. Saat ini tidak ada, sehingga alur izin tetap
+  tersedia untuk tool baru (mis. shell) tanpa mengubah engine.
+- `disabledTools`, `autoApproveTools` (dari *Always allow*), dan `run.allowedTools` tetap dihormati.
+- Tests: `test/approval.test.ts`.
+
 ## Global Tools settings
 
-`GET`/`PUT` `/api/settings/chat-tools` (`app_settings.auto_approve_writes`, `chat_disabled_tools`):
+`GET`/`PUT` `/api/settings/chat-tools` (`app_settings.auto_approve_writes`, `chat_disabled_tools`,
+`chat_write_review_mode`):
 
 - **Auto-approve writes** — skip Review untuk `write_file` di chat Build (default off).
+- **Review perubahan AI** (`chat_write_review_mode`) — `end` (default: tulis dulu, review di akhir,
+  tidak memblok) atau `before` (berhenti dan minta accept/reject per hunk).
 - **Max agent steps** — kosong/null = unlimited; jika diisi (1–200), langkah terakhir memaksa
   jawaban teks saja (OpenCode-style).
 - **Disabled tools** — deny-list nama tool; dihilangkan dari tool list LLM dan ditolak jika
@@ -71,6 +90,23 @@ Konfigurasi tetap lewat Global Settings → LLM Providers:
 - `model`: mis. `composer-2`.
 - `baseUrl`: tidak dipakai.
 - `provider`: `cursor`.
+
+### ripgrep (wajib untuk local agent)
+
+SDK menolak menjalankan tool `grep`/`glob` dengan error
+`{"message":"Ripgrep path not configured. Call configureRipgrepPath() at startup."}` sampai app
+memberi tahu lokasi binary `rg`. `src/server/chat/ripgrep.ts` menyelesaikannya sekali saat
+`loadCursorSdk()` (sebelum `Agent.create`):
+
+1. env `CURSOR_RIPGREP_PATH` / `RIPGREP_PATH`,
+2. setiap direktori di `PATH`,
+3. lokasi umum (`~/.cargo/bin`, `~/.local/bin`, Homebrew, `/usr/bin`, …),
+4. binary yang mungkin dibundel di sekitar paket `@cursor/sdk`.
+
+Hasilnya dikirim lewat `configureRipgrepPath()` (dicari otomatis di export SDK) **dan** sebagai
+`local.ripgrepPath` pada `configureCursorSdk()`. Bila tidak ada `rg`, app menulis warning ke log dan
+error chat diterjemahkan menjadi saran instalasi (`rewriteCursorTransportError`). Tests:
+`test/ripgrep.test.ts`.
 
 Katalog model dari `Cursor.models.list` disimpan di `llm_providers.config.cursorModels` (plus
 `cursorModelsUpdatedAt`). Sync katalog berjalan di background setelah listen (`bootstrapBackground`)
@@ -122,7 +158,7 @@ Skill builtin (`src/skills/builtin/code-review/SKILL.md`). Saat `skillName=code-
 - Mode dipaksa **Plan** (UI + server) — tidak menulis file lewat tools
 - Pesan user diperkaya dengan status/diff git (`src/server/code-review.ts`: unstaged, staged, vs
   upstream merge-base bila ada)
-- Output diharapkan findings-first (severityitas: bug, regresi, security, missing tests)
+- Output diharapkan findings-first (severity: bug, regresi, security, missing tests)
 
 Detail: [code-review.md](code-review.md).
 

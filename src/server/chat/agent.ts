@@ -15,6 +15,7 @@ import {
   type PromptSettings,
   readPromptSettings,
 } from "../prompts.ts";
+import { needsToolPermission as toolPermissionNeeded } from "./approval.ts";
 import type { CursorConversationMessage, CursorStreamEvent } from "./cursor.ts";
 import { complete, type CompleteResult, VARIANT_TEMPERATURE } from "./llm.ts";
 import {
@@ -378,15 +379,18 @@ function createCursorProgress(
 
 const PERMISSION_TIMEOUT_MS = 10 * 60_000;
 
+/** Thin wrapper: the policy itself lives in `approval.ts` (unit tested). */
 function needsToolPermission(
   run: Run,
   toolName: string,
   settings: { disabledTools: string[]; autoApproveTools: string[] },
 ): boolean {
-  if (settings.disabledTools.includes(toolName)) return false;
-  if (settings.autoApproveTools.includes(toolName)) return false;
-  if (run.allowedTools?.has(toolName)) return false;
-  return true;
+  return toolPermissionNeeded({
+    toolName,
+    disabledTools: settings.disabledTools,
+    autoApproveTools: settings.autoApproveTools,
+    allowedTools: run.allowedTools,
+  });
 }
 
 function requestToolPermission(

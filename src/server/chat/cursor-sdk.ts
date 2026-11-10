@@ -7,15 +7,62 @@
  *
  * Do NOT force `useHttp1ForAgent: true`: the SDK's HTTP/1.1 path (`node:https`)
  * fails on Deno with `write EPERM`.
+ *
+ * Local agents also shell out to `ripgrep`; the SDK refuses to run `grep`/`glob`
+ * until `configureRipgrepPath()` is called at startup, so the resolved binary is
+ * handed over here (see `ripgrep.ts`).
  */
+
+import { log } from "../../core/logger.ts";
+import { configureSdkRipgrep, RIPGREP_INSTALL_HINT, resolveRipgrepPath } from "./ripgrep.ts";
 
 type CursorSdk = typeof import("@cursor/sdk");
 
 let sdkPromise: Promise<CursorSdk> | null = null;
 let configured = false;
+let ripgrepPath: string | null = null;
 
 function isDenoRuntime(): boolean {
   return typeof Deno !== "undefined";
+}
+
+/**
+ * Configures the SDK once: transport (HTTP/2 for local agents) plus the ripgrep
+ * binary. Both are process-wide settings, so they are applied before the first
+ * agent is created.
+ */
+function applyCursorSdkConfig(sdk: CursorSdk): void {
+  const record = sdk as unknown as Record<string, unknown>;
+  const local: Record<string, unknown> = { useHttp1ForAgent: null };
+
+  ripgrepPath = resolveRipgrepPath();
+  if (ripgrepPath) {
+    local.ripgrepPath = ripgrepPath;
+    try {
+      const setup = configureSdkRipgrep(record, ripgrepPath);
+      if (!setup.configured) {
+        log.debug("cursor sdk has no ripgrep setter; using local options", { path: ripgrepPath });
+      }
+    } catch (error) {
+      log.warn("cursor sdk ripgrep configuration failed", { error: String(error) });
+    }
+  } else {
+    log.warn("ripgrep not found for cursor local agent", { hint: RIPGREP_INSTALL_HINT });
+  }
+
+  const configure = sdk.configureCursorSdk as unknown as (
+    options: Record<string, unknown>,
+  ) => void;
+  try {
+    configure({ local });
+  } catch (error) {
+    log.debug("cursor sdk rejected local options; retrying minimal", { error: String(error) });
+    try {
+      configure({ local: { useHttp1ForAgent: null } });
+    } catch {
+      // SDK without local options: keep its defaults.
+    }
+  }
 }
 
 export async function loadCursorSdk(): Promise<CursorSdk> {
@@ -25,14 +72,14 @@ export async function loadCursorSdk(): Promise<CursorSdk> {
   const sdk = await sdkPromise;
   if (!configured) {
     configured = true;
-    // Explicitly clear any previous HTTP/1.1 force so local agents use HTTP/2.
-    if (isDenoRuntime()) {
-      sdk.configureCursorSdk({
-        local: { useHttp1ForAgent: null },
-      });
-    }
+    if (isDenoRuntime()) applyCursorSdkConfig(sdk);
   }
   return sdk;
+}
+
+/** Resolved `rg` binary (null when ripgrep is missing on this machine). */
+export function cursorRipgrepPath(): string | null {
+  return ripgrepPath ?? resolveRipgrepPath();
 }
 
 export function rewriteCursorTransportError(error: unknown): Error {
@@ -42,6 +89,11 @@ export function rewriteCursorTransportError(error: unknown): Error {
       "Cursor local agent membutuhkan HTTP/2 streaming. " +
         "App mencoba transport Node (node:http2); restart app lalu coba lagi, " +
         "atau gunakan cloud agent (id bc-…).",
+    );
+  }
+  if (/ripgrep path not configured/i.test(message)) {
+    return new Error(
+      `Cursor local agent butuh ripgrep untuk tool grep/glob. ${RIPGREP_INSTALL_HINT}`,
     );
   }
   if (error instanceof CursorPhaseTimeoutError) return error;

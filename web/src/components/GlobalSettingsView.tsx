@@ -25,6 +25,7 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { AutomationSettings } from "@/components/AutomationSettings";
 import { BackupSettings } from "@/components/BackupSettings";
 import { ChatToolsSettings } from "@/components/ChatToolsSettings";
+import { LayoutSettings } from "@/components/LayoutSettings";
 import { LlmProvidersSettings } from "@/components/LlmProvidersSettings";
 import { LspSettingsPanel } from "@/components/LspSettings";
 import { McpSettings } from "@/components/McpSettings";
@@ -135,6 +136,7 @@ export function GlobalSettingsView({
     return (
       <div className="flex flex-col gap-8">
         <Appearance />
+        <LayoutSettings />
         <EditorSettings />
         <ChatSettings />
         <IconSettings />

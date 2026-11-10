@@ -37,6 +37,13 @@ finishing a change.
   layout; Ticket keeps create/filter/refresh in its sidebar; Global = one page). State lives in
   `App.tsx` (tab list, and file/doc selection). All activity-bar menus use the outer `<aside>`;
   Global Settings keeps its section nav in that panel instead of inside the tab.
+- **Layout (deep work)**: `web/src/lib/layout-mode.ts` stores `standard` | `focus` in localStorage
+  (`rnd.layout:v1`) and sets `data-layout` on `<html>`; `web/src/focus-layout.css` hides the
+  activity bar, left panel, `TabsBar`, and status bar so only the tab area + chat remain. Read it
+  through `web/src/hooks/useLayoutMode.ts` (mounted from `WindowToolbar`; also opens chat and
+  focuses the ticket board). Toggle: toolbar button or `Cmd/Ctrl+Shift+F`
+  (`installLayoutShortcut` in `web/src/main.tsx`, registered before React so it wins over the old
+  Find binding). Settings UI: Global Settings → Appearance → **Layout** (`LayoutSettings.tsx`).
 - **Documents**: `DocumentPanel` switches between **Local** (`.md` files under
   `projects.document_path`), **Docmost**, **Notion**, and **Confluence Cloud**. Remote sources use
   `GET /documents?source=` / `GET /documents/:pageId?source=` (`docmost` default). Notion auth is
@@ -54,7 +61,8 @@ finishing a change.
   manual (`POST /local-tickets/:id/sync` with optional `{ provider: "jira"|"clickup" }`) and sets
   `jira_key` / `sync_provider` / `sync_status`. ClickUp needs `apiToken` + `listId` in project
   integrations. Global Automation (`auto_build_on_in_progress`, default off) starts a new Build chat
-  when a Kanban card moves To Do → In Progress; see `docs/automation.md`.
+  when a Kanban card moves To Do → In Progress; see `docs/automation.md`. Card drag to the chat
+  sidebar uses the grip in `TicketKanban` (`web/src/lib/chat-drag.ts`).
 - **Skills**: `src/server/skills.ts` discovers `SKILL.md` folders (frontmatter `name`/`description`)
   from `<workspace>/.agents/skills` (highest), `appDataDir()/<project-slug>/skills` (auto from Build
   chats), `appDataDir()/skills` (global), and `src/skills/builtin` (bundled, lowest priority). On
@@ -104,11 +112,15 @@ finishing a change.
   migrated into the global table at startup). Provider type `cursor` uses `@cursor/sdk`
   (`src/server/chat/cursor.ts`): local agents run in `projects.workspace_path` (same cwd as the
   Cursor IDE) with read/grep/glob/ls/edit/task (shell/delete disabled); a pre-run file snapshot is
-  diffed then reverted so changes become synthetic `write_file` Review hunks. Cloud agents (`bc-…`)
-  are imported/resumed for chat history (no local Review). API key lives in `llm_providers.api_key`;
-  model e.g. `composer-2`. Project Settings no longer manages them; Global Settings → LLM Providers
-  does, via `GET/POST /api/llm` and `PUT/DELETE /api/llm/:id`. Chat and
-  `generateTicketsFromDocument` resolve providers from the global list.
+  diffed then reverted so changes become synthetic `write_file` Review hunks. The SDK needs the
+  `ripgrep` binary path at startup (`Ripgrep path not configured`) — `src/server/chat/ripgrep.ts`
+  resolves it (env `CURSOR_RIPGREP_PATH`/`RIPGREP_PATH`, `PATH`, common install dirs, SDK-adjacent
+  binaries) and calls `configureRipgrepPath()` / `configureCursorSdk({ local: { ripgrepPath } })`
+  from `loadCursorSdk()`. Cloud agents (`bc-…`) are imported/resumed for chat history (no local
+  Review). API key lives in `llm_providers.api_key`; model e.g. `composer-2`. Project Settings no
+  longer manages them; Global Settings → LLM Providers does, via `GET/POST /api/llm` and
+  `PUT/DELETE /api/llm/:id`. Chat and `generateTicketsFromDocument` resolve providers from the
+  global list.
 - **Workflows**: definitions are YAML files in `<workspace>/.workflows/<slug>.yaml` (fallback
   `appDataDir()/<project-slug>/workflows`), parsed with `@std/yaml` + Zod
   (`src/server/workflow/parse.ts`), stored/validated via `store.ts`, and executed by `runner.ts`
@@ -143,9 +155,10 @@ finishing a change.
   outer panel — its `GlobalSettingsPanel` lives inside the tab. In Project Settings each
   form/section is a **`Collapsible`** (`CollapsibleSection`).
 - **Search**: `Cmd/Ctrl+P` opens `QuickOpen` (fuzzy file-name palette) backed by
-  `GET /api/projects/:id/files/index`; the **Find** activity item / `Cmd/Ctrl+Shift+F` opens a
-  `FindTab` for workspace text search (`GET .../files/find?q=&case=&regex=`) and opens results at
-  the matching line. Backend helpers live in `src/fs/workspace.ts`; tests in `test/files.test.ts`.
+  `GET /api/projects/:id/files/index`; the **Find** activity item opens a `FindTab` for workspace
+  text search (`GET .../files/find?q=&case=&regex=`) and opens results at the matching line.
+  `Cmd/Ctrl+Shift+F` is reserved for the deep-work layout (see above); `Cmd/Ctrl+F` keeps Monaco's
+  in-file find. Backend helpers live in `src/fs/workspace.ts`; tests in `test/files.test.ts`.
 - UI build outputs are embedded (`scripts/build-assets.ts` -> `src/ui/assets.generated.ts`) so the
   desktop binary is self-contained; never read UI files from disk at runtime.
 - Integration credentials (API token/key) are entered as normal text and stored **encrypted at
@@ -161,19 +174,20 @@ finishing a change.
   open, everything else requires the cookie (set when the HTML shell is served) or the `x-app-token`
   header.
 - **Filesystem reads must go through `src/fs/workspace.ts`** (path-traversal guarded, capped size).
-  Writes (chat `write_file`) create **pending hunk changes** in `src/server/chat.ts`; a **Review
-  tab** (`ReviewTab`) in the main area accepts/rejects each hunk (`POST /api/chat/change`) or all
-  (`/api/chat/change-all`) before `writeWorkspaceFile` runs — unless Global Settings → Tools
-  `auto_approve_writes` is on (then writes apply immediately). Chat agent steps default to
-  unlimited (OpenCode-style); optional `chat_max_steps` in Global Settings → Tools forces a
-  text-only summary on the final step. Chat/workflow agent also has document
+  Writes (chat `write_file`) are governed by Global Settings → Tools: `auto_approve_writes` on =
+  apply immediately; off + `chat_write_review_mode: "end"` (default) = apply during the run and
+  review/revert everything at the end (no blocking, no per-tool permission prompt); off +
+  `"before"` = pause and accept/reject hunks before writing. `src/server/chat/approval.ts` decides
+  the per-call permission prompt and never prompts for `write_file` or read-only tools. Chat agent
+  steps default to unlimited (OpenCode-style); optional `chat_max_steps` in Global Settings → Tools
+  forces a text-only summary on the final step. Chat/workflow agent also has document
   tools (`src/server/chat/document-tools.ts`: local + Docmost/Notion/Confluence) and ticket tools
   (`ticket-tools.ts`: local + Jira list/get/update/sync/transition); those mutations apply
   immediately (no Review). Chat tools can be disabled via `chat_disabled_tools` (same Tools
   section). Chat only shows a notice and dispatches events (`web/src/lib/review-events.ts`). Direct
   editor saves use `PUT /api/projects/:id/files/content` (also `writeWorkspaceFile`, no approval;
   user is editing). The Explorer Monaco editor is editable; tabs track a `dirty` flag and save via
-  button or `Cmd/Ctrl+S`.
+  button or `Cmd/Ctrl+S` (`web/src/lib/dirty-paths.ts` drives the bold file names in the Explorer).
 - Persistence uses `node:sqlite` (`src/db/db.ts`); keep queries parameterized and add columns via
   `ensureColumn` migrations.
 
@@ -185,12 +199,14 @@ finishing a change.
   - `web/src/components/` — feature components (ActivityBar, `TabsBar`, Workspace/FileTree/Document/
     Ticket/Settings panels, `TicketKanban`, `TicketDetailDialog`, `MonacoViewer`,
     `MarkdownView`/`Mermaid`, `SettingsView` + `IntegrationForm`/`LlmProviderForm`,
-    `GlobalSettingsView`, `ChatSidebar`, `ThemeProvider`).
+    `GlobalSettingsView`, `ChatSidebar`, `ThemeProvider`, `LayoutSettings`).
   - `web/src/components/reui/` — vendored ReUI components (`kanban.tsx`, from `@reui/kanban`; needs
     `@base-ui/react` + `@dnd-kit/*`).
   - `web/src/components/ui/` — shadcn components (button, card, input, label, select, badge,
     dropdown-menu, dialog, …).
-  - `web/src/lib/` — `api.ts`, `integrations.ts`, `monaco.ts`, `bindings.ts`, `utils.ts`.
+  - `web/src/lib/` — `api.ts`, `integrations.ts`, `monaco.ts`, `bindings.ts`, `utils.ts`,
+    `layout-mode.ts`.
+  - `web/src/focus-layout.css` — deep-work chrome hiding (imported from `web/src/main.tsx`).
 - `scripts/build-assets.ts` — embeds `web/dist` into `src/ui/assets.generated.ts`.
 - `src/core` — paths, logger, bootstrap.
 - `src/config` — Zod schemas (`schema.ts`).

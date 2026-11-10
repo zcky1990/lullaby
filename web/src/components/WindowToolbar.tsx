@@ -1,7 +1,9 @@
 import { useEffect, useRef } from "react";
-import { MessageSquare, Sparkles } from "lucide-react";
+import { Maximize2, MessageSquare, Minimize2, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { CHAT_OPEN_REQUEST_EVENT } from "@/lib/chat-drag";
+import { LAYOUT_SHORTCUT, setLayoutMode } from "@/lib/layout-mode";
+import { useLayoutMode } from "@/hooks/useLayoutMode";
 import { cn } from "@/lib/utils";
 
 interface Props {
@@ -12,6 +14,8 @@ interface Props {
 }
 
 export function WindowToolbar({ projectName, workspace, chatOpen, onToggleChat }: Props) {
+  const layout = useLayoutMode();
+  const focusMode = layout === "focus";
   const chatOpenRef = useRef(chatOpen);
   chatOpenRef.current = chatOpen;
   const toggleChatRef = useRef(onToggleChat);
@@ -46,22 +50,40 @@ export function WindowToolbar({ projectName, workspace, chatOpen, onToggleChat }
         </div>
       </div>
 
-      <Button
-        size="icon"
-        variant="ghost"
-        onClick={onToggleChat}
-        className={cn(
-          "size-9 rounded border border-transparent transition-all",
-          chatOpen
-            ? "border-primary/20 bg-primary/10 text-primary shadow-sm hover:bg-primary/15"
-            : "text-muted-foreground hover:bg-accent hover:text-foreground",
-        )}
-        aria-label="Chat"
-        title="Chat"
-        aria-pressed={chatOpen}
-      >
-        <MessageSquare className="size-4" />
-      </Button>
+      <div className="flex shrink-0 items-center gap-1">
+        <Button
+          size="icon"
+          variant="ghost"
+          onClick={() => setLayoutMode(focusMode ? "standard" : "focus")}
+          className={cn(
+            "size-9 rounded border border-transparent transition-all",
+            focusMode
+              ? "border-primary/20 bg-primary/10 text-primary shadow-sm hover:bg-primary/15"
+              : "text-muted-foreground hover:bg-accent hover:text-foreground",
+          )}
+          aria-label={focusMode ? "Keluar dari deep work" : "Deep work (Kanban + Chat)"}
+          aria-pressed={focusMode}
+          title={`${focusMode ? "Keluar dari" : "Aktifkan"} deep work — ${LAYOUT_SHORTCUT}`}
+        >
+          {focusMode ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
+        </Button>
+        <Button
+          size="icon"
+          variant="ghost"
+          onClick={onToggleChat}
+          className={cn(
+            "size-9 rounded border border-transparent transition-all",
+            chatOpen
+              ? "border-primary/20 bg-primary/10 text-primary shadow-sm hover:bg-primary/15"
+              : "text-muted-foreground hover:bg-accent hover:text-foreground",
+          )}
+          aria-label="Chat"
+          title="Chat"
+          aria-pressed={chatOpen}
+        >
+          <MessageSquare className="size-4" />
+        </Button>
+      </div>
     </div>
   );
 }

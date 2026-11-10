@@ -21,6 +21,9 @@ status bar.
 File dan dokumen terbuka sebagai **tab dinamis**. Menu Workspace / Ticket / Settings / Git / Global
 membuka **singleton tab**.
 
+Shortcut shell: `Cmd/Ctrl+P` (Quick Open), `Cmd/Ctrl+S` (simpan file), `Cmd/Ctrl+Shift+V` (preview
+markdown), dan `Cmd/Ctrl+Shift+F` (toggle layout deep work — lihat di bawah).
+
 ## Area utama (`TabsBar`)
 
 Jenis tab: `workspace` | `ticket` | `workflow` | `workflow-docs` | `cron` | `cron-docs` | `settings`
@@ -39,6 +42,25 @@ Menu Workflows membuka tab home; klik file workflow di panel membuka tab `workfl
 (dinamis). Menu Cron membuka singleton `cron` + panel jadwal.
 
 State tab: `web/src/hooks/useEditorTabs.ts`, dikelola dari `App.tsx`.
+
+## Layout deep work (Kanban + Chat)
+
+Mode tampilan minimal untuk sesi fokus panjang: hanya area tab (Kanban) + chat sidebar.
+
+- State: `web/src/lib/layout-mode.ts` (`standard` | `focus`, localStorage `rnd.layout:v1`), dibaca
+  komponen lewat `web/src/hooks/useLayoutMode.ts` (`useSyncExternalStore`).
+- Toggle: tombol **deep work** di `WindowToolbar` (ikon maximize/minimize) atau
+  `Cmd/Ctrl+Shift+F` (`installLayoutShortcut`, didaftarkan di `web/src/main.tsx` sebelum React
+  mount dan memakai `stopImmediatePropagation` sehingga menang atas handler lama Find).
+- Saat aktif: `data-layout="focus"` dipasang di `<html>`; `web/src/focus-layout.css` menyembunyikan
+  activity bar, panel kiri (semua `aside` kecuali chat), `TabsBar`, dan status bar. Chat dibuka
+  otomatis (`rnd:chat-open-request`) dan tab Ticket difokuskan lewat item activity bar yang sama
+  dengan klik user.
+- Sifatnya presentasional: bila selector CSS tidak cocok lagi, chrome hanya tetap terlihat (shell
+  tidak error). Panel Global Settings (termasuk section Layout) ikut tersembunyi saat mode aktif,
+  jadi keluar lewat tombol toolbar atau shortcut.
+- Default `standard`; nilai disimpan lokal per mesin (tidak ikut export/import config).
+- Section pengaturan: **Global Settings → Appearance → Layout**. Tests: `web/src/lib/layout-mode.test.ts`.
 
 ## Explorer — penanda file belum disimpan
 
@@ -131,6 +153,10 @@ Global Settings → Tools punya dua pengaturan yang menentukan kapan `write_file
 | on                    | —                        | tulis langsung ke disk, tanpa Review tab                                                                             |
 | off                   | `end` (**default**)      | tulis langsung selama agent bekerja, semua perubahan dikumpulkan lalu direview saat chat selesai — **tidak memblok** |
 | off                   | `before`                 | agent berhenti (`status: approval_required`) dan menunggu accept/reject per hunk sebelum menulis                     |
+
+Mode `end` (deferred review) **tidak** memunculkan prompt izin per-tool: `write_file` dan tool
+read-only dikecualikan oleh `src/server/chat/approval.ts` (`needsToolPermission`), jadi satu-satunya
+interaksi adalah kartu review di akhir.
 
 Mode `end` (deferred review):
 

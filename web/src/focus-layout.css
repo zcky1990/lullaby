@@ -1,0 +1,20 @@
+/*
+ * Deep-work ("focus") layout — see web/src/lib/layout-mode.ts.
+ *
+ * Only the tab area (Kanban) and the chat sidebar stay visible. This is purely
+ * presentational: when a selector stops matching, the chrome is shown again
+ * instead of breaking the shell.
+ */
+html[data-layout="focus"] nav[class*="w-12"] {
+  display: none;
+}
+
+/* Every aside except the chat sidebar (it hosts the resize grip with aria-label). */
+html[data-layout="focus"] aside:not(:has([aria-label="Resize chat"])) {
+  display: none;
+}
+
+html[data-layout="focus"] main > div.flex.items-stretch,
+html[data-layout="focus"] footer {
+  display: none;
+}
