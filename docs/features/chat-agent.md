@@ -58,8 +58,13 @@ Event UI: `web/src/lib/review-events.ts`.
 Provider LLM dengan `provider: cursor` memakai `@cursor/sdk` (lihat `src/server/chat/cursor.ts`).
 Di runtime Deno, app memakai transport Node (`connect-node` / `node:http2`) — Deno `fetch`
 tidak mendukung streaming request body untuk local agent bidi. **Jangan** pakai HTTP/1.1
-untuk local agent (bisa hang sampai timeout). Lihat `cursor-sdk.ts`.
-Timeout: `send` 90s, `wait` wall-clock 15 menit (tanpa drain `stream()` paralel).
+(`useHttp1ForAgent`): jalur `node:https` SDK gagal di Deno dengan `write EPERM`. Lihat
+`cursor-sdk.ts`.
+Progres streaming datang dari `agent.send(message, { mode, onDelta })` (`sendCursorPrompt`);
+`mode`/`onDelta` **harus** di argumen kedua — di dalam `message` keduanya diabaikan SDK.
+Setiap fase dibatasi `runCursorPhase` (timeout + sinyal Stop): `Agent.create`/`resume` 120s,
+`send` 180s, `wait` wall-clock 15 menit (tanpa drain `stream()` paralel). Fase yang
+ditinggalkan dibersihkan bila selesai terlambat (agent ditutup, run dibatalkan).
 Konfigurasi tetap lewat Global Settings → LLM Providers:
 
 - `apiKey`: Cursor API key (disimpan di `llm_providers.api_key`).

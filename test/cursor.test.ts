@@ -4,9 +4,12 @@ import {
   bootstrapCursorPrompt,
   collectCursorWrites,
   conversationFromSdkTurns,
+  type CursorStreamEvent,
   isCloudCursorAgentId,
   latestUserPrompt,
+  mapCursorDelta,
   revertWorkspaceToSnapshot,
+  sendCursorPrompt,
   snapshotWorkspaceFiles,
 } from "../src/server/chat/cursor.ts";
 import { ChatInput } from "../src/config/schema.ts";
@@ -19,11 +22,13 @@ import {
   getLlmProvider,
   upsertImportedCursorSession,
 } from "../src/db/db.ts";
+import { cursorModelsAreFresh, storeCursorModels } from "../src/server/chat/cursor-models.ts";
 import {
-  cursorModelsAreFresh,
-  storeCursorModels,
-} from "../src/server/chat/cursor-models.ts";
-import { rewriteCursorTransportError } from "../src/server/chat/cursor-sdk.ts";
+  CursorPhaseTimeoutError,
+  isCursorCancellation,
+  rewriteCursorTransportError,
+  runCursorPhase,
+} from "../src/server/chat/cursor-sdk.ts";
 import { serializeLlm } from "../src/server/serializers.ts";
 import type { ChatTurn } from "../src/server/chat/types.ts";
 
@@ -193,6 +198,164 @@ Deno.test("rewriteCursorTransportError explains Deno fetch streaming limit", () 
   );
   equal(rewritten.message.includes("HTTP/2"), true);
   equal(rewritten.message.includes("bc-"), true);
+});
+
+Deno.test("rewriteCursorTransportError keeps phase timeout messages intact", () => {
+  const timeout = new CursorPhaseTimeoutError("Cursor send timeout setelah 180 detik");
+  equal(rewriteCursorTransportError(timeout), timeout);
+});
+
+Deno.test("sendCursorPrompt passes mode and onDelta as send options, not in the message", async () => {
+  const calls: Array<{ message: unknown; options: unknown }> = [];
+  const agent = {
+    send: (message: unknown, options?: unknown) => {
+      calls.push({ message, options });
+      return Promise.resolve("run");
+    },
+  };
+  const events: CursorStreamEvent[] = [];
+  const run = await sendCursorPrompt(agent, {
+    text: "hello",
+    images: [{ data: "AAAA", mimeType: "image/png" }],
+    mode: "plan",
+    onEvent: (event) => events.push(event),
+  });
+
+  equal(run, "run");
+  equal(calls.length, 1);
+  deepEqual(calls[0].message, {
+    text: "hello",
+    images: [{ data: "AAAA", mimeType: "image/png" }],
+  });
+  const options = calls[0].options as {
+    mode?: string;
+    onDelta?: (args: { update: unknown }) => void;
+  };
+  equal(options.mode, "plan");
+  equal(typeof options.onDelta, "function");
+
+  options.onDelta?.({ update: { type: "text-delta", text: "hi" } });
+  options.onDelta?.({ update: { type: "token-delta", tokens: 3 } });
+  options.onDelta?.({
+    update: {
+      type: "tool-call-completed",
+      callId: "c1",
+      toolCall: { type: "read", args: { path: "a.ts" }, result: { status: "success", value: 1 } },
+    },
+  });
+  deepEqual(events.map((event) => `${event.type}:${event.status}`), [
+    "assistant:running",
+    "tool_call:completed",
+  ]);
+  equal(events[1].name, "read");
+});
+
+Deno.test("sendCursorPrompt omits images, mode and onDelta when not needed", async () => {
+  const calls: Array<{ message: unknown; options: unknown }> = [];
+  await sendCursorPrompt({
+    send: (message: unknown, options?: unknown) => {
+      calls.push({ message, options });
+      return Promise.resolve(null);
+    },
+  }, { text: "hi", images: [], mode: "build" });
+  deepEqual(calls[0].message, { text: "hi" });
+  deepEqual(calls[0].options, {});
+});
+
+Deno.test("mapCursorDelta marks failed tool calls as errors", () => {
+  const event = mapCursorDelta({
+    type: "tool-call-completed",
+    callId: "c2",
+    toolCall: { type: "edit", args: {}, result: { status: "error", error: { message: "no" } } },
+  });
+  equal(event?.status, "error");
+  equal(mapCursorDelta({ type: "turn-ended" }), null);
+});
+
+Deno.test("runCursorPhase returns the result and does not call onLate", async () => {
+  let late = 0;
+  const value = await runCursorPhase(() => Promise.resolve(7), {
+    timeoutMs: 1000,
+    timeoutMessage: "timeout",
+    onLate: () => {
+      late += 1;
+    },
+  });
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  equal(value, 7);
+  equal(late, 0);
+});
+
+Deno.test("runCursorPhase times out and cleans up work that finishes late", async () => {
+  const lateValues: string[] = [];
+  let release: (value: string) => void = () => {};
+  const work = new Promise<string>((resolve) => {
+    release = resolve;
+  });
+  let caught: unknown;
+  try {
+    await runCursorPhase(() => work, {
+      timeoutMs: 10,
+      timeoutMessage: "phase timeout",
+      onLate: (value) => {
+        lateValues.push(value);
+      },
+    });
+  } catch (error) {
+    caught = error;
+  }
+  equal(caught instanceof CursorPhaseTimeoutError, true);
+  equal((caught as Error).message, "phase timeout");
+  deepEqual(lateValues, []);
+
+  release("agent");
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  deepEqual(lateValues, ["agent"]);
+});
+
+Deno.test("runCursorPhase rejects on abort before and during the phase", async () => {
+  const aborted = new AbortController();
+  aborted.abort();
+  let started = false;
+  let first: unknown;
+  try {
+    await runCursorPhase(() => {
+      started = true;
+      return Promise.resolve(1);
+    }, { timeoutMs: 1000, timeoutMessage: "timeout", signal: aborted.signal });
+  } catch (error) {
+    first = error;
+  }
+  equal(isCursorCancellation(first), true);
+  equal(started, false);
+
+  const controller = new AbortController();
+  const pending = runCursorPhase(() => new Promise<number>(() => {}), {
+    timeoutMs: 60_000,
+    timeoutMessage: "timeout",
+    signal: controller.signal,
+  });
+  controller.abort();
+  let second: unknown;
+  try {
+    await pending;
+  } catch (error) {
+    second = error;
+  }
+  equal(isCursorCancellation(second), true);
+});
+
+Deno.test("runCursorPhase propagates the work's own failure", async () => {
+  let caught: unknown;
+  try {
+    await runCursorPhase(() => Promise.reject(new Error("auth failed")), {
+      timeoutMs: 1000,
+      timeoutMessage: "timeout",
+    });
+  } catch (error) {
+    caught = error;
+  }
+  equal((caught as Error).message, "auth failed");
 });
 
 Deno.test("cursorModelsAreFresh respects TTL", () => {

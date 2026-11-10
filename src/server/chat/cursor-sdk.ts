@@ -1,13 +1,12 @@
 /**
- * Deno cannot run Cursor local-agent HTTP/2 bidi over `connect-web` fetch
- * ("The fetch API does not support streaming request bodies").
+ * On Deno the SDK picks `connect-web` (fetch), which cannot carry the local
+ * agent bidi stream ("The fetch API does not support streaming request
+ * bodies"). Hiding the `Deno` global from the SDK runtime check while RPC is
+ * in flight makes it use `connect-node` over `node:http2`, which works on
+ * Deno 2.9 with SDK 1.3.1 (verified end to end, including `AgentService/Run`).
  *
- * Prefer the Node `connect-node` / `node:http2` transport by hiding the `Deno`
- * global from the SDK runtime check while RPC is in flight.
- *
- * Do NOT force `useHttp1ForAgent: true` for local agents — HTTP/1.1 cannot
- * carry the bidi stream the local runtime needs, and `send()`/`wait()` hang
- * until our timeout (see Cursor forum reports).
+ * Do NOT force `useHttp1ForAgent: true`: the SDK's HTTP/1.1 path (`node:https`)
+ * fails on Deno with `write EPERM`.
  */
 
 type CursorSdk = typeof import("@cursor/sdk");
@@ -45,13 +44,85 @@ export function rewriteCursorTransportError(error: unknown): Error {
         "atau gunakan cloud agent (id bc-…).",
     );
   }
+  if (error instanceof CursorPhaseTimeoutError) return error;
   if (/timeout|timed out|stalled|hang/i.test(message)) {
     return new Error(
-      `${message} Local Cursor agent di Deno bisa hang jika transport HTTP/2 gagal. ` +
-        "Coba pesan lebih pendek, restart app, atau gunakan provider LLM biasa / cloud agent.",
+      `${message} Koneksi ke server Cursor lambat atau terputus; coba lagi beberapa saat lagi.`,
     );
   }
   return error instanceof Error ? error : new Error(message);
+}
+
+export class CursorPhaseTimeoutError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "CursorPhaseTimeoutError";
+  }
+}
+
+export function cursorCancellationError(): Error {
+  const error = new Error("Chat dihentikan.");
+  error.name = "AbortError";
+  return error;
+}
+
+export function isCursorCancellation(error: unknown): boolean {
+  return error instanceof Error && error.name === "AbortError";
+}
+
+export interface CursorPhaseOptions<T> {
+  timeoutMs: number;
+  timeoutMessage: string;
+  signal?: AbortSignal;
+  /** Called when the phase was abandoned (timeout/abort) but its work finished later. */
+  onLate?: (value: T) => void | Promise<void>;
+}
+
+/**
+ * Bound one SDK phase by a deadline and the chat abort signal. The SDK calls
+ * have no timeout of their own, so a stalled connection would otherwise hang
+ * the chat with Stop doing nothing.
+ */
+export async function runCursorPhase<T>(
+  work: () => Promise<T>,
+  options: CursorPhaseOptions<T>,
+): Promise<T> {
+  const { timeoutMs, timeoutMessage, signal, onLate } = options;
+  if (signal?.aborted) throw cursorCancellationError();
+
+  let abandoned = false;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let onAbort: (() => void) | undefined;
+  const pending = work();
+  pending.then(
+    (value) => {
+      if (!abandoned || !onLate) return;
+      Promise.resolve()
+        .then(() => onLate(value))
+        .catch(() => {});
+    },
+    () => {},
+  );
+
+  try {
+    return await Promise.race([
+      pending,
+      new Promise<never>((_resolve, reject) => {
+        timer = setTimeout(() => reject(new CursorPhaseTimeoutError(timeoutMessage)), timeoutMs);
+      }),
+      new Promise<never>((_resolve, reject) => {
+        if (!signal) return;
+        onAbort = () => reject(cursorCancellationError());
+        signal.addEventListener("abort", onAbort, { once: true });
+      }),
+    ]);
+  } catch (error) {
+    abandoned = true;
+    throw error;
+  } finally {
+    if (timer) clearTimeout(timer);
+    if (signal && onAbort) signal.removeEventListener("abort", onAbort);
+  }
 }
 
 let transportDepth = 0;

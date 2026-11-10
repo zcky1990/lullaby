@@ -1,14 +1,25 @@
 import { dirname, join } from "node:path";
 import type { LlmProviderRow } from "../../db/db.ts";
 import { listWorkspaceFiles, resolveWithin } from "../../fs/workspace.ts";
-import { loadCursorSdk, withCursorConnectTransport } from "./cursor-sdk.ts";
+import type { Run, SDKUserMessage, SendOptions } from "@cursor/sdk";
+import {
+  cursorCancellationError,
+  CursorPhaseTimeoutError,
+  isCursorCancellation,
+  loadCursorSdk,
+  runCursorPhase,
+  withCursorConnectTransport,
+} from "./cursor-sdk.ts";
 import type { ChatTurn, ToolCall } from "./types.ts";
 
 const CURSOR_DEFAULT_MODEL = "composer-2";
 /** Wall-clock cap for an entire local/cloud run (Build can take several minutes). */
 const CURSOR_RUN_TIMEOUT_MS = 15 * 60_000;
+/** Fail fast if `Agent.create()` / `Agent.resume()` never returns (auth/connect stall). */
+const CURSOR_SETUP_TIMEOUT_MS = 120_000;
 /** Fail fast if `agent.send()` never returns a run handle (SDK connect stall). */
 const CURSOR_SEND_TIMEOUT_MS = 180_000;
+const CURSOR_TEST_TIMEOUT_MS = 20_000;
 const CURSOR_BUILD_TOOLS = ["read", "grep", "glob", "ls", "edit", "task"] as const;
 const CURSOR_PLAN_TOOLS = ["read", "grep", "glob", "ls", "task"] as const;
 const MAX_FILES = 3000;
@@ -329,7 +340,7 @@ function toolCallParts(raw: unknown): {
   };
 }
 
-function mapCursorDelta(raw: unknown): CursorStreamEvent | null {
+export function mapCursorDelta(raw: unknown): CursorStreamEvent | null {
   const update = asRecord(raw);
   if (!update) return null;
   const type = typeof update.type === "string" ? update.type : "";
@@ -392,13 +403,40 @@ function mapCursorDelta(raw: unknown): CursorStreamEvent | null {
   }
 }
 
-function cancellationError(): Error {
-  const error = new Error("Chat dihentikan.");
-  error.name = "AbortError";
-  return error;
+export interface CursorPromptInput {
+  text: string;
+  images?: Array<{ data: string; mimeType: string }>;
+  mode: "plan" | "build";
+  onEvent?: (event: CursorStreamEvent) => void;
 }
 
-/** Single `wait()` with wall-clock timeout; progress comes from `send({ onDelta })`. */
+/**
+ * `send(message, options)`: `mode` and `onDelta` belong to the second argument.
+ * Passing them inside the message silently drops streaming progress.
+ */
+export async function sendCursorPrompt<R>(
+  agent: { send: (message: SDKUserMessage, options?: SendOptions) => Promise<R> },
+  input: CursorPromptInput,
+): Promise<R> {
+  const message: SDKUserMessage = { text: input.text };
+  if (input.images?.length) message.images = input.images;
+  const options: SendOptions = {};
+  if (input.mode === "plan") options.mode = "plan";
+  const onEvent = input.onEvent;
+  if (onEvent) {
+    options.onDelta = ({ update }) => {
+      try {
+        const event = mapCursorDelta(update);
+        if (event) onEvent(event);
+      } catch {
+        // progress callbacks must never break the SDK stream
+      }
+    };
+  }
+  return await agent.send(message, options);
+}
+
+/** Single `wait()` with wall-clock timeout; progress comes from `send(…, { onDelta })`. */
 async function waitForCursorRun(
   run: CursorRunHandle,
   signal?: AbortSignal,
@@ -433,7 +471,7 @@ async function waitForCursorRun(
             } catch {
               // ignore
             }
-            reject(cancellationError());
+            reject(cursorCancellationError());
           })();
         };
         if (signal.aborted) onAbort();
@@ -474,7 +512,7 @@ export async function completeCursor(
     throw new Error("Workspace project belum diatur untuk Cursor local agent.");
   }
 
-  if (opts.signal?.aborted) throw cancellationError();
+  if (opts.signal?.aborted) throw cursorCancellationError();
 
   const notifyStatus = (status: string, message?: string) => {
     if (!opts.onEvent) return;
@@ -509,28 +547,43 @@ export async function completeCursor(
     };
 
   return await withCursorConnectTransport(async () => {
-    let agent: Awaited<ReturnType<typeof Agent.create>>;
+    type CursorAgent = Awaited<ReturnType<typeof Agent.create>>;
+    const setupPhase = (work: () => Promise<CursorAgent>) =>
+      runCursorPhase(work, {
+        timeoutMs: CURSOR_SETUP_TIMEOUT_MS,
+        timeoutMessage: `Cursor tidak merespons setelah ${CURSOR_SETUP_TIMEOUT_MS / 1000} detik ` +
+          "saat menyiapkan agent (login/koneksi ke server Cursor macet). Coba lagi.",
+        signal: opts.signal,
+        onLate: disposeAgent,
+      });
+
+    let agent: CursorAgent;
     let resumed = false;
 
     try {
-      notifyStatus("setup", resumed ? "Melanjutkan agent Cursor…" : "Menyiapkan agent Cursor…");
+      notifyStatus(
+        "setup",
+        opts.cursorAgentId ? "Melanjutkan agent Cursor…" : "Menyiapkan agent Cursor…",
+      );
       if (opts.cursorAgentId) {
+        const agentId = opts.cursorAgentId;
         try {
-          agent = await Agent.resume(opts.cursorAgentId, agentOptions);
+          agent = await setupPhase(() => Agent.resume(agentId, agentOptions));
           resumed = true;
         } catch (error) {
+          if (isCursorCancellation(error) || error instanceof CursorPhaseTimeoutError) throw error;
           if (cloud) {
             throw new Error(
-              `Gagal resume cloud agent ${opts.cursorAgentId}: ${
+              `Gagal resume cloud agent ${agentId}: ${
                 error instanceof Error ? error.message : String(error)
               }`,
             );
           }
           resumed = false;
-          agent = await Agent.create(agentOptions);
+          agent = await setupPhase(() => Agent.create(agentOptions));
         }
       } else {
-        agent = await Agent.create(agentOptions);
+        agent = await setupPhase(() => Agent.create(agentOptions));
       }
 
       const prompt = resumed ? latestUserPrompt(turns) : bootstrapCursorPrompt(turns);
@@ -540,41 +593,21 @@ export async function completeCursor(
       }
 
       const images = imageParts(turns);
-      const onEvent = opts.onEvent;
       notifyStatus("starting", "Menghubungkan ke Cursor…");
-      let run: Awaited<ReturnType<typeof agent.send>>;
+      let run: Run;
       try {
-        run = await Promise.race([
-          agent.send({
-            text: prompt,
-            ...(images.length ? { images } : {}),
-            ...(mode === "plan" ? { mode: "plan" } : {}),
-            ...(onEvent
-              ? {
-                onDelta: (args: { update: unknown }) => {
-                  try {
-                    const event = mapCursorDelta(args.update);
-                    if (event) onEvent(event);
-                  } catch {
-                    // progress callbacks must never break the SDK stream
-                  }
-                },
-              }
-              : {}),
-          }),
-          new Promise<never>((_resolve, reject) => {
-            setTimeout(
-              () =>
-                reject(
-                  new Error(
-                    `Cursor send timeout setelah ${CURSOR_SEND_TIMEOUT_MS / 1000} detik ` +
-                      "(koneksi SDK macet sebelum run mulai).",
-                  ),
-                ),
-              CURSOR_SEND_TIMEOUT_MS,
-            );
-          }),
-        ]);
+        run = await runCursorPhase(
+          () => sendCursorPrompt(agent, { text: prompt, images, mode, onEvent: opts.onEvent }),
+          {
+            timeoutMs: CURSOR_SEND_TIMEOUT_MS,
+            timeoutMessage: `Cursor send timeout setelah ${CURSOR_SEND_TIMEOUT_MS / 1000} detik ` +
+              "(koneksi ke server Cursor macet sebelum run mulai). Coba lagi.",
+            signal: opts.signal,
+            onLate: async (late) => {
+              await late.cancel();
+            },
+          },
+        );
       } catch (error) {
         await disposeAgent(agent);
         if (error instanceof CursorAgentError) {
@@ -586,7 +619,7 @@ export async function completeCursor(
 
       try {
         const result = await waitForCursorRun(run as CursorRunHandle, opts.signal);
-        if (opts.signal?.aborted) throw cancellationError();
+        if (opts.signal?.aborted) throw cursorCancellationError();
         if (result.status !== "finished") {
           throw new Error(result.error?.message ?? `Cursor run ${result.status}.`);
         }
@@ -669,15 +702,10 @@ export async function listCursorModels(apiKey: string): Promise<CursorModelInfo[
   if (!apiKey.trim()) throw new Error("Cursor API key belum diisi.");
   const { Cursor } = await loadCursorSdk();
   const models = await withCursorConnectTransport(() =>
-    Promise.race([
-      Cursor.models.list({ apiKey }),
-      new Promise<never>((_resolve, reject) => {
-        setTimeout(
-          () => reject(new Error("Cursor models list timed out")),
-          CURSOR_MODELS_TIMEOUT_MS,
-        );
-      }),
-    ])
+    runCursorPhase(() => Cursor.models.list({ apiKey }), {
+      timeoutMs: CURSOR_MODELS_TIMEOUT_MS,
+      timeoutMessage: "Cursor models list timed out",
+    })
   );
   return models.map((model) => ({
     id: model.id,
@@ -691,7 +719,12 @@ export async function testCursor(
 ): Promise<{ ok: boolean; message: string; count?: number }> {
   if (!apiKey.trim()) return { ok: false, message: "Cursor API key belum diisi." };
   const { Cursor } = await loadCursorSdk();
-  const models = await withCursorConnectTransport(() => Cursor.models.list({ apiKey }));
+  const models = await withCursorConnectTransport(() =>
+    runCursorPhase(() => Cursor.models.list({ apiKey }), {
+      timeoutMs: CURSOR_TEST_TIMEOUT_MS,
+      timeoutMessage: `Cursor tidak merespons setelah ${CURSOR_TEST_TIMEOUT_MS / 1000} detik.`,
+    })
+  );
   return {
     ok: true,
     message: `Cursor terhubung (${models.length} model tersedia).`,
