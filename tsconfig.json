@@ -1,0 +1,10 @@
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "ESNext",
+    "lib": ["deno.window"],
+    "types": [
+      "https://deno.land"
+    ]
+  }
+}
