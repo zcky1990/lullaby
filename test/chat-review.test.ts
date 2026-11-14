@@ -10,10 +10,12 @@ import {
   recordAppliedWrite,
 } from "../src/server/chat/review.ts";
 import {
+  getPendingReviewTtlMs,
   getRun,
   PENDING_REVIEW_TTL_MS,
   pruneRuns,
   RUN_TTL_MS,
+  setPendingReviewTtlMs,
   setRun,
 } from "../src/server/chat/state.ts";
 import type { PendingChange, Run, ToolCall } from "../src/server/chat/types.ts";
@@ -208,7 +210,9 @@ Deno.test("deferred review survives the short idle TTL used for finished runs", 
 
 Deno.test("deferred review is pruned after the long pending-review TTL", async () => {
   const root = await Deno.makeTempDir();
+  const previous = getPendingReviewTtlMs();
   try {
+    setPendingReviewTtlMs(PENDING_REVIEW_TTL_MS);
     await Deno.writeTextFile(join(root, "note.txt"), "before\n");
     const run = makeRun(root);
     run.finishedAt = Date.now() - PENDING_REVIEW_TTL_MS - 1_000;
@@ -223,6 +227,27 @@ Deno.test("deferred review is pruned after the long pending-review TTL", async (
     equal(response.status === "error" ? response.error.includes("tidak tersedia") : false, true);
     equal(await Deno.readTextFile(join(root, "note.txt")), "after\n");
   } finally {
+    setPendingReviewTtlMs(previous);
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("pending-review TTL follows setPendingReviewTtlMs", async () => {
+  const root = await Deno.makeTempDir();
+  const previous = getPendingReviewTtlMs();
+  const shortTtl = 60 * 60 * 1000;
+  try {
+    setPendingReviewTtlMs(shortTtl);
+    equal(getPendingReviewTtlMs(), shortTtl);
+    await Deno.writeTextFile(join(root, "note.txt"), "before\n");
+    const run = makeRun(root);
+    run.finishedAt = Date.now() - shortTtl - 1_000;
+    setRun(run);
+    await applyDeferredWrite(run, "note.txt", "after\n");
+    pruneRuns(Date.now());
+    equal(getRun(run.id), undefined);
+  } finally {
+    setPendingReviewTtlMs(previous);
     await Deno.remove(root, { recursive: true });
   }
 });

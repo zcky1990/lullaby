@@ -1,6 +1,7 @@
 import { appendEvent, getDb, markInterruptedWorkflowRuns, pruneEvents } from "../db/db.ts";
 import { ensureChatSessionTombstones } from "../db/chat-tombstones.ts";
 import { migratePlaintextSecrets } from "../secrets/migrate.ts";
+import { readChatToolsSettings } from "../server/chat/settings.ts";
 import { syncConfiguredCursorModels } from "../server/chat/cursor-models.ts";
 import { installDefaultSkills } from "../server/skills.ts";
 import { startWorkflowScheduler } from "../server/workflow/scheduler.ts";
@@ -22,6 +23,11 @@ export async function bootstrap(): Promise<void> {
     await migratePlaintextSecrets();
   } catch (error) {
     log.warn("secrets migration skipped", { error: String(error) });
+  }
+  try {
+    await readChatToolsSettings();
+  } catch (error) {
+    log.warn("chat tools settings load skipped", { error: String(error) });
   }
   await pruneEvents(1000);
   await markInterruptedWorkflowRuns();

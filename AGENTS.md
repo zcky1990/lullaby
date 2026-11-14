@@ -177,10 +177,11 @@ finishing a change.
   Writes (chat `write_file`) are governed by Global Settings → Tools: `auto_approve_writes` on =
   apply immediately; off + `chat_write_review_mode: "end"` (default) = apply during the run and
   review/revert everything at the end (no blocking, no per-tool permission prompt); off +
-  `"before"` = pause and accept/reject hunks before writing. `src/server/chat/approval.ts` decides
-  the per-call permission prompt and never prompts for `write_file` or read-only tools. Chat agent
-  steps default to unlimited (OpenCode-style); optional `chat_max_steps` in Global Settings → Tools
-  forces a text-only summary on the final step. Chat/workflow agent also has document
+  `"before"` = pause and accept/reject hunks before writing. Deferred-review runs stay in memory
+  for `chat_review_keep_hours` (1–168, default 24; Global Settings → Tools).
+  `src/server/chat/approval.ts` decides the per-call permission prompt and never prompts for
+  `write_file` or read-only tools. Chat agent steps default to unlimited (OpenCode-style); optional
+  `chat_max_steps` in Global Settings → Tools forces a text-only summary on the final step. Chat/workflow agent also has document
   tools (`src/server/chat/document-tools.ts`: local + Docmost/Notion/Confluence) and ticket tools
   (`ticket-tools.ts`: local + Jira list/get/update/sync/transition); those mutations apply
   immediately (no Review). Chat tools can be disabled via `chat_disabled_tools` (same Tools

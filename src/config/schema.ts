@@ -376,6 +376,8 @@ export const ChatToolsSettingsInput = z.object({
   maxSteps: z.number().int().min(1).max(200).nullable().optional(),
   /** `end` = apply writes then review after the run (non-blocking). */
   writeReviewMode: z.enum(["end", "before"]).optional(),
+  /** Hours to keep deferred-review runs in memory (1–168). Default 24. */
+  reviewKeepHours: z.number().int().min(1).max(168).optional(),
 });
 export type ChatToolsSettingsInput = z.infer<typeof ChatToolsSettingsInput>;
 

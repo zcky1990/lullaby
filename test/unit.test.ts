@@ -820,15 +820,29 @@ Deno.test("ChatToolsSettingsInput defaults and accepts disabled tools", () => {
   equal(empty.autoApproveWrites, false);
   deepEqual(empty.disabledTools, []);
   equal(empty.maxSteps, undefined);
+  equal(empty.reviewKeepHours, undefined);
   const parsed = ChatToolsSettingsInput.parse({
     autoApproveWrites: true,
     disabledTools: ["write_file", "create_ticket"],
     maxSteps: 20,
+    reviewKeepHours: 48,
   });
   equal(parsed.autoApproveWrites, true);
   deepEqual(parsed.disabledTools, ["write_file", "create_ticket"]);
   equal(parsed.maxSteps, 20);
+  equal(parsed.reviewKeepHours, 48);
   equal(ChatToolsSettingsInput.parse({ maxSteps: null }).maxSteps, null);
+});
+
+Deno.test("normalizeReviewKeepHours clamps to 1–168 with default 24", async () => {
+  const { DEFAULT_REVIEW_KEEP_HOURS, normalizeReviewKeepHours, reviewKeepHoursToMs } =
+    await import("../src/server/chat/settings.ts");
+  equal(normalizeReviewKeepHours(undefined), DEFAULT_REVIEW_KEEP_HOURS);
+  equal(normalizeReviewKeepHours("nope"), DEFAULT_REVIEW_KEEP_HOURS);
+  equal(normalizeReviewKeepHours(0), 1);
+  equal(normalizeReviewKeepHours(48), 48);
+  equal(normalizeReviewKeepHours(999), 168);
+  equal(reviewKeepHoursToMs(24), 24 * 60 * 60 * 1000);
 });
 
 Deno.test("toolsFor filters disabled tools and plan/build membership", () => {

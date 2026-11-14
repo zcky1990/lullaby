@@ -29,7 +29,9 @@ import {
   CHAT_AUTO_APPROVE_TOOLS_KEY,
   CHAT_DISABLED_TOOLS_KEY,
   CHAT_MAX_STEPS_KEY,
+  CHAT_REVIEW_KEEP_HOURS_KEY,
   CHAT_WRITE_REVIEW_MODE_KEY,
+  normalizeReviewKeepHours,
   normalizeWriteReviewMode,
   readChatToolsSettings,
 } from "../chat/settings.ts";
@@ -178,6 +180,7 @@ export async function getChatToolsSettingsHandler(): Promise<Response> {
     autoApproveTools: settings.autoApproveTools,
     maxSteps: settings.maxSteps,
     writeReviewMode: settings.writeReviewMode,
+    reviewKeepHours: settings.reviewKeepHours,
     tools: CHAT_TOOL_CATALOG,
   });
 }
@@ -201,6 +204,9 @@ export async function saveChatToolsSettingsHandler(req: Request): Promise<Respon
   const writeReviewMode = parsed.data.writeReviewMode === undefined
     ? current.writeReviewMode
     : normalizeWriteReviewMode(parsed.data.writeReviewMode);
+  const reviewKeepHours = parsed.data.reviewKeepHours === undefined
+    ? current.reviewKeepHours
+    : normalizeReviewKeepHours(parsed.data.reviewKeepHours);
   await setAppSetting(
     AUTO_APPROVE_WRITES_KEY,
     parsed.data.autoApproveWrites ? "true" : "false",
@@ -209,21 +215,16 @@ export async function saveChatToolsSettingsHandler(req: Request): Promise<Respon
   await setAppSetting(CHAT_AUTO_APPROVE_TOOLS_KEY, JSON.stringify(autoApproveTools));
   await setAppSetting(CHAT_MAX_STEPS_KEY, maxSteps == null ? "" : String(maxSteps));
   await setAppSetting(CHAT_WRITE_REVIEW_MODE_KEY, writeReviewMode);
+  await setAppSetting(CHAT_REVIEW_KEEP_HOURS_KEY, String(reviewKeepHours));
   await record("settings.chat_tools_updated", {
     autoApproveWrites: parsed.data.autoApproveWrites,
     disabled: disabledTools.length,
     autoApproveTools: autoApproveTools.length,
     maxSteps,
     writeReviewMode,
+    reviewKeepHours,
   });
-  return json({
-    autoApproveWrites: parsed.data.autoApproveWrites,
-    disabledTools,
-    autoApproveTools,
-    maxSteps,
-    writeReviewMode,
-    tools: CHAT_TOOL_CATALOG,
-  });
+  return await getChatToolsSettingsHandler();
 }
 
 export async function getAutomationSettingsHandler(): Promise<Response> {

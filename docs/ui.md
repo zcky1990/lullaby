@@ -144,7 +144,7 @@ menampilkan collapsible **Perubahan file** — komponen `web/src/components/Chat
 
 ## Review perubahan AI
 
-Global Settings → Tools punya dua pengaturan yang menentukan kapan `write_file` direview
+Global Settings → Tools mengatur kapan `write_file` direview dan berapa lama antrean hunk disimpan
 (`src/server/chat/settings.ts`, `app_settings`):
 
 | `auto_approve_writes` | `chat_write_review_mode` | Perilaku                                                                                                             |
@@ -152,6 +152,8 @@ Global Settings → Tools punya dua pengaturan yang menentukan kapan `write_file
 | on                    | —                        | tulis langsung ke disk, tanpa Review tab                                                                             |
 | off                   | `end` (**default**)      | tulis langsung selama agent bekerja, semua perubahan dikumpulkan lalu direview saat chat selesai — **tidak memblok** |
 | off                   | `before`                 | agent berhenti (`status: approval_required`) dan menunggu accept/reject per hunk sebelum menulis                     |
+
+`chat_review_keep_hours` (1–168, default **24**) mengatur TTL run dengan hunk belum di-settle.
 
 Mode `end` (deferred review) **tidak** memunculkan prompt izin per-tool: `write_file` dan tool
 read-only dikecualikan oleh `src/server/chat/approval.ts` (`needsToolPermission`), jadi satu-satunya
@@ -163,9 +165,9 @@ Mode `end` (deferred review):
   (`run.pendingChanges`, `applied: true`, semua hunk sudah `accepted`). Langkah chat menampilkan
   “Diterapkan: `<path>`”.
 - Saat run selesai, respons `done` membawa `runId`, `pendingChanges`, dan `reviewDeferred: true`.
-  Run tetap di memori selama masih ada hunk belum di-settle (TTL 24 jam dari `finishedAt`); run
-  tanpa antrean review dihapus setelah 10 menit. Restart app menghapus state Review (lihat
-  `docs/improvements.md` REL-1).
+  Run tetap di memori selama masih ada hunk belum di-settle (TTL dari
+  `chat_review_keep_hours`, default 24 jam dari `finishedAt`); run tanpa antrean review dihapus
+  setelah 10 menit. Restart app menghapus state Review (lihat `docs/improvements.md` REL-1).
 - Chat menampilkan kartu **Perubahan sudah diterapkan** (ringkasan file, mis.
   `2 file (1 baru, 1 diubah) · +12 · −3`) dengan tombol **Review & revert**; tab Review dibuat di
   latar belakang lewat event `rnd:chat-review` (tanpa merebut fokus tab aktif) dan bisa

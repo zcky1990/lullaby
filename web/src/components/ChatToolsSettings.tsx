@@ -26,6 +26,17 @@ const REVIEW_MODES: Array<{ id: WriteReviewMode; label: string }> = [
   { id: "before", label: "Sebelum diterapkan" },
 ];
 
+const DEFAULT_REVIEW_KEEP_HOURS = 24;
+
+type SavePatch = {
+  autoApproveWrites?: boolean;
+  disabledTools?: string[];
+  autoApproveTools?: string[];
+  maxSteps?: number | null;
+  writeReviewMode?: WriteReviewMode;
+  reviewKeepHours?: number;
+};
+
 export function ChatToolsSettings() {
   const [autoApproveWrites, setAutoApproveWrites] = useState(false);
   const [writeReviewMode, setWriteReviewMode] = useState<WriteReviewMode>("end");
@@ -33,6 +44,8 @@ export function ChatToolsSettings() {
   const [autoApproveTools, setAutoApproveTools] = useState<string[]>([]);
   const [maxSteps, setMaxSteps] = useState<number | null>(null);
   const [maxStepsDraft, setMaxStepsDraft] = useState("");
+  const [reviewKeepHours, setReviewKeepHours] = useState(DEFAULT_REVIEW_KEEP_HOURS);
+  const [reviewKeepDraft, setReviewKeepDraft] = useState(String(DEFAULT_REVIEW_KEEP_HOURS));
   const [tools, setTools] = useState<ChatToolCatalogEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -66,25 +79,23 @@ export function ChatToolsSettings() {
     setAutoApproveTools(res.autoApproveTools);
     setMaxSteps(res.maxSteps);
     setMaxStepsDraft(res.maxSteps == null ? "" : String(res.maxSteps));
+    const keep = res.reviewKeepHours ?? DEFAULT_REVIEW_KEEP_HOURS;
+    setReviewKeepHours(keep);
+    setReviewKeepDraft(String(keep));
     setTools(res.tools);
   };
 
-  const save = async (
-    nextAuto: boolean,
-    nextDisabled: string[],
-    nextMaxSteps: number | null,
-    nextAutoTools: string[] = autoApproveTools,
-    nextReviewMode: WriteReviewMode = writeReviewMode,
-  ) => {
+  const save = async (patch: SavePatch = {}) => {
     setBusy(true);
     setError(undefined);
     try {
       const payload = {
-        autoApproveWrites: nextAuto,
-        disabledTools: nextDisabled,
-        autoApproveTools: nextAutoTools,
-        maxSteps: nextMaxSteps,
-        writeReviewMode: nextReviewMode,
+        autoApproveWrites: patch.autoApproveWrites ?? autoApproveWrites,
+        disabledTools: patch.disabledTools ?? disabledTools,
+        autoApproveTools: patch.autoApproveTools ?? autoApproveTools,
+        maxSteps: patch.maxSteps !== undefined ? patch.maxSteps : maxSteps,
+        writeReviewMode: patch.writeReviewMode ?? writeReviewMode,
+        reviewKeepHours: patch.reviewKeepHours ?? reviewKeepHours,
       };
       const res = await api.saveChatToolsSettings(payload);
       applyResponse(res);
@@ -99,13 +110,13 @@ export function ChatToolsSettings() {
     const next = enabled
       ? disabledTools.filter((item) => item !== name)
       : [...new Set([...disabledTools, name])];
-    void save(autoApproveWrites, next, maxSteps);
+    void save({ disabledTools: next });
   };
 
   const commitMaxSteps = () => {
     const trimmed = maxStepsDraft.trim();
     if (!trimmed) {
-      void save(autoApproveWrites, disabledTools, null);
+      void save({ maxSteps: null });
       return;
     }
     const parsed = Number.parseInt(trimmed, 10);
@@ -114,7 +125,18 @@ export function ChatToolsSettings() {
       setMaxStepsDraft(maxSteps == null ? "" : String(maxSteps));
       return;
     }
-    void save(autoApproveWrites, disabledTools, parsed);
+    void save({ maxSteps: parsed });
+  };
+
+  const commitReviewKeepHours = () => {
+    const trimmed = reviewKeepDraft.trim();
+    const parsed = Number.parseInt(trimmed, 10);
+    if (!Number.isFinite(parsed) || parsed < 1 || parsed > 168) {
+      setError("Durasi simpan review harus angka 1–168 jam.");
+      setReviewKeepDraft(String(reviewKeepHours));
+      return;
+    }
+    void save({ reviewKeepHours: parsed });
   };
 
   return (
@@ -149,7 +171,7 @@ export function ChatToolsSettings() {
               </div>
               <Switch
                 checked={autoApproveWrites}
-                onCheckedChange={(next) => void save(next, disabledTools, maxSteps)}
+                onCheckedChange={(next) => void save({ autoApproveWrites: next })}
                 disabled={busy}
                 aria-label="Auto-approve file writes"
               />
@@ -157,48 +179,88 @@ export function ChatToolsSettings() {
 
             {!autoApproveWrites
               ? (
-                <div className="flex flex-col gap-2 rounded-md border p-4">
-                  <Label htmlFor="chat-write-review-mode" className="text-xs font-medium">
-                    Review perubahan AI
-                  </Label>
-                  <p className="text-xs text-muted-foreground">
-                    <span className="font-medium">Setelah selesai</span> (default): perubahan
-                    langsung diterapkan selama agent bekerja, lalu semua file dikumpulkan di tab
-                    Review ketika chat selesai — chat tidak terblokir.{" "}
-                    <span className="font-medium">Sebelum diterapkan</span>: agent berhenti dan
-                    menunggu persetujuan per hunk sebelum menulis ke disk.
-                  </p>
-                  <Select
-                    value={writeReviewMode}
-                    onValueChange={(value) =>
-                      void save(
-                        autoApproveWrites,
-                        disabledTools,
-                        maxSteps,
-                        autoApproveTools,
-                        value === "before" ? "before" : "end",
-                      )}
-                    disabled={busy}
-                  >
-                    <SelectTrigger
-                      id="chat-write-review-mode"
-                      size="sm"
-                      className="h-8 w-full text-xs"
-                      aria-label="Mode review perubahan"
+                <>
+                  <div className="flex flex-col gap-2 rounded-md border p-4">
+                    <Label htmlFor="chat-write-review-mode" className="text-xs font-medium">
+                      Review perubahan AI
+                    </Label>
+                    <p className="text-xs text-muted-foreground">
+                      <span className="font-medium">Setelah selesai</span> (default): perubahan
+                      langsung diterapkan selama agent bekerja, lalu semua file dikumpulkan di tab
+                      Review ketika chat selesai — chat tidak terblokir.{" "}
+                      <span className="font-medium">Sebelum diterapkan</span>: agent berhenti dan
+                      menunggu persetujuan per hunk sebelum menulis ke disk.
+                    </p>
+                    <Select
+                      value={writeReviewMode}
+                      onValueChange={(value) =>
+                        void save({
+                          writeReviewMode: value === "before" ? "before" : "end",
+                        })}
+                      disabled={busy}
                     >
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectGroup>
-                        {REVIEW_MODES.map((mode) => (
-                          <SelectItem key={mode.id} value={mode.id} className="text-xs">
-                            {mode.label}
-                          </SelectItem>
-                        ))}
-                      </SelectGroup>
-                    </SelectContent>
-                  </Select>
-                </div>
+                      <SelectTrigger
+                        id="chat-write-review-mode"
+                        size="sm"
+                        className="h-8 w-full text-xs"
+                        aria-label="Mode review perubahan"
+                      >
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectGroup>
+                          {REVIEW_MODES.map((mode) => (
+                            <SelectItem key={mode.id} value={mode.id} className="text-xs">
+                              {mode.label}
+                            </SelectItem>
+                          ))}
+                        </SelectGroup>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="flex flex-col gap-2 rounded-md border p-4">
+                    <Label htmlFor="chat-review-keep-hours" className="text-xs font-medium">
+                      Durasi simpan antrean review
+                    </Label>
+                    <p className="text-xs text-muted-foreground">
+                      Berapa lama run dengan hunk Keep/Revert tetap di memori setelah chat selesai
+                      (1–168 jam). Default 24. Restart aplikasi tetap menghapus antrean Review.
+                    </p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Input
+                        id="chat-review-keep-hours"
+                        type="number"
+                        min={1}
+                        max={168}
+                        inputMode="numeric"
+                        className="h-8 w-24 text-xs"
+                        value={reviewKeepDraft}
+                        onChange={(event) => setReviewKeepDraft(event.target.value)}
+                        onBlur={() => commitReviewKeepHours()}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter") {
+                            event.currentTarget.blur();
+                          }
+                        }}
+                        disabled={busy}
+                      />
+                      <span className="text-xs text-muted-foreground">jam</span>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={busy || reviewKeepHours === DEFAULT_REVIEW_KEEP_HOURS}
+                        onClick={() => {
+                          setReviewKeepDraft(String(DEFAULT_REVIEW_KEEP_HOURS));
+                          void save({ reviewKeepHours: DEFAULT_REVIEW_KEEP_HOURS });
+                        }}
+                      >
+                        Reset 24 jam
+                      </Button>
+                    </div>
+                  </div>
+                </>
               )
               : null}
 
@@ -236,7 +298,7 @@ export function ChatToolsSettings() {
                   disabled={busy || maxSteps == null}
                   onClick={() => {
                     setMaxStepsDraft("");
-                    void save(autoApproveWrites, disabledTools, null);
+                    void save({ maxSteps: null });
                   }}
                 >
                   Unlimited
@@ -271,12 +333,9 @@ export function ChatToolsSettings() {
                           disabled={busy}
                           aria-label={`Cabut izin ${name}`}
                           onClick={() =>
-                            void save(
-                              autoApproveWrites,
-                              disabledTools,
-                              maxSteps,
-                              autoApproveTools.filter((item) => item !== name),
-                            )}
+                            void save({
+                              autoApproveTools: autoApproveTools.filter((item) => item !== name),
+                            })}
                         >
                           ×
                         </button>
@@ -299,7 +358,7 @@ export function ChatToolsSettings() {
                   variant="outline"
                   size="sm"
                   disabled={busy || disabledTools.length === 0}
-                  onClick={() => void save(autoApproveWrites, [], maxSteps)}
+                  onClick={() => void save({ disabledTools: [] })}
                 >
                   Enable all
                 </Button>

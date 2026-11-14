@@ -109,6 +109,9 @@ Key-value global.
 | `auto_approve_writes` | `"true"` / `"false"` (chat Build skip Review) |
 | `chat_disabled_tools` | JSON tool name[] (deny-list chat tools) |
 | `chat_max_steps` | kosong = unlimited; angka 1–200 = batas langkah agent |
+| `chat_write_review_mode` | `end` (default) / `before` |
+| `chat_review_keep_hours` | 1–168; default 24 (TTL run dengan hunk Review) |
+| `chat_auto_approve_tools` | JSON tool name[] (always-allow) |
 | `auto_build_on_in_progress` | `"true"` / `"false"` |
 | `notifications` | JSON: `{ channels: [{ id, name, type, enabled, webhookUrl }] }` (`webhookUrl` terenkripsi) |
 | `terminal_shell` | `"zsh"` / `"bash"` |

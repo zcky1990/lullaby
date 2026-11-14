@@ -338,6 +338,8 @@ export interface ChatToolsSettingsResponse {
   /** null = unlimited (OpenCode-style). */
   maxSteps: number | null;
   writeReviewMode: WriteReviewMode;
+  /** Hours to keep deferred-review runs (default 24). */
+  reviewKeepHours: number;
   tools: ChatToolCatalogEntry[];
 }
 
@@ -1193,6 +1195,7 @@ export const api = {
     autoApproveTools?: string[];
     maxSteps?: number | null;
     writeReviewMode?: WriteReviewMode;
+    reviewKeepHours?: number;
   }) =>
     request<ChatToolsSettingsResponse>(
       "/api/settings/chat-tools",

@@ -58,14 +58,15 @@ Implementasi: `src/server/backup.ts` + `src/server/routes/backup.ts` (didaftarka
 
 ### Chat tools (`/api/settings/chat-tools`)
 
-`GET`/`PUT` `{ autoApproveWrites, disabledTools, autoApproveTools, maxSteps, writeReviewMode }`
-(`null` `maxSteps` = unlimited). `writeReviewMode`:
+`GET`/`PUT` `{ autoApproveWrites, disabledTools, autoApproveTools, maxSteps, writeReviewMode,
+reviewKeepHours }` (`null` `maxSteps` = unlimited). `writeReviewMode`:
 
 - `end` (default) — `write_file` langsung diterapkan; review dilakukan setelah run selesai
   (respons `done` membawa `runId` + `pendingChanges` + `reviewDeferred: true`).
 - `before` — run berhenti dengan `status: "approval_required"` sampai hunk diputuskan.
 
-Field yang tidak dikirim saat `PUT` mempertahankan nilai tersimpan.
+`reviewKeepHours` (1–168, default 24) mengatur berapa lama run dengan hunk Keep/Revert tetap di
+memori setelah selesai. Field yang tidak dikirim saat `PUT` mempertahankan nilai tersimpan.
 
 ## Projects
 
