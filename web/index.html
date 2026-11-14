@@ -4,8 +4,15 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Lullaby</title>
-    <link rel="icon" type="image/png" href="/lullaby.png" />
-    <link rel="apple-touch-icon" href="/lullaby.png" />
+    <!--
+      Favicon sengaja memakai WebP (72 KB) dan bukan PNG 1,5 MB: aset di web/public/
+      ikut ter-embed base64 ke src/ui/assets.generated.ts (lihat PERF-1).
+      Ikon packaging desktop tetap di icons/ (deno.json → desktop.app.icons).
+      apple-touch-icon dihapus karena iOS hanya menerima PNG dan aplikasi ini adalah
+      webview desktop; guard ukuran di scripts/build-assets.ts menjaga agar PNG besar
+      tidak kembali masuk.
+    -->
+    <link rel="icon" type="image/webp" href="/lullaby.webp" />
     <script>
       (function () {
         try {

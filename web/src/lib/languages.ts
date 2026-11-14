@@ -1,52 +1,15 @@
-const LANGUAGE_BY_EXTENSION: Record<string, string> = {
-  ts: "typescript",
-  tsx: "typescript",
-  mts: "typescript",
-  cts: "typescript",
-  js: "javascript",
-  jsx: "javascript",
-  mjs: "javascript",
-  cjs: "javascript",
-  json: "json",
-  jsonc: "json",
-  css: "css",
-  scss: "scss",
-  less: "less",
-  html: "html",
-  htm: "html",
-  md: "markdown",
-  markdown: "markdown",
-  yml: "yaml",
-  yaml: "yaml",
-  py: "python",
-  rb: "ruby",
-  go: "go",
-  rs: "rust",
-  java: "java",
-  kt: "kotlin",
-  c: "c",
-  h: "c",
-  cpp: "cpp",
-  cc: "cpp",
-  hpp: "cpp",
-  cs: "csharp",
-  php: "php",
-  sh: "shell",
-  bash: "shell",
-  zsh: "shell",
-  sql: "sql",
-  lua: "lua",
-  xml: "xml",
-  toml: "ini",
-  ini: "ini",
-  dockerfile: "dockerfile",
-  env: "ini",
-};
-
-export function languageForPath(path: string): string {
-  const name = path.split("/").pop() ?? path;
-  if (name === "Dockerfile") return "dockerfile";
-  if (name === "Makefile") return "makefile";
-  const ext = name.includes(".") ? name.split(".").pop()!.toLowerCase() : "";
-  return LANGUAGE_BY_EXTENSION[ext] ?? "plaintext";
-}
+/**
+ * Daftar bahasa untuk editor.
+ *
+ * Implementasi + daftar id tinggal di `./monaco-languages` supaya pemetaan
+ * ekstensi, daftar id yang diregistrasi, dan import di `./monaco` tidak drift.
+ * Modul ini dipertahankan sebagai entry point yang sudah dipakai komponen.
+ */
+export {
+  LANGUAGE_BY_EXTENSION,
+  LANGUAGE_IDS_WITHOUT_DEFINITION,
+  MONACO_LANGUAGE_IDS,
+  PLAINTEXT_LANGUAGE,
+  languageForPath,
+  type MonacoLanguageId,
+} from "./monaco-languages";

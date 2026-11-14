@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { Contrast, Monitor, Moon, Sun, Wand2 } from "lucide-react";
 import type { GlobalSection } from "@/components/GlobalSettingsPanel";
 import {
@@ -12,6 +12,7 @@ import {
   type Theme,
   type ThemePreset,
 } from "@/components/ThemeProvider";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -21,6 +22,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
+import { Switch } from "@/components/ui/switch";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { AutomationSettings } from "@/components/AutomationSettings";
 import { BackupSettings } from "@/components/BackupSettings";
@@ -34,6 +36,11 @@ import { PromptsSettings } from "@/components/PromptsSettings";
 import { RolesSettings } from "@/components/RolesSettings";
 import { SkillsSettings } from "@/components/SkillsSettings";
 import { TerminalSettings } from "@/components/TerminalSettings";
+import {
+  isMonacoTypeScriptServiceEnabled,
+  setMonacoTypeScriptServiceEnabled,
+  subscribeMonacoSettings,
+} from "@/lib/monaco-settings";
 import {
   api,
   type LlmProvider,
@@ -284,6 +291,13 @@ function EditorSettings() {
     editorFontSize,
     setEditorFontSize,
   } = useTheme();
+  // PERF-3: preferensi ini dibaca `lib/monaco` sebelum editor dibuat, jadi
+  // sumbernya `lib/monaco-settings` (localStorage), bukan ui_preferences.
+  const typeScriptService = useSyncExternalStore(
+    subscribeMonacoSettings,
+    isMonacoTypeScriptServiceEnabled,
+    isMonacoTypeScriptServiceEnabled,
+  );
   return (
     <Section title="Editor" description="Tema, font, dan ukuran text editor (Monaco).">
       <div className="flex flex-col gap-4">
@@ -340,6 +354,26 @@ function EditorSettings() {
             </Select>
           </Field>
         </div>
+        <Field label="TypeScript service">
+          <div className="flex items-start gap-2">
+            <Switch
+              id="monaco-typescript-service"
+              checked={typeScriptService}
+              onCheckedChange={(checked) => setMonacoTypeScriptServiceEnabled(checked)}
+              aria-label="TypeScript service"
+            />
+            <div className="flex flex-col gap-1">
+              <Label htmlFor="monaco-typescript-service">
+                IntelliSense TypeScript/JavaScript bawaan Monaco
+              </Label>
+              <p className="max-w-md text-xs text-muted-foreground">
+                Matikan bila Anda memakai language server (LSP) untuk TS/JS: worker ±7 MB tidak
+                akan diunduh dan chunk language service tidak dimuat. Syntax highlighting tetap
+                aktif; perubahan berlaku untuk editor yang dibuka setelah aplikasi dimuat ulang.
+              </p>
+            </div>
+          </div>
+        </Field>
       </div>
     </Section>
   );

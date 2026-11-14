@@ -2,7 +2,9 @@ import { useEffect, useRef, useState } from "react";
 import Editor from "@monaco-editor/react";
 import type { editor as MonacoEditor } from "monaco-editor";
 import type * as MonacoNS from "monaco-editor";
-import "@/lib/monaco";
+// PERF-3: `ensureMonacoReady()` mendaftarkan layanan TypeScript secara kondisional,
+// jadi modul ini diimpor sebagai nilai (efek sampingnya tetap berjalan).
+import { ensureMonacoReady } from "@/lib/monaco";
 import { Skeleton } from "@/components/ui/skeleton";
 import { languageForPath } from "@/lib/languages";
 import { EDITOR_FONT_STACKS, useTheme } from "@/components/ThemeProvider";
@@ -61,9 +63,22 @@ export default function MonacoViewer({
   const lspRef = useRef(lsp);
   lspRef.current = lsp;
   const [editorReady, setEditorReady] = useState(0);
+  const [monacoReady, setMonacoReady] = useState(false);
   const languageId = language ?? languageForPath(path);
   const modelPath = lsp ? fileUri(lsp.absolutePath) : path;
   const sessionKey = lspSessionKey(lsp, languageId);
+
+  // PERF-3: tunggu registrasi layanan bahasa sebelum model pertama dibuat,
+  // supaya model tidak jatuh ke plaintext saat layanan TypeScript dimatikan.
+  useEffect(() => {
+    let cancelled = false;
+    void ensureMonacoReady().then(() => {
+      if (!cancelled) setMonacoReady(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (!lsp) onLspStatusRef.current?.({ status: "off" });
@@ -132,6 +147,10 @@ export default function MonacoViewer({
       void disposeCurrent();
     };
   }, [sessionKey, languageId, editorReady]);
+
+  if (!monacoReady) {
+    return <Skeleton className="w-full rounded-none" style={{ height }} />;
+  }
 
   return (
     <Editor

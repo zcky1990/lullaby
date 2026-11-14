@@ -1,8 +1,16 @@
+import { lazy, Suspense } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { Mermaid } from "@/components/Mermaid";
 import { useTheme } from "@/components/ThemeProvider";
+import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
+
+// PERF-4: Mermaid (±778 KB + renderer diagram) dulu diimpor statis sehingga ikut
+// terunduh untuk setiap dokumen Markdown, termasuk yang tidak punya diagram.
+// Sekarang chunk-nya baru diambil saat ada blok ```mermaid.
+const MermaidDiagram = lazy(() =>
+  import("@/components/Mermaid").then((module) => ({ default: module.Mermaid }))
+);
 
 interface Props {
   content: string;
@@ -27,7 +35,11 @@ export default function MarkdownView({ content, fontSize, fontFamily }: Props) {
       const { className, children } = props;
       const language = /language-(\w+)/.exec(className ?? "")?.[1];
       if (language === "mermaid") {
-        return <Mermaid chart={String(children).replace(/\n$/, "")} />;
+        return (
+          <Suspense fallback={<Skeleton className="my-4 h-24 w-full rounded-md" />}>
+            <MermaidDiagram chart={String(children).replace(/\n$/, "")} />
+          </Suspense>
+        );
       }
       return <code className={className}>{children}</code>;
     },
