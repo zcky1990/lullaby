@@ -21,9 +21,10 @@ status bar.
 File dan dokumen terbuka sebagai **tab dinamis**. Menu Workspace / Ticket / Settings / Git / Global
 membuka **singleton tab**.
 
-Shortcut shell: `Cmd/Ctrl+P` (Quick Open), `Cmd/Ctrl+S` (simpan file), `Cmd/Ctrl+Shift+V` (preview
-markdown), `Cmd/Ctrl+Shift+F` (buka panel Find), dan `Cmd/Ctrl+Shift+D` (toggle layout deep work —
-lihat di bawah).
+Shortcut shell: `Cmd/Ctrl+P` (Quick Open), `Cmd/Ctrl+L` (seleksi di editor/preview → dialog
+tambah ke chat), `Cmd/Ctrl+S` (simpan file), `Cmd/Ctrl+Shift+V` (preview markdown),
+`Cmd/Ctrl+Shift+F` (buka panel Find), dan `Cmd/Ctrl+Shift+D` (toggle layout deep work — lihat di
+bawah).
 
 ## Area utama (`TabsBar`)
 

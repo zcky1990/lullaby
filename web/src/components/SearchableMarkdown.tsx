@@ -3,6 +3,7 @@ import { ChevronDown, ChevronUp, Search, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import MarkdownView from "@/components/MarkdownView";
 import { registerFinder } from "@/lib/find";
+import { registerSelectionProvider } from "@/lib/selection-to-chat";
 import { cn } from "@/lib/utils";
 
 interface Props {
@@ -142,6 +143,26 @@ export default function SearchableMarkdown({
         inputRef.current?.select();
       });
       return true;
+    });
+  }, []);
+
+  useEffect(() => {
+    return registerSelectionProvider(() => {
+      const root = rootRef.current;
+      if (!root?.isConnected) return null;
+      const rect = root.getBoundingClientRect();
+      if (rect.width < 8 || rect.height < 8) return null;
+      const sel = window.getSelection();
+      if (!sel || sel.isCollapsed || sel.rangeCount === 0) return null;
+      const range = sel.getRangeAt(0);
+      if (!root.contains(range.commonAncestorContainer)) return null;
+      const text = sel.toString();
+      if (!text.trim()) return null;
+      return {
+        text,
+        focused: root.contains(document.activeElement) ||
+          root.contains(range.commonAncestorContainer),
+      };
     });
   }, []);
 

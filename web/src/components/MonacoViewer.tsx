@@ -10,6 +10,7 @@ import { languageForPath } from "@/lib/languages";
 import { EDITOR_FONT_STACKS, useTheme } from "@/components/ThemeProvider";
 import { registerFinder } from "@/lib/find";
 import { fileUri, type LspStatusEvent } from "@/lib/lsp";
+import { registerSelectionProvider } from "@/lib/selection-to-chat";
 
 export interface MonacoLspConfig {
   projectId: string;
@@ -98,6 +99,26 @@ export default function MonacoViewer({
       return true;
     });
   }, [editorReady]);
+
+  useEffect(() => {
+    if (!editorReady) return;
+    return registerSelectionProvider(() => {
+      const editor = editorRef.current;
+      const dom = editor?.getDomNode();
+      if (!editor || !dom?.isConnected) return null;
+      const rect = dom.getBoundingClientRect();
+      if (rect.width < 8 || rect.height < 8) return null;
+      const selection = editor.getSelection();
+      if (!selection || selection.isEmpty()) return null;
+      const text = editor.getModel()?.getValueInRange(selection) ?? "";
+      if (!text.trim()) return null;
+      return {
+        text,
+        focused: editor.hasTextFocus() || dom.contains(document.activeElement),
+        sourceLabel: path,
+      };
+    });
+  }, [editorReady, path]);
 
   useEffect(() => {
     let disposed = false;

@@ -52,6 +52,10 @@ import {
   type SkillInfo,
 } from "@/lib/api";
 import {
+  ADD_TO_CHAT_EVENT,
+  type AddToChatDetail,
+} from "@/lib/add-to-chat-events";
+import {
   AUTO_BUILD_EVENT,
   type AutoBuildDetail,
 } from "@/lib/auto-build-events";
@@ -797,6 +801,59 @@ export function ChatSidebar({
     };
     window.addEventListener(AUTO_BUILD_EVENT, handler);
     return () => window.removeEventListener(AUTO_BUILD_EVENT, handler);
+  }, []);
+
+  useEffect(() => {
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent<AddToChatDetail>).detail;
+      if (!detail?.selection?.trim()) return;
+      const label = detail.sourceLabel?.trim() || "Seleksi";
+      const name = `Seleksi: ${label}`.slice(0, 80);
+      const body = [
+        `# Seleksi: ${label}`,
+        "",
+        "---",
+        "",
+        detail.selection.trim(),
+      ].join("\n");
+      setError(undefined);
+      setAttachments((current) => {
+        if (current.some((item) => item.type === "text" && item.name === name)) {
+          return current;
+        }
+        if (current.length >= MAX_ATTACHMENTS) {
+          setError(`Maksimal ${MAX_ATTACHMENTS} lampiran per pesan.`);
+          return current;
+        }
+        return [
+          ...current,
+          {
+            id: crypto.randomUUID(),
+            name,
+            type: "text",
+            mime: "text/markdown",
+            data: body,
+          },
+        ];
+      });
+      if (detail.prompt.trim()) {
+        setInput((current) => {
+          const next = detail.prompt.trim();
+          if (!current.trim()) return next;
+          return `${current.trim()}\n\n${next}`;
+        });
+      }
+      requestAnimationFrame(() => {
+        textareaRef.current?.focus();
+        const el = textareaRef.current;
+        if (el) {
+          const end = el.value.length;
+          el.setSelectionRange(end, end);
+        }
+      });
+    };
+    window.addEventListener(ADD_TO_CHAT_EVENT, handler);
+    return () => window.removeEventListener(ADD_TO_CHAT_EVENT, handler);
   }, []);
 
   const refreshSkills = useCallback(async () => {

@@ -23,7 +23,12 @@ import {
 } from "@/components/ui/empty";
 import { FileTreePanel } from "@/components/FileTreePanel";
 import { FindTab } from "@/components/FindTab";
+import { AddToChatDialog } from "@/components/AddToChatDialog";
 import { QuickOpen } from "@/components/QuickOpen";
+import {
+  readEditorSelection,
+  shouldIgnoreAddToChatShortcut,
+} from "@/lib/selection-to-chat";
 import { GitPanel } from "@/components/GitPanel";
 import { GitTab } from "@/components/GitTab";
 import { GlobalSettingsPanel, type GlobalSection } from "@/components/GlobalSettingsPanel";
@@ -192,6 +197,9 @@ export default function App() {
   } | null>(null);
   const [panelWidth, setPanelWidth] = useState(readPanelWidth);
   const [quickOpenOpen, setQuickOpenOpen] = useState(false);
+  const [addToChatOpen, setAddToChatOpen] = useState(false);
+  const [addToChatSelection, setAddToChatSelection] = useState("");
+  const [addToChatSource, setAddToChatSource] = useState<string | undefined>();
   const [activeLspStatus, setActiveLspStatus] = useState<LspStatusEvent>({ status: "off" });
 
   useEffect(() => {
@@ -662,6 +670,28 @@ export default function App() {
     window.addEventListener("keydown", handler, { capture: true });
     return () => window.removeEventListener("keydown", handler, { capture: true });
   }, [openSingleton]);
+
+  useEffect(() => {
+    const handler = (event: KeyboardEvent) => {
+      if (!(event.metaKey || event.ctrlKey) || event.shiftKey || event.altKey) return;
+      if (event.key.toLowerCase() !== "l") return;
+      if (shouldIgnoreAddToChatShortcut(event.target)) return;
+      const snap = readEditorSelection();
+      if (!snap?.text) return;
+      event.preventDefault();
+      event.stopPropagation();
+      const tab = tabs.find((item) => item.id === activeTabId);
+      const source = snap.sourceLabel ??
+        (tab?.kind === "file" || tab?.kind === "document"
+          ? tab.ref ?? tab.title
+          : tab?.title);
+      setAddToChatSelection(snap.text);
+      setAddToChatSource(source);
+      setAddToChatOpen(true);
+    };
+    window.addEventListener("keydown", handler, { capture: true });
+    return () => window.removeEventListener("keydown", handler, { capture: true });
+  }, [tabs, activeTabId]);
 
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
@@ -1450,6 +1480,13 @@ export default function App() {
         onOpenFile={(path) => {
           void openFile(path);
         }}
+      />
+
+      <AddToChatDialog
+        open={addToChatOpen}
+        selection={addToChatSelection}
+        sourceLabel={addToChatSource}
+        onOpenChange={setAddToChatOpen}
       />
     </div>
   );
