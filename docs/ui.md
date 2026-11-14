@@ -164,8 +164,9 @@ Mode `end` (deferred review):
   (`run.pendingChanges`, `applied: true`, semua hunk sudah `accepted`). Langkah chat menampilkan
   “Diterapkan: `<path>`”.
 - Saat run selesai, respons `done` membawa `runId`, `pendingChanges`, dan `reviewDeferred: true`.
-  Run tetap disimpan di memori (TTL 10 menit, dihitung dari `finishedAt`) supaya review masih bisa
-  dilakukan setelah jawaban selesai.
+  Run tetap di memori selama masih ada hunk belum di-settle (TTL 24 jam dari `finishedAt`); run
+  tanpa antrean review dihapus setelah 10 menit. Restart app menghapus state Review (lihat
+  `docs/improvements.md` REL-1).
 - Chat menampilkan kartu **Perubahan sudah diterapkan** (ringkasan file, mis.
   `2 file (1 baru, 1 diubah) · +12 · −3`) dengan tombol **Review & revert**; tab Review dibuat di
   latar belakang lewat event `rnd:chat-review` (tanpa merebut fokus tab aktif) dan bisa

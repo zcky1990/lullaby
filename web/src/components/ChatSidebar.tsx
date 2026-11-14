@@ -683,7 +683,10 @@ export function ChatSidebar({
       return;
     }
     setSteps([]);
-    setError(response.error);
+    setReviewOffer(null);
+    setPending(null);
+    dispatchReview(null, null);
+    setError(response.status === "error" ? response.error : "Terjadi kesalahan.");
   };
 
   const responseRef = useRef(handleResponse);

@@ -1,13 +1,23 @@
 import type { Run } from "./types.ts";
 
+/** Idle active runs (no pending review) are dropped after this. */
 export const RUN_TTL_MS = 10 * 60 * 1000;
+/**
+ * Runs that still have Keep/Revert hunks stay much longer — the Review UI
+ * promises "review anytime", and the previous 10-minute TTL caused
+ * `run_not_found` after the chat sat idle.
+ */
+export const PENDING_REVIEW_TTL_MS = 24 * 60 * 60 * 1000;
 
 export const runs = new Map<string, Run>();
 
-export function pruneRuns(): void {
-  const now = Date.now();
+export function runTtlMs(run: Run): number {
+  return run.pendingChanges.size > 0 ? PENDING_REVIEW_TTL_MS : RUN_TTL_MS;
+}
+
+export function pruneRuns(now = Date.now()): void {
   for (const [id, run] of runs) {
-    if (now - (run.finishedAt ?? run.createdAt) > RUN_TTL_MS) runs.delete(id);
+    if (now - (run.finishedAt ?? run.createdAt) > runTtlMs(run)) runs.delete(id);
   }
 }
 

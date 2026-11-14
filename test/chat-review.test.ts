@@ -9,7 +9,13 @@ import {
   prepareWriteChange,
   recordAppliedWrite,
 } from "../src/server/chat/review.ts";
-import { getRun, setRun } from "../src/server/chat/state.ts";
+import {
+  getRun,
+  PENDING_REVIEW_TTL_MS,
+  pruneRuns,
+  RUN_TTL_MS,
+  setRun,
+} from "../src/server/chat/state.ts";
 import type { PendingChange, Run, ToolCall } from "../src/server/chat/types.ts";
 
 const PROVIDER: LlmProviderRow = {
@@ -178,4 +184,51 @@ Deno.test("deferred review: repeated writes to one path produce one cumulative r
   } finally {
     await Deno.remove(root, { recursive: true });
   }
+});
+
+Deno.test("deferred review survives the short idle TTL used for finished runs", async () => {
+  const root = await Deno.makeTempDir();
+  try {
+    await Deno.writeTextFile(join(root, "note.txt"), "before\n");
+    const run = makeRun(root);
+    run.finishedAt = Date.now() - RUN_TTL_MS - 1_000;
+    setRun(run);
+    await applyDeferredWrite(run, "note.txt", "after\n");
+
+    pruneRuns(Date.now());
+    equal(getRun(run.id)?.id, run.id);
+
+    const response = await decideAllChatChanges(run.id, false);
+    equal(response.status, "done");
+    equal(await Deno.readTextFile(join(root, "note.txt")), "before\n");
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("deferred review is pruned after the long pending-review TTL", async () => {
+  const root = await Deno.makeTempDir();
+  try {
+    await Deno.writeTextFile(join(root, "note.txt"), "before\n");
+    const run = makeRun(root);
+    run.finishedAt = Date.now() - PENDING_REVIEW_TTL_MS - 1_000;
+    setRun(run);
+    await applyDeferredWrite(run, "note.txt", "after\n");
+
+    pruneRuns(Date.now());
+    equal(getRun(run.id), undefined);
+
+    const response = await decideAllChatChanges(run.id, false);
+    equal(response.status, "error");
+    equal(response.status === "error" ? response.error.includes("tidak tersedia") : false, true);
+    equal(await Deno.readTextFile(join(root, "note.txt")), "after\n");
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("decideChatChange reports a clear error when the run is gone", async () => {
+  const response = await decideChatChange("missing-run", "missing-call", 0, true);
+  equal(response.status, "error");
+  equal(response.status === "error" ? response.error.includes("tidak tersedia") : false, true);
 });

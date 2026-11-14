@@ -292,6 +292,18 @@ async function settle(run: Run): Promise<ChatResponse> {
   return await advanceFn(run);
 }
 
+function reviewMissingError(
+  code: "run_not_found" | "change_not_found" | "hunk_not_found",
+): ChatResponse {
+  const messages: Record<typeof code, string> = {
+    run_not_found: "Sesi review sudah tidak tersedia (habis waktu atau app di-restart). " +
+      "Perubahan di disk tetap ada; buka file di Explorer bila perlu dicek manual.",
+    change_not_found: "Perubahan ini sudah tidak ada di antrean review.",
+    hunk_not_found: "Hunk tidak ditemukan.",
+  };
+  return { status: "error", error: messages[code] };
+}
+
 export async function decideChatChange(
   runId: string,
   callId: string,
@@ -300,11 +312,11 @@ export async function decideChatChange(
 ): Promise<ChatResponse> {
   pruneRuns();
   const run = getRun(runId);
-  if (!run) return { status: "error", error: "run_not_found" };
+  if (!run) return reviewMissingError("run_not_found");
   const change = run.pendingChanges.get(callId);
-  if (!change) return { status: "error", error: "change_not_found" };
+  if (!change) return reviewMissingError("change_not_found");
   if (hunk < 0 || hunk >= change.hunks.length) {
-    return { status: "error", error: "hunk_not_found" };
+    return reviewMissingError("hunk_not_found");
   }
   change.decisions.set(hunk, accept);
   change.touched = true;
@@ -317,8 +329,8 @@ export async function decideAllChatChanges(
 ): Promise<ChatResponse> {
   pruneRuns();
   const run = getRun(runId);
-  if (!run) return { status: "error", error: "run_not_found" };
-  if (run.pendingChanges.size === 0) return { status: "error", error: "change_not_found" };
+  if (!run) return reviewMissingError("run_not_found");
+  if (run.pendingChanges.size === 0) return reviewMissingError("change_not_found");
   for (const change of run.pendingChanges.values()) {
     for (let index = 0; index < change.hunks.length; index++) {
       change.decisions.set(index, accept);

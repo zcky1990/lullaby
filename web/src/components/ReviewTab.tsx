@@ -25,12 +25,13 @@ export function ReviewTab({
   const [error, setError] = useState<string | undefined>();
   const applied = isAppliedReview(changes);
 
-  const decide = async (callId: string, hunk: number, accept: boolean) => {
+  const applyDecision = async (work: () => Promise<Awaited<ReturnType<typeof api.chatChange>>>) => {
     setBusy(true);
     setError(undefined);
     try {
-      const response = await api.chatChange({ runId, callId, hunk, accept });
+      const response = await work();
       dispatchChatResponse(response);
+      if (response.status === "error") setError(response.error);
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -38,18 +39,10 @@ export function ReviewTab({
     }
   };
 
-  const decideAll = async (accept: boolean) => {
-    setBusy(true);
-    setError(undefined);
-    try {
-      const response = await api.chatChangeAll({ runId, accept });
-      dispatchChatResponse(response);
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  };
+  const decide = (callId: string, hunk: number, accept: boolean) =>
+    applyDecision(() => api.chatChange({ runId, callId, hunk, accept }));
+
+  const decideAll = (accept: boolean) => applyDecision(() => api.chatChangeAll({ runId, accept }));
 
   if (changes.length === 0) {
     return (
