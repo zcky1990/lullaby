@@ -41,9 +41,9 @@ finishing a change.
   (`rnd.layout:v1`) and sets `data-layout` on `<html>`; `web/src/focus-layout.css` hides the
   activity bar, left panel, `TabsBar`, and status bar so only the tab area + chat remain. Read it
   through `web/src/hooks/useLayoutMode.ts` (mounted from `WindowToolbar`; also opens chat and
-  focuses the ticket board). Toggle: toolbar button or `Cmd/Ctrl+Shift+F`
-  (`installLayoutShortcut` in `web/src/main.tsx`, registered before React so it wins over the old
-  Find binding). Settings UI: Global Settings → Appearance → **Layout** (`LayoutSettings.tsx`).
+  focuses the ticket board). Toggle: toolbar button or `Cmd/Ctrl+Shift+D`
+  (`installLayoutShortcut` in `web/src/main.tsx`). Settings UI: Global Settings → Appearance →
+  **Layout** (`LayoutSettings.tsx`).
 - **Documents**: `DocumentPanel` switches between **Local** (`.md` files under
   `projects.document_path`), **Docmost**, **Notion**, and **Confluence Cloud**. Remote sources use
   `GET /documents?source=` / `GET /documents/:pageId?source=` (`docmost` default). Notion auth is
@@ -157,8 +157,8 @@ finishing a change.
 - **Search**: `Cmd/Ctrl+P` opens `QuickOpen` (fuzzy file-name palette) backed by
   `GET /api/projects/:id/files/index`; the **Find** activity item opens a `FindTab` for workspace
   text search (`GET .../files/find?q=&case=&regex=`) and opens results at the matching line.
-  `Cmd/Ctrl+Shift+F` is reserved for the deep-work layout (see above); `Cmd/Ctrl+F` keeps Monaco's
-  in-file find. Backend helpers live in `src/fs/workspace.ts`; tests in `test/files.test.ts`.
+  `Cmd/Ctrl+Shift+F` opens Find; `Cmd/Ctrl+F` keeps Monaco's in-file find. Backend helpers live in
+  `src/fs/workspace.ts`; tests in `test/files.test.ts`.
 - UI build outputs are embedded (`scripts/build-assets.ts` -> `src/ui/assets.generated.ts`) so the
   desktop binary is self-contained; never read UI files from disk at runtime.
 - Integration credentials (API token/key) are entered as normal text and stored **encrypted at

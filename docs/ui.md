@@ -22,7 +22,8 @@ File dan dokumen terbuka sebagai **tab dinamis**. Menu Workspace / Ticket / Sett
 membuka **singleton tab**.
 
 Shortcut shell: `Cmd/Ctrl+P` (Quick Open), `Cmd/Ctrl+S` (simpan file), `Cmd/Ctrl+Shift+V` (preview
-markdown), dan `Cmd/Ctrl+Shift+F` (toggle layout deep work — lihat di bawah).
+markdown), `Cmd/Ctrl+Shift+F` (buka panel Find), dan `Cmd/Ctrl+Shift+D` (toggle layout deep work —
+lihat di bawah).
 
 ## Area utama (`TabsBar`)
 
@@ -50,8 +51,8 @@ Mode tampilan minimal untuk sesi fokus panjang: hanya area tab (Kanban) + chat s
 - State: `web/src/lib/layout-mode.ts` (`standard` | `focus`, localStorage `rnd.layout:v1`), dibaca
   komponen lewat `web/src/hooks/useLayoutMode.ts` (`useSyncExternalStore`).
 - Toggle: tombol **deep work** di `WindowToolbar` (ikon maximize/minimize) atau
-  `Cmd/Ctrl+Shift+F` (`installLayoutShortcut`, didaftarkan di `web/src/main.tsx` sebelum React
-  mount dan memakai `stopImmediatePropagation` sehingga menang atas handler lama Find).
+  `Cmd/Ctrl+Shift+D` (`installLayoutShortcut`, didaftarkan di `web/src/main.tsx` sebelum React
+  mount).
 - Saat aktif: `data-layout="focus"` dipasang di `<html>`; `web/src/focus-layout.css` menyembunyikan
   activity bar, panel kiri (semua `aside` kecuali chat), `TabsBar`, dan status bar. Chat dibuka
   otomatis (`rnd:chat-open-request`) dan tab Ticket difokuskan lewat item activity bar yang sama

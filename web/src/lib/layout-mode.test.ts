@@ -70,12 +70,12 @@ describe("activateTicketBoard", () => {
 });
 
 describe("installLayoutShortcut", () => {
-  it("toggles the layout on Cmd/Ctrl+Shift+F and swallows the event", () => {
+  it("toggles the layout on Cmd/Ctrl+Shift+D and swallows the event", () => {
     const uninstall = installLayoutShortcut();
     const later = vi.fn();
     window.addEventListener("keydown", later, { capture: true });
     const event = new KeyboardEvent("keydown", {
-      key: "f",
+      key: "d",
       metaKey: true,
       shiftKey: true,
       cancelable: true,
@@ -88,11 +88,20 @@ describe("installLayoutShortcut", () => {
 
     window.removeEventListener("keydown", later, { capture: true });
     uninstall();
-    expect(LAYOUT_SHORTCUT).toBe("Cmd/Ctrl+Shift+F");
+    expect(LAYOUT_SHORTCUT).toBe("Cmd/Ctrl+Shift+D");
   });
 
-  it("ignores other shortcuts", () => {
+  it("ignores Find's Cmd/Ctrl+Shift+F and plain Cmd/Ctrl+F", () => {
     const uninstall = installLayoutShortcut();
+    window.dispatchEvent(
+      new KeyboardEvent("keydown", {
+        key: "f",
+        metaKey: true,
+        shiftKey: true,
+        cancelable: true,
+      }),
+    );
+    expect(readLayoutMode()).toBe("standard");
     window.dispatchEvent(
       new KeyboardEvent("keydown", { key: "f", metaKey: true, cancelable: true }),
     );

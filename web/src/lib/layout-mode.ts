@@ -68,16 +68,16 @@ export function activateTicketBoard(doc: Document = document): boolean {
   return true;
 }
 
-export const LAYOUT_SHORTCUT = "Cmd/Ctrl+Shift+F";
+/** Deep-work layout. `Cmd/Ctrl+Shift+F` is reserved for workspace Find. */
+export const LAYOUT_SHORTCUT = "Cmd/Ctrl+Shift+D";
 
 /**
- * `Cmd/Ctrl+Shift+F` toggles the layout. Registered before React mounts and with
- * `stopImmediatePropagation` so it wins over the shell's Find shortcut.
+ * `Cmd/Ctrl+Shift+D` toggles the deep-work layout. Registered before React mounts.
  */
 export function installLayoutShortcut(): () => void {
   const handler = (event: KeyboardEvent) => {
     if (!(event.metaKey || event.ctrlKey) || !event.shiftKey || event.altKey) return;
-    if (event.key.toLowerCase() !== "f") return;
+    if (event.key.toLowerCase() !== "d") return;
     event.preventDefault();
     event.stopImmediatePropagation();
     toggleLayoutMode();
