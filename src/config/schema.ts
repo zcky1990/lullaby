@@ -214,6 +214,18 @@ export const CreateWorkspacePathInput = z.object({
 });
 export type CreateWorkspacePathInput = z.infer<typeof CreateWorkspacePathInput>;
 
+export const DeleteWorkspacePathInput = z.object({
+  path: z.string().trim().min(1).max(1000),
+});
+export type DeleteWorkspacePathInput = z.infer<typeof DeleteWorkspacePathInput>;
+
+export const TransferWorkspacePathInput = z.object({
+  from: z.string().trim().min(1).max(1000),
+  parent: z.string().trim().max(1000).optional().default(""),
+  name: z.string().trim().min(1).max(255).optional(),
+});
+export type TransferWorkspacePathInput = z.infer<typeof TransferWorkspacePathInput>;
+
 export const GenerateTicketsInput = z.object({
   title: z.string().trim().min(1).max(200),
   content: z.string().max(200_000),

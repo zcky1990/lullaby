@@ -62,25 +62,23 @@ Mode tampilan minimal untuk sesi fokus panjang: hanya area tab (Kanban) + chat s
 - Default `standard`; nilai disimpan lokal per mesin (tidak ikut export/import config).
 - Section pengaturan: **Global Settings → Appearance → Layout**. Tests: `web/src/lib/layout-mode.test.ts`.
 
-## Explorer — penanda file belum disimpan
+## Explorer — penanda perubahan & context menu
 
-Tab editor file punya flag `dirty` (di-set saat Monaco `onChange`, dibersihkan saat simpan).
-Explorer memakai flag itu untuk menandai file yang belum disimpan:
+Explorer menandai dua jenis perubahan:
 
-- Nama file dirender `font-semibold` + `text-foreground` (ikon file ikut lebih terang) dan diberi
-  dot kecil `bg-primary` di kanan; tooltip menjadi `nama — belum disimpan` plus teks `sr-only`
-  “(belum disimpan)” untuk pembaca layar. Folder tidak pernah ditandai.
-- Penanda otomatis hilang setelah `Cmd|Ctrl+S` / tombol **Simpan** (`patchTab { dirty: false }`)
-  atau setelah isi file dibaca ulang dari disk (mis. `openFile(path, true)` dari daftar perubahan
-  chat).
-- Sumber data: `web/src/lib/dirty-paths.ts` (`collectDirtyPaths` → `Set<path>`, `isDirtyPath` untuk
-  pencocokan, plus store kecil `publishDirtyPaths` / `subscribeDirtyPaths`).
-- `useEditorTabs` mempublikasikan ringkasan path dirty setiap daftar tab berubah; `FileTreePanel`
-  berlangganan lewat `web/src/hooks/useDirtyPaths.ts` (`useSyncExternalStore`), jadi tidak perlu
-  prop dari `App.tsx`. Prop `dirtyPaths` masih tersedia sebagai override (mis. untuk test).
-- Perbandingan path dinormalkan (`\` → `/`, prefix `./` dibuang). Path relatif dan absolut
-  dicocokkan lewat suffix hanya bila tingkatannya berbeda, sehingga `src/a.ts` tidak dianggap sama
-  dengan `lib/src/a.ts`.
+1. **Belum disimpan (dirty)** — tab editor dengan isi Monaco berbeda dari disk (`dirty-paths.ts`).
+   File: `font-semibold` + dot `bg-primary`. Folder induk ikut lebih terang bila ada anak dirty.
+2. **Git** — dari `gitStatus` (dimuat saat panel Explorer/Git dibuka). Modified = biru (`M`),
+   untracked/baru = amber (`U`). Folder induk mewarisi warna bila berisi file berubah
+   (`explorer-marks.ts`).
+
+Klik kanan (context menu):
+
+- **File baru** / **Folder baru** (juga di toolbar)
+- **Cut** / **Copy** / **Paste** (clipboard in-app; Paste ke folder yang diklik atau root)
+- **Delete** (konfirmasi; file atau folder rekursif)
+
+API: `POST /files` create, `DELETE /files` hapus, `POST /files/move`, `POST /files/copy`.
 
 ## Chat sidebar
 

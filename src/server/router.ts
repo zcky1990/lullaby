@@ -9,6 +9,7 @@ import {
   ConfluenceConfig,
   CreateDocumentInput,
   CreateWorkspacePathInput,
+  DeleteWorkspacePathInput,
   DocmostConfig,
   DocumentSource,
   type DocumentSource as DocumentSourceType,
@@ -36,6 +37,7 @@ import {
   ProjectUpdateInput,
   type TicketProvider,
   TicketTransitionInput,
+  TransferWorkspacePathInput,
   UpdateDocumentInput,
   UpdateFileInput,
 } from "../config/schema.ts";
@@ -105,13 +107,17 @@ import {
   unstagePaths as gitUnstage,
 } from "../integrations/git.ts";
 import {
+  copyWorkspacePath,
   createWorkspaceDir,
   createWorkspaceFile,
   findInWorkspace,
   joinWorkspacePath,
   listDirectory,
   listWorkspaceFiles,
+  moveWorkspacePath,
   readWorkspaceFile,
+  removeWorkspacePath,
+  workspaceBasename,
   writeWorkspaceFile,
 } from "../fs/workspace.ts";
 import {
@@ -350,6 +356,56 @@ async function createPathHandler(projectId: string, req: Request): Promise<Respo
     await createWorkspaceFile(project.workspace_path, path, parsed.data.content ?? "");
     await record("file.created", { projectId, path });
     return json({ ok: true, type: "file", path }, 201);
+  } catch (error) {
+    return json({ error: (error as Error).message }, 400);
+  }
+}
+
+async function deletePathHandler(projectId: string, req: Request): Promise<Response> {
+  const project = await getProject(projectId);
+  if (!project) return json({ error: "project_not_found" }, 404);
+  if (!project.workspace_path) return json({ error: "no_workspace" }, 400);
+
+  const parsed = DeleteWorkspacePathInput.safeParse(await readJson(req));
+  if (!parsed.success) {
+    return json({ error: "invalid_input", issues: parsed.error.issues }, 400);
+  }
+
+  try {
+    await removeWorkspacePath(project.workspace_path, parsed.data.path);
+    await record("file.deleted", { projectId, path: parsed.data.path });
+    return json({ ok: true, path: parsed.data.path });
+  } catch (error) {
+    return json({ error: (error as Error).message }, 400);
+  }
+}
+
+async function transferPathHandler(
+  projectId: string,
+  req: Request,
+  mode: "move" | "copy",
+): Promise<Response> {
+  const project = await getProject(projectId);
+  if (!project) return json({ error: "project_not_found" }, 404);
+  if (!project.workspace_path) return json({ error: "no_workspace" }, 400);
+
+  const parsed = TransferWorkspacePathInput.safeParse(await readJson(req));
+  if (!parsed.success) {
+    return json({ error: "invalid_input", issues: parsed.error.issues }, 400);
+  }
+
+  try {
+    const name = parsed.data.name?.trim() || workspaceBasename(parsed.data.from);
+    const to = joinWorkspacePath(parsed.data.parent ?? "", name);
+    const path = mode === "move"
+      ? await moveWorkspacePath(project.workspace_path, parsed.data.from, to)
+      : await copyWorkspacePath(project.workspace_path, parsed.data.from, to);
+    await record(mode === "move" ? "file.moved" : "file.copied", {
+      projectId,
+      from: parsed.data.from,
+      path,
+    });
+    return json({ ok: true, mode, from: parsed.data.from, path });
   } catch (error) {
     return json({ error: (error as Error).message }, 400);
   }
@@ -1987,6 +2043,19 @@ export async function handleRequest(req: Request): Promise<Response> {
     }
     if (files && method === "POST") {
       return await createPathHandler(files[1], req);
+    }
+    if (files && method === "DELETE") {
+      return await deletePathHandler(files[1], req);
+    }
+
+    const fileMove = pathname.match(/^\/api\/projects\/([^/]+)\/files\/move$/);
+    if (fileMove && method === "POST") {
+      return await transferPathHandler(fileMove[1], req, "move");
+    }
+
+    const fileCopy = pathname.match(/^\/api\/projects\/([^/]+)\/files\/copy$/);
+    if (fileCopy && method === "POST") {
+      return await transferPathHandler(fileCopy[1], req, "copy");
     }
 
     const fileIndex = pathname.match(/^\/api\/projects\/([^/]+)\/files\/index$/);

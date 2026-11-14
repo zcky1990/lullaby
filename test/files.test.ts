@@ -1,11 +1,16 @@
 import { deepEqual, equal, rejects } from "node:assert/strict";
 import { join } from "node:path";
 import {
+  copyWorkspacePath,
   createWorkspaceDir,
   createWorkspaceFile,
   findInWorkspace,
   joinWorkspacePath,
   listWorkspaceFiles,
+  moveWorkspacePath,
+  removeWorkspacePath,
+  workspaceBasename,
+  workspaceParentPath,
 } from "../src/fs/workspace.ts";
 
 const dir = await Deno.makeTempDir();
@@ -79,6 +84,30 @@ Deno.test("createWorkspaceFile and createWorkspaceDir", async () => {
   equal(createdDir, "src/feature");
   equal((await Deno.stat(join(dir, "src", "feature"))).isDirectory, true);
   await rejects(() => createWorkspaceDir(dir, "src/feature"), /sudah ada/);
+});
+
+Deno.test("move/copy/delete workspace paths", async () => {
+  equal(workspaceBasename("src/app.ts"), "app.ts");
+  equal(workspaceParentPath("src/app.ts"), "src");
+
+  await Deno.writeTextFile(join(dir, "src", "move-me.ts"), "move\n");
+  const moved = await moveWorkspacePath(dir, "src/move-me.ts", "src/feature/moved.ts");
+  equal(moved, "src/feature/moved.ts");
+  equal(await Deno.readTextFile(join(dir, "src", "feature", "moved.ts")), "move\n");
+  await rejects(() => Deno.stat(join(dir, "src", "move-me.ts")));
+
+  const copied = await copyWorkspacePath(dir, "src/feature", "src/feature-copy");
+  equal(copied, "src/feature-copy");
+  equal(await Deno.readTextFile(join(dir, "src", "feature-copy", "moved.ts")), "move\n");
+
+  await rejects(
+    () => moveWorkspacePath(dir, "src/feature", "src/feature/nested"),
+    /dirinya sendiri/,
+  );
+
+  await removeWorkspacePath(dir, "src/feature-copy");
+  await rejects(() => Deno.stat(join(dir, "src", "feature-copy")));
+  await rejects(() => removeWorkspacePath(dir, ""), /root workspace/);
 });
 
 Deno.test("workspace search cleanup", async () => {

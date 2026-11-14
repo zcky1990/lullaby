@@ -838,7 +838,7 @@ export default function App() {
       loadLocalDocuments(currentId).catch(console.error);
     }
     if (menu === "ticket") loadTickets(currentId).catch(console.error);
-    if (menu === "git") loadGit(currentId).catch(console.error);
+    if (menu === "git" || menu === "files") loadGit(currentId).catch(console.error);
     if (menu === "workflow" || menu === "cron") {
       loadWorkflows(currentId).catch(console.error);
     }
@@ -1266,7 +1266,11 @@ export default function App() {
             <FileTreePanel
               projectId={currentId}
               selectedPath={activeTab?.kind === "file" ? activeTab.ref ?? null : null}
+              gitStatus={gitStatusData}
               onOpenFile={openFile}
+              onWorkspaceChange={() => {
+                if (currentId) loadGit(currentId).catch(console.error);
+              }}
             />
           )}
           {menu === "find" && (

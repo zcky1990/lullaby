@@ -81,6 +81,9 @@ Field yang tidak dikirim saat `PUT` mempertahankan nilai tersimpan.
 | ------ | ---------------------------------------------- | ---------------------------------------------- |
 | `GET`  | `/api/projects/:id/files?path=`                | List directory                                 |
 | `POST` | `/api/projects/:id/files`                      | Buat file/folder `{ type, parent?, name }`     |
+| `DELETE` | `/api/projects/:id/files`                    | Hapus file/folder `{ path }`                   |
+| `POST` | `/api/projects/:id/files/move`                 | Pindah/rename `{ from, parent?, name? }`       |
+| `POST` | `/api/projects/:id/files/copy`                 | Salin `{ from, parent?, name? }`                |
 | `GET`  | `/api/projects/:id/files/index`                | Indeks semua file workspace (untuk Quick Open) |
 | `GET`  | `/api/projects/:id/files/find?q=&case=&regex=` | Cari teks di file workspace                    |
 | `GET`  | `/api/projects/:id/files/content?path=`        | Baca file                                      |

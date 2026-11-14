@@ -5,6 +5,7 @@ import {
   ChatInput,
   ChatToolsSettingsInput,
   CreateWorkspacePathInput,
+  DeleteWorkspacePathInput,
   GenerateTicketsInput,
   GitCloneInput,
   JiraConfig,
@@ -16,6 +17,7 @@ import {
   RoleInput,
   TerminalSettingsInput,
   TicketTransitionInput,
+  TransferWorkspacePathInput,
   UpdateFileInput,
 } from "../src/config/schema.ts";
 import {
@@ -453,6 +455,14 @@ Deno.test("CreateWorkspacePathInput validates file and dir creates", () => {
   const dir = CreateWorkspacePathInput.parse({ type: "dir", name: "feature" });
   equal(dir.parent, "");
   throws(() => CreateWorkspacePathInput.parse({ type: "file", name: "" }));
+});
+
+Deno.test("Delete/TransferWorkspacePathInput validate explorer mutations", () => {
+  equal(DeleteWorkspacePathInput.parse({ path: " src/a.ts " }).path, "src/a.ts");
+  throws(() => DeleteWorkspacePathInput.parse({ path: "" }));
+  const moved = TransferWorkspacePathInput.parse({ from: "src/a.ts", parent: " lib " });
+  equal(moved.parent, "lib");
+  equal(moved.name, undefined);
 });
 
 Deno.test("LocalTicketUpdateInput allows clearing priority", () => {

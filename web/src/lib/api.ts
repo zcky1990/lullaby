@@ -780,6 +780,27 @@ export const api = {
       `/api/projects/${projectId}/files`,
       jsonInit("POST", payload),
     ),
+  deletePath: (projectId: string, path: string) =>
+    request<{ ok: boolean; path: string }>(
+      `/api/projects/${projectId}/files`,
+      jsonInit("DELETE", { path }),
+    ),
+  movePath: (
+    projectId: string,
+    payload: { from: string; parent?: string; name?: string },
+  ) =>
+    request<{ ok: boolean; mode: "move"; from: string; path: string }>(
+      `/api/projects/${projectId}/files/move`,
+      jsonInit("POST", payload),
+    ),
+  copyPath: (
+    projectId: string,
+    payload: { from: string; parent?: string; name?: string },
+  ) =>
+    request<{ ok: boolean; mode: "copy"; from: string; path: string }>(
+      `/api/projects/${projectId}/files/copy`,
+      jsonInit("POST", payload),
+    ),
   projectDetail: (id: string) => request<ProjectDetail>(`/api/projects/${id}`),
   listDocuments: (projectId: string, pageId?: string, source: DocumentSource = "docmost") => {
     const params = new URLSearchParams({ source });

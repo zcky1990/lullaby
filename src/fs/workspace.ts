@@ -200,6 +200,100 @@ export async function createWorkspaceDir(root: string, rel: string): Promise<str
   return rel.replace(/\\/g, "/");
 }
 
+function normalizeRel(rel: string): string {
+  return rel.trim().replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
+}
+
+export function workspaceBasename(rel: string): string {
+  const path = normalizeRel(rel);
+  const index = path.lastIndexOf("/");
+  return index < 0 ? path : path.slice(index + 1);
+}
+
+export function workspaceParentPath(rel: string): string {
+  const path = normalizeRel(rel);
+  const index = path.lastIndexOf("/");
+  return index <= 0 ? "" : path.slice(0, index);
+}
+
+function isSameOrDescendant(ancestor: string, path: string): boolean {
+  const root = normalizeRel(ancestor);
+  const target = normalizeRel(path);
+  if (!root) return true;
+  return target === root || target.startsWith(`${root}/`);
+}
+
+async function pathExists(abs: string): Promise<boolean> {
+  return await Deno.stat(abs).then(() => true).catch(() => false);
+}
+
+async function copyEntry(fromAbs: string, toAbs: string): Promise<void> {
+  const stat = await Deno.stat(fromAbs);
+  if (stat.isDirectory) {
+    await Deno.mkdir(toAbs, { recursive: true });
+    for await (const entry of Deno.readDir(fromAbs)) {
+      await copyEntry(joinChild(fromAbs, entry.name), joinChild(toAbs, entry.name));
+    }
+    return;
+  }
+  if (!stat.isFile) throw new Error("Tipe entri tidak didukung.");
+  await Deno.mkdir(dirname(toAbs), { recursive: true });
+  await Deno.copyFile(fromAbs, toAbs);
+}
+
+export async function removeWorkspacePath(root: string, rel: string): Promise<void> {
+  const path = normalizeRel(rel);
+  if (!path) throw new Error("Tidak bisa menghapus root workspace.");
+  const target = resolveWithin(root, path);
+  if (!target) throw new Error("Path di luar workspace.");
+  const stat = await Deno.stat(target).catch(() => null);
+  if (!stat) throw new Error("File atau folder tidak ditemukan.");
+  await Deno.remove(target, { recursive: true });
+}
+
+export async function moveWorkspacePath(
+  root: string,
+  fromRel: string,
+  toRel: string,
+): Promise<string> {
+  const from = normalizeRel(fromRel);
+  const to = normalizeRel(toRel);
+  if (!from || !to) throw new Error("Path sumber/tujuan wajib diisi.");
+  if (from === to) return to;
+  if (isSameOrDescendant(from, to)) {
+    throw new Error("Tidak bisa memindahkan folder ke dalam dirinya sendiri.");
+  }
+  const fromAbs = resolveWithin(root, from);
+  const toAbs = resolveWithin(root, to);
+  if (!fromAbs || !toAbs) throw new Error("Path di luar workspace.");
+  if (!(await pathExists(fromAbs))) throw new Error("File atau folder tidak ditemukan.");
+  if (await pathExists(toAbs)) throw new Error("Tujuan sudah ada.");
+  await Deno.mkdir(dirname(toAbs), { recursive: true });
+  await Deno.rename(fromAbs, toAbs);
+  return to;
+}
+
+export async function copyWorkspacePath(
+  root: string,
+  fromRel: string,
+  toRel: string,
+): Promise<string> {
+  const from = normalizeRel(fromRel);
+  const to = normalizeRel(toRel);
+  if (!from || !to) throw new Error("Path sumber/tujuan wajib diisi.");
+  if (from === to) throw new Error("Sumber dan tujuan sama.");
+  if (isSameOrDescendant(from, to)) {
+    throw new Error("Tidak bisa menyalin folder ke dalam dirinya sendiri.");
+  }
+  const fromAbs = resolveWithin(root, from);
+  const toAbs = resolveWithin(root, to);
+  if (!fromAbs || !toAbs) throw new Error("Path di luar workspace.");
+  if (!(await pathExists(fromAbs))) throw new Error("File atau folder tidak ditemukan.");
+  if (await pathExists(toAbs)) throw new Error("Tujuan sudah ada.");
+  await copyEntry(fromAbs, toAbs);
+  return to;
+}
+
 export interface WorkspaceFileIndex {
   files: string[];
   truncated: boolean;
