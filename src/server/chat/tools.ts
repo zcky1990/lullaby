@@ -118,6 +118,12 @@ export const CHAT_TOOL_CATALOG: ChatToolCatalogEntry[] = [
     description: "Load the full instructions of an available skill by name (read-only).",
     requiresApproval: false,
   },
+  {
+    name: "spawn_agent",
+    description:
+      "Delegate a focused sub-task to a child agent (depth 1). Returns a summary JSON result.",
+    requiresApproval: false,
+  },
 ];
 
 const TOOL_DEFS: ToolDef[] = [
@@ -358,6 +364,43 @@ const USE_SKILL_TOOL: ToolDef = {
   },
 };
 
+export const SPAWN_AGENT_TOOL_NAME = "spawn_agent";
+
+const SPAWN_AGENT_TOOL: ToolDef = {
+  name: SPAWN_AGENT_TOOL_NAME,
+  description:
+    "Delegate a focused sub-task to a child agent in the same workspace. Use for isolated " +
+    "investigation or a bounded edit. Do not use for the whole user request. Returns JSON with " +
+    "message, filesTouched, createdTickets, and toolLog. Nested spawn_agent is not allowed.",
+  parameters: {
+    type: "object",
+    properties: {
+      prompt: {
+        type: "string",
+        description: "Clear instructions for the child agent.",
+      },
+      mode: {
+        type: "string",
+        enum: ["plan", "build"],
+        description: "Child mode (default: same as parent).",
+      },
+      roleId: {
+        type: "string",
+        description: "Optional role id (persona + optional provider).",
+      },
+      skillName: {
+        type: "string",
+        description: "Optional skill name to inject into the child system prompt.",
+      },
+      maxSteps: {
+        type: "number",
+        description: "Child step budget (1–50, default 20).",
+      },
+    },
+    required: ["prompt"],
+  },
+};
+
 const TICKET_STATUSES = ["Backlog", "To Do", "In Progress", "Test", "Done"] as const;
 const TICKET_PRIORITIES = ["Low", "Medium", "High", "Urgent"] as const;
 const TICKET_TYPES = ["Task", "Bug", "Story"] as const;
@@ -375,15 +418,22 @@ export const WRITE_TOOLS = new Set(["write_file"]);
 
 const MAX_TOOL_RESULT = 60_000;
 
+export interface ToolsForOptions {
+  /** Interactive chat parent only. Headless/child must pass false. */
+  allowSpawnAgent?: boolean;
+}
+
 export function toolsFor(
   workspace: string | null,
   mode: "plan" | "build",
   hasSkills: boolean,
   disabledTools: ReadonlySet<string> = new Set(),
+  options: ToolsForOptions = {},
 ): ToolDef[] {
   const tools: ToolDef[] = [];
   if (hasSkills) tools.push(USE_SKILL_TOOL);
   tools.push(...DOC_READ_TOOLS, ...TICKET_READ_TOOLS);
+  if (options.allowSpawnAgent) tools.push(SPAWN_AGENT_TOOL);
   if (mode === "plan") {
     return tools.filter((tool) => !disabledTools.has(tool.name));
   }
@@ -403,6 +453,9 @@ export async function applyWriteFile(workspace: string, call: ToolCall): Promise
 
 export async function executeTool(run: Run, call: ToolCall): Promise<string> {
   const args = safeParse(call.arguments);
+  if (call.name === SPAWN_AGENT_TOOL_NAME) {
+    return "spawn_agent harus dijalankan lewat agent loop (bukan executeTool langsung).";
+  }
   if (isMcpChatTool(call.name)) {
     const binding = run.mcpTools.get(call.name);
     if (!binding) return `Unknown MCP tool: ${call.name}`;

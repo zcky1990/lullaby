@@ -57,6 +57,13 @@ export function describeToolCall(call: ToolCall): string {
       return "Mengubah status tiket";
     case "use_skill":
       return typeof args.name === "string" ? `Memuat skill ${args.name}` : "Memuat skill";
+    case "spawn_agent": {
+      const prompt = typeof args.prompt === "string" ? args.prompt.replace(/\s+/g, " ") : "";
+      if (!prompt) return "Menjalankan subagent";
+      return prompt.length > 60
+        ? `Subagent: ${prompt.slice(0, 60)}…`
+        : `Subagent: ${prompt}`;
+    }
     default:
       return call.name.startsWith("mcp_") ? `Menjalankan tool MCP ${call.name}` : call.name;
   }

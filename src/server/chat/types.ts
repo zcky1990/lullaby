@@ -138,6 +138,12 @@ export interface Run {
   abort?: AbortController;
   cancelled?: boolean;
   allowedTools?: Set<string>;
+  /** Present on ephemeral child runs created by spawn_agent. */
+  parentRunId?: string;
+  /** Child run ids spawned from this parent (in-flight + finished this turn). */
+  childRunIds?: string[];
+  /** Concurrent in-flight spawn_agent count on this parent. */
+  activeSubagentCount?: number;
   pendingPermission?: {
     id: string;
     toolName: string;

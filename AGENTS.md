@@ -69,7 +69,9 @@ finishing a change.
   first launch `installDefaultSkills()` copies `docmost-api`, `jira-api`, `confluence-api`, and
   `clickup-api` into the global skills dir (guarded by `app_settings.skills_defaults_installed`).
   Chat injects the skill list into the system prompt and exposes a read-only `use_skill` tool
-  (progressive disclosure; allowed in Plan mode). After each successful Build run that used tools,
+  (progressive disclosure; allowed in Plan mode). Interactive chat (non-Cursor) also exposes
+  `spawn_agent` for depth-1 child agents (`src/server/chat/subagent.ts`); child writes merge into
+  the parent Review queue; headless/workflow agents do not get this tool. After each successful Build run that used tools,
   `src/server/chat/skill-learn.ts` writes a deterministic project skill. Chat composer supports
   `/skill-name` (autocomplete + `skillName` on `POST .../chat`) which injects the skill body into
   the system prompt. Builtin `/code-review` forces Plan mode and prepends git status/diff context

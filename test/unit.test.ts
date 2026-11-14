@@ -851,6 +851,11 @@ Deno.test("toolsFor filters disabled tools and plan/build membership", () => {
   equal(all.some((tool) => tool.name === "use_skill"), true);
   equal(all.some((tool) => tool.name === "list_documents"), true);
   equal(all.some((tool) => tool.name === "sync_ticket"), true);
+  equal(all.some((tool) => tool.name === "spawn_agent"), false);
+  const withSpawn = toolsFor("/tmp/ws", "build", true, new Set(), { allowSpawnAgent: true });
+  equal(withSpawn.some((tool) => tool.name === "spawn_agent"), true);
+  const planSpawn = toolsFor("/tmp/ws", "plan", true, new Set(), { allowSpawnAgent: true });
+  equal(planSpawn.some((tool) => tool.name === "spawn_agent"), true);
   const filtered = toolsFor(
     "/tmp/ws",
     "build",

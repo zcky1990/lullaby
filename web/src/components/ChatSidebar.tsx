@@ -1231,7 +1231,14 @@ export function ChatSidebar({
                 ? (
                   <div className="flex flex-col gap-1.5 rounded-md border border-border/50 bg-muted/20 p-2">
                     {steps.map((step) => (
-                      <div key={step.id} className="flex items-start gap-2 text-xs">
+                      <div
+                        key={step.id}
+                        className={cn(
+                          "flex items-start gap-2 text-xs",
+                          step.toolName === "spawn_agent" &&
+                            "ml-3 border-l border-border/60 pl-2",
+                        )}
+                      >
                         {step.status === "running"
                           ? <Spinner className="mt-0.5 size-3 shrink-0" />
                           : step.status === "error"
@@ -1242,6 +1249,7 @@ export function ChatSidebar({
                             className={cn(
                               "font-medium",
                               step.status === "done" && "text-muted-foreground",
+                              step.toolName === "spawn_agent" && "text-[11px]",
                             )}
                           >
                             {step.title}

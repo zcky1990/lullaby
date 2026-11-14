@@ -17,7 +17,7 @@ import {
 } from "../prompts.ts";
 import { needsToolPermission as toolPermissionNeeded } from "./approval.ts";
 import type { CursorConversationMessage, CursorStreamEvent } from "./cursor.ts";
-import { complete, type CompleteResult, VARIANT_TEMPERATURE } from "./llm.ts";
+import { complete, type CompleteResult, safeParse, VARIANT_TEMPERATURE } from "./llm.ts";
 import {
   approvalResponse,
   deferredReviewResponse,
@@ -31,11 +31,13 @@ import { scheduleSkillLearn } from "./skill-learn.ts";
 import { describeToolCall, emitChatStep, summarizeToolResult } from "./steps.ts";
 import { deleteRun, pruneRuns, setRun } from "./state.ts";
 import { loadMcpChatTools } from "./mcp-tools.ts";
+import { runSpawnAgent } from "./subagent.ts";
 import {
   applyWriteFile,
   executeTool,
   isMcpChatTool,
   resolveAttachments,
+  SPAWN_AGENT_TOOL_NAME,
   toolsFor,
   WRITE_TOOLS,
 } from "./tools.ts";
@@ -125,6 +127,16 @@ export function systemPrompt(
     ? `${withPersona}${skillList}${activeSkillPrompt(activeSkill.name, activeSkill.body)}`
     : `${withPersona}${skillList}`;
   return withActive;
+}
+
+const SPAWN_AGENT_HINT =
+  `\n\nYou can delegate a focused sub-task with the spawn_agent tool (prompt required; optional ` +
+  `mode, roleId, skillName, maxSteps). Use it for isolated investigation or a bounded edit — ` +
+  `not for the entire user request. Nested spawn_agent is not available. Writes from the child ` +
+  `are applied and queued on your Review.`;
+
+function isCursorProvider(provider: LlmProviderRow): boolean {
+  return (provider.provider || "").toLowerCase() === "cursor";
 }
 
 function describeCursorTool(name: string | undefined, args: unknown): string {
@@ -502,8 +514,11 @@ export async function advance(run: Run): Promise<ChatResponse> {
     const disabledTools = new Set(settings.disabledTools);
     const mcp = await loadMcpChatTools();
     run.mcpTools = mcp.byName;
+    const allowSpawnAgent = !isCursorProvider(run.provider) && !run.parentRunId;
     const tools = [
-      ...toolsFor(run.workspace, run.mode, run.skills.size > 0, disabledTools),
+      ...toolsFor(run.workspace, run.mode, run.skills.size > 0, disabledTools, {
+        allowSpawnAgent,
+      }),
       ...mcp.defs,
     ];
     const deferReview = settings.writeReviewMode === "end";
@@ -595,13 +610,15 @@ export async function advance(run: Run): Promise<ChatResponse> {
           "get_document",
           "list_tickets",
           "get_ticket",
+          SPAWN_AGENT_TOOL_NAME,
         ]);
         for (const call of response.toolCalls) {
           if (isCancelled(run)) return cancelledResponse(run);
           const stepId = `tool-${call.id}`;
           const label = describeToolCall(call);
           const allowedByPlan = planAllowed.has(call.name) || isMcpChatTool(call.name);
-          const permission = allowedByPlan && !disabledTools.has(call.name)
+          const permission = allowedByPlan && !disabledTools.has(call.name) &&
+              call.name !== SPAWN_AGENT_TOOL_NAME
             ? await ensureToolPermission(run, call, label, settings)
             : { outcome: "allowed" as const };
           if (permission.outcome === "cancelled") return cancelledResponse(run);
@@ -625,6 +642,15 @@ export async function advance(run: Run): Promise<ChatResponse> {
             result = `Tool "${call.name}" dinonaktifkan di Global Settings → Tools.`;
           } else if (!planAllowed.has(call.name) && !isMcpChatTool(call.name)) {
             result = "Tool tidak tersedia di mode Plan.";
+          } else if (call.name === SPAWN_AGENT_TOOL_NAME) {
+            try {
+              result = await runSpawnAgent(run, safeParse(call.arguments), {
+                deferReview,
+                disabledTools,
+              });
+            } catch (error) {
+              result = `Error: ${(error as Error).message}`;
+            }
           } else {
             try {
               result = await executeTool(run, call);
@@ -660,7 +686,9 @@ export async function advance(run: Run): Promise<ChatResponse> {
         if (isCancelled(run)) return cancelledResponse(run);
         const stepId = `tool-${call.id}`;
         const label = describeToolCall(call);
-        const permission = await ensureToolPermission(run, call, label, settings);
+        const permission = call.name === SPAWN_AGENT_TOOL_NAME
+          ? { outcome: "allowed" as const }
+          : await ensureToolPermission(run, call, label, settings);
         if (permission.outcome === "cancelled") return cancelledResponse(run);
         if (permission.outcome === "denied") {
           run.batchResults.set(call.id, `Tool "${call.name}" dibatalkan oleh pengguna.`);
@@ -677,6 +705,11 @@ export async function advance(run: Run): Promise<ChatResponse> {
         try {
           if (disabledTools.has(call.name)) {
             result = `Tool "${call.name}" dinonaktifkan di Global Settings → Tools.`;
+          } else if (call.name === SPAWN_AGENT_TOOL_NAME) {
+            result = await runSpawnAgent(run, safeParse(call.arguments), {
+              deferReview,
+              disabledTools,
+            });
           } else if (WRITE_TOOLS.has(call.name)) {
             const prepared = await prepareWriteChange(run, call);
             if (prepared.change) {
@@ -870,7 +903,7 @@ export async function startChat(
           rolePersona,
           activeSkill,
           prompts,
-        ),
+        ) + (isCursorProvider(provider) ? "" : SPAWN_AGENT_HINT),
       },
       ...resolved.map((message) => ({
         role: message.role,

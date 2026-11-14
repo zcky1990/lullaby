@@ -7,7 +7,7 @@ Chat sidebar kanan (`ChatSidebar`) memanggil `POST /api/projects/:id/chat`. Engi
 
 | Mode      | Tools                                                                       | Tujuan                                |
 | --------- | --------------------------------------------------------------------------- | ------------------------------------- |
-| **Plan**  | `use_skill`, doc/ticket reads, enabled MCP (`mcp_*`)                        | Rencana + baca konteks (tanpa mutate file/doc/ticket app) |
+| **Plan**  | `use_skill`, `spawn_agent` (non-Cursor), doc/ticket reads, MCP (`mcp_*`)     | Rencana + baca konteks (tanpa mutate file/doc/ticket app) |
 | **Build** | Plan tools + file tools + doc/ticket write/sync + MCP                       | Kerja di workspace + docs/tickets + MCP |
 
 Mode disimpan di localStorage (`rnd.chatMode:v1`).
@@ -23,6 +23,12 @@ Mode disimpan di localStorage (`rnd.chatMode:v1`).
 - `create_ticket` selalu menulis ke SQLite lokal (bukan langsung ke board remote)
 - Mutasi doc/ticket langsung diterapkan (tidak lewat Review tab; Review hanya `write_file`)
 - `use_skill` memuat body `SKILL.md` (progressive disclosure)
+- **`spawn_agent`** (chat interaktif, provider non-Cursor): delegasi sub-tugas ke child agent
+  depth 1 (`src/server/chat/subagent.ts`). Args: `prompt` (wajib), opsional `mode`, `roleId`,
+  `skillName`, `maxSteps` (default 20, max 50). Maks 3 subagent per parent run. Child tidak
+  mendapat `spawn_agent` lagi. `write_file` child auto-apply dan digabung ke
+  `pendingChanges`/Review parent. Workflow `action: agent` / headless **tidak** expose tool ini.
+  Provider Cursor memakai tool `task` bawaan SDK.
 - **MCP**: jika Global Settings → MCP master switch on, tool dari setiap server enabled
   di-inject ke LLM sebagai `mcp_<server>_<tool>` (`src/server/chat/mcp-tools.ts`). Disable
   per-tool memakai key `serverId:toolName` (`mcp_disabled_tools`). Eksekusi:
