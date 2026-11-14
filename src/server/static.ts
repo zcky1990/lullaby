@@ -17,16 +17,16 @@ type StoredAsset = Asset & { compression?: "gzip" };
 
 interface Decoded {
   /** String untuk aset `utf8`, byte untuk `base64` (masih ter-gzip bila `compressed`). */
-  body: string | Uint8Array;
+  body: string | Uint8Array<ArrayBuffer>;
   compressed: boolean;
   etag: string;
 }
 
 /** PERF-6: decode base64 hanya sekali per aset, bukan pada setiap request. */
 const decodedCache = new Map<string, Decoded>();
-const inflatedCache = new Map<string, Promise<Uint8Array>>();
+const inflatedCache = new Map<string, Promise<Uint8Array<ArrayBuffer>>>();
 
-function base64ToBytes(body: string): Uint8Array {
+function base64ToBytes(body: string): Uint8Array<ArrayBuffer> {
   const binary = atob(body);
   const bytes = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
@@ -34,7 +34,7 @@ function base64ToBytes(body: string): Uint8Array {
 }
 
 /** FNV-1a 32-bit — cukup untuk ETag aset, jauh lebih murah dari digest kripto. */
-function hash(body: string | Uint8Array): string {
+function hash(body: string | Uint8Array<ArrayBuffer>): string {
   let value = 0x811c9dc5;
   if (typeof body === "string") {
     for (let i = 0; i < body.length; i++) {
@@ -72,12 +72,15 @@ function decode(pathname: string, asset: StoredAsset): Decoded {
   return entry;
 }
 
-function inflate(bytes: Uint8Array): Promise<Uint8Array> {
+function inflate(bytes: Uint8Array<ArrayBuffer>): Promise<Uint8Array<ArrayBuffer>> {
   const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream("gzip"));
   return new Response(stream).arrayBuffer().then((buffer) => new Uint8Array(buffer));
 }
 
-function inflateOnce(pathname: string, bytes: Uint8Array): Promise<Uint8Array> {
+function inflateOnce(
+  pathname: string,
+  bytes: Uint8Array<ArrayBuffer>,
+): Promise<Uint8Array<ArrayBuffer>> {
   const cached = inflatedCache.get(pathname);
   if (cached) return cached;
   const loading = inflate(bytes).catch((error: unknown) => {
@@ -90,8 +93,11 @@ function inflateOnce(pathname: string, bytes: Uint8Array): Promise<Uint8Array> {
 }
 
 /** Body stream untuk klien tanpa dukungan gzip: dekompresi lazy, API tetap sync. */
-function inflateStream(pathname: string, bytes: Uint8Array): ReadableStream<Uint8Array> {
-  return new ReadableStream<Uint8Array>({
+function inflateStream(
+  pathname: string,
+  bytes: Uint8Array<ArrayBuffer>,
+): ReadableStream<Uint8Array<ArrayBuffer>> {
+  return new ReadableStream<Uint8Array<ArrayBuffer>>({
     async start(controller) {
       try {
         controller.enqueue(await inflateOnce(pathname, bytes));
@@ -145,7 +151,7 @@ function toResponse(pathname: string, asset: StoredAsset, req?: Request): Respon
 
   if (decoded.compressed) {
     headers.set("vary", "accept-encoding");
-    const bytes = decoded.body as Uint8Array;
+    const bytes = decoded.body as Uint8Array<ArrayBuffer>;
     if (acceptsGzip(req)) {
       headers.set("content-encoding", "gzip");
       return new Response(bytes, { headers });
