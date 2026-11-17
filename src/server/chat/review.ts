@@ -2,6 +2,11 @@ import type { ChatChange } from "../../db/db.ts";
 import { readWorkspaceFile, removeWorkspaceFile, writeWorkspaceFile } from "../../fs/workspace.ts";
 import { applyHunks, diffHunks, diffLines } from "../diff.ts";
 import { safeParse } from "./llm.ts";
+import {
+  hydrateChatRun,
+  persistChatRun,
+  persistChatRunSettled,
+} from "./persist.ts";
 import { scheduleSkillLearn } from "./skill-learn.ts";
 import { deleteRun, getRun, pruneRuns, setRun } from "./state.ts";
 import type { ChatResponse, PendingChange, PendingFileChange, Run, ToolCall } from "./types.ts";
@@ -112,13 +117,14 @@ function updateChangeEntry(
 /**
  * Record a write that was already applied to disk.
  * When `deferReview` is set the change stays queued so the user can review it
- * after the run finishes (reject = revert that hunk).
+ * after the run finishes (reject = revert that hunk). The queue is persisted in
+ * `chat_runs` so it survives an app restart/crash.
  */
-export function recordAppliedWrite(
+export async function recordAppliedWrite(
   run: Run,
   change: PendingChange,
   deferReview: boolean,
-): void {
+): Promise<void> {
   const previous = deferReview
     ? [...run.pendingChanges.values()].find((item) => item.path === change.path)
     : undefined;
@@ -142,6 +148,7 @@ export function recordAppliedWrite(
   change.applied = true;
   change.touched = false;
   run.pendingChanges.set(change.call.id, change);
+  await persistChatRun(run, run.finishedAt ? "review" : "running");
 }
 
 /** Final response for a finished run that still has review items to settle. */
@@ -253,12 +260,17 @@ async function settle(run: Run): Promise<ChatResponse> {
   const message = notes.join("\n");
 
   if (run.pendingChanges.size > 0) {
-    if (run.finishedAt) return deferredReviewResponse(run, message);
+    if (run.finishedAt) {
+      await persistChatRun(run, "review");
+      return deferredReviewResponse(run, message);
+    }
+    await persistChatRun(run, "running");
     return approvalResponse(run);
   }
 
   if (run.finishedAt) {
     deleteRun(run.id);
+    await persistChatRunSettled(run.id);
     return {
       status: "done",
       message,
@@ -280,6 +292,7 @@ async function settle(run: Run): Promise<ChatResponse> {
   if (run.provider.id === "test" || !run.turns.some((turn) => turn.role !== "tool")) {
     scheduleSkillLearn(run);
     deleteRun(run.id);
+    await persistChatRunSettled(run.id);
     return {
       status: "done",
       message: "Perubahan diterapkan.",
@@ -304,6 +317,17 @@ function reviewMissingError(
   return { status: "error", error: messages[code] };
 }
 
+/** Run dari memory, atau dihidrasi ulang dari `chat_runs` (setelah restart). */
+async function loadReviewRun(runId: string): Promise<Run | undefined> {
+  const cached = getRun(runId);
+  if (cached) return cached;
+  try {
+    return await hydrateChatRun(runId);
+  } catch {
+    return undefined;
+  }
+}
+
 export async function decideChatChange(
   runId: string,
   callId: string,
@@ -311,7 +335,7 @@ export async function decideChatChange(
   accept: boolean,
 ): Promise<ChatResponse> {
   pruneRuns();
-  const run = getRun(runId);
+  const run = await loadReviewRun(runId);
   if (!run) return reviewMissingError("run_not_found");
   const change = run.pendingChanges.get(callId);
   if (!change) return reviewMissingError("change_not_found");
@@ -328,7 +352,7 @@ export async function decideAllChatChanges(
   accept: boolean,
 ): Promise<ChatResponse> {
   pruneRuns();
-  const run = getRun(runId);
+  const run = await loadReviewRun(runId);
   if (!run) return reviewMissingError("run_not_found");
   if (run.pendingChanges.size === 0) return reviewMissingError("change_not_found");
   for (const change of run.pendingChanges.values()) {

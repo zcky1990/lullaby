@@ -225,3 +225,10 @@ disembunyikan. WebSocket ke `/api/projects/:id/terminal`.
 
 `ThemeProvider`: light/dark/system, color preset, font app/editor, tema Monaco (auto mengikuti app).
 Mermaid mengikuti tema yang sama.
+
+Cache SVG Mermaid (`web/src/lib/mermaid-svg-cache.ts`) disimpan di `localStorage`
+(`lullaby:mermaid-svg:*`) dengan key hash dari `MERMAID_CACHE_VERSION` + tema + source diagram,
+jadi source tidak terbaca di key dan diagram yang sama tidak mengunduh chunk mermaid lagi. Batas:
+256 KB/entri, 40 entri, 2 MB total (entri tertua dievakuasi). Bump `MERMAID_CACHE_VERSION` setiap
+upgrade `mermaid` (atau ubah opsi `initialize()`); cache ikut hilang bila data aplikasi/localStorage
+di-reset.

@@ -31,6 +31,7 @@ import { scheduleSkillLearn } from "./skill-learn.ts";
 import { describeToolCall, emitChatStep, summarizeToolResult } from "./steps.ts";
 import { deleteRun, pruneRuns, setRun } from "./state.ts";
 import { loadMcpChatTools } from "./mcp-tools.ts";
+import { persistChatRun } from "./persist.ts";
 import { runSpawnAgent } from "./subagent.ts";
 import {
   applyWriteFile,
@@ -472,7 +473,7 @@ function isCancelled(run: Run): boolean {
   return run.cancelled === true || run.abort?.signal.aborted === true;
 }
 
-function cancelledResponse(run: Run): ChatResponse {
+async function cancelledResponse(run: Run): Promise<ChatResponse> {
   run.cancelled = true;
   emitChatStep(run, {
     id: "run-cancelled",
@@ -481,6 +482,7 @@ function cancelledResponse(run: Run): ChatResponse {
     title: "Chat dihentikan",
   });
   deleteRun(run.id);
+  await persistChatRun(run, "interrupted");
   return { status: "cancelled", message: "Chat dihentikan.", sessionId: run.sessionId };
 }
 
@@ -489,7 +491,7 @@ function cancelledResponse(run: Run): ChatResponse {
  * stays in memory (with its pending changes) so the Review tab can still revert
  * them after the answer is complete.
  */
-function finishRun(run: Run, response: ChatResponse): ChatResponse {
+async function finishRun(run: Run, response: ChatResponse): Promise<ChatResponse> {
   if (response.status === "done" && run.pendingChanges.size > 0) {
     emitChatStep(run, {
       id: "review-deferred",
@@ -501,9 +503,11 @@ function finishRun(run: Run, response: ChatResponse): ChatResponse {
     run.finishedAt = Date.now();
     run.emit = undefined;
     setRun(run);
+    await persistChatRun(run, "review");
     return deferredReviewResponse(run, response.message);
   }
   deleteRun(run.id);
+  await persistChatRun(run, "review");
   return response;
 }
 
@@ -718,7 +722,7 @@ export async function advance(run: Run): Promise<ChatResponse> {
                   result = "No workspace configured.";
                 } else {
                   result = await applyWriteFile(run.workspace, call);
-                  recordAppliedWrite(run, prepared.change, deferReview);
+                  await recordAppliedWrite(run, prepared.change, deferReview);
                   if (deferReview) {
                     emitChatStep(run, {
                       id: `applied-${call.id}`,
@@ -811,6 +815,7 @@ export async function advance(run: Run): Promise<ChatResponse> {
       title: "Terjadi kesalahan",
       detail: (error as Error).message,
     });
+    await persistChatRun(run, "interrupted");
     deleteRun(run.id);
     return { status: "error", error: (error as Error).message, sessionId: run.sessionId };
   }
@@ -926,6 +931,7 @@ export async function startChat(
     allowedTools: new Set(),
   };
   setRun(run);
+  await persistChatRun(run, "running");
   return await advance(run);
 }
 

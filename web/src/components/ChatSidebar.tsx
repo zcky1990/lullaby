@@ -71,6 +71,7 @@ import {
   type ChatDragPayload,
 } from "@/lib/chat-drag";
 import { describeDeferredReview, readDeferredReview } from "@/lib/chat-review";
+import { fetchProjectChatReview } from "@/lib/chat-review-api";
 import { CHAT_RESPONSE_EVENT, dispatchChangesApplied, dispatchReview } from "@/lib/review-events";
 import {
   AUTOSKILL_COMMAND,
@@ -527,6 +528,23 @@ export function ChatSidebar({
     dispatchReview(null, null);
     refreshSessions().catch(console.error);
   }, [projectId, refreshSessions]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!projectId) return;
+    fetchProjectChatReview(projectId)
+      .then((stored) => {
+        if (cancelled || !stored || stored.pendingChanges.length === 0) return;
+        setReviewOffer({ runId: stored.runId, changes: stored.pendingChanges });
+        dispatchReview(stored.runId, stored.pendingChanges, { applied: true, focus: false });
+      })
+      .catch(() => {
+        // abaikan: tab Review tetap bisa dibuka manual dari state chat
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId]);
 
   useEffect(() => {
     return () => {

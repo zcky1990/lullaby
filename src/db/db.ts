@@ -128,6 +128,17 @@ CREATE TABLE IF NOT EXISTS chat_messages (
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+CREATE TABLE IF NOT EXISTS chat_runs (
+  id              TEXT PRIMARY KEY,
+  project_id      TEXT NOT NULL,
+  session_id      TEXT NOT NULL,
+  status          TEXT NOT NULL DEFAULT 'running',
+  pending_changes TEXT NOT NULL DEFAULT '[]',
+  error           TEXT,
+  created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+  finished_at     TEXT
+);
+
 CREATE TABLE IF NOT EXISTS workflow_sessions (
   id         TEXT PRIMARY KEY,
   project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
@@ -275,6 +286,8 @@ function migrate(db: DatabaseSync): void {
     db.exec(`
       CREATE INDEX IF NOT EXISTS idx_chat_sessions_project ON chat_sessions(project_id);
       CREATE INDEX IF NOT EXISTS idx_chat_messages_session ON chat_messages(session_id);
+      CREATE INDEX IF NOT EXISTS idx_chat_runs_project ON chat_runs(project_id, created_at);
+      CREATE INDEX IF NOT EXISTS idx_chat_runs_status ON chat_runs(status);
       CREATE INDEX IF NOT EXISTS idx_local_tickets_project ON local_tickets(project_id);
       CREATE INDEX IF NOT EXISTS idx_events_created_at ON events(created_at);
       CREATE INDEX IF NOT EXISTS idx_roles_provider ON roles(provider_id);
@@ -1537,4 +1550,92 @@ export async function listWorkflowSessions(projectId: string): Promise<WorkflowS
       projectId,
     ),
   );
+}
+
+export type ChatRunStatus = "running" | "review" | "interrupted";
+
+export interface ChatRunRow {
+  id: string;
+  project_id: string;
+  session_id: string;
+  status: string;
+  pending_changes: string;
+  error: string | null;
+  created_at: string;
+  finished_at: string | null;
+}
+
+export async function upsertChatRun(input: {
+  id: string;
+  projectId: string;
+  sessionId: string;
+  status: ChatRunStatus;
+  pendingChanges: string;
+  finishedAt?: string | null;
+}): Promise<void> {
+  const db = await getDb();
+  db.prepare(
+    "INSERT INTO chat_runs (id, project_id, session_id, status, pending_changes, finished_at) " +
+      "VALUES (?, ?, ?, ?, ?, ?) " +
+      "ON CONFLICT(id) DO UPDATE SET status = excluded.status, " +
+      "pending_changes = excluded.pending_changes, finished_at = excluded.finished_at",
+  ).run(
+    input.id,
+    input.projectId,
+    input.sessionId,
+    input.status,
+    input.pendingChanges,
+    input.finishedAt ?? null,
+  );
+}
+
+export async function getChatRun(id: string): Promise<ChatRunRow | null> {
+  const db = await getDb();
+  const row = db.prepare("SELECT * FROM chat_runs WHERE id = ?").get(id);
+  return (row as ChatRunRow | undefined) ?? null;
+}
+
+export async function findLatestPendingChatRun(projectId: string): Promise<ChatRunRow | null> {
+  const db = await getDb();
+  const row = db
+    .prepare(
+      "SELECT * FROM chat_runs WHERE project_id = ? AND status IN ('review','interrupted') " +
+        "AND pending_changes != '[]' ORDER BY created_at DESC LIMIT 1",
+    )
+    .get(projectId);
+  return (row as ChatRunRow | undefined) ?? null;
+}
+
+export async function listPendingChatRuns(): Promise<ChatRunRow[]> {
+  const db = await getDb();
+  return rows<ChatRunRow>(
+    db
+      .prepare(
+        "SELECT * FROM chat_runs WHERE status IN ('review','interrupted') " +
+          "AND pending_changes != '[]' ORDER BY created_at",
+      )
+      .all(),
+  );
+}
+
+export async function deleteChatRun(id: string): Promise<void> {
+  const db = await getDb();
+  db.prepare("DELETE FROM chat_runs WHERE id = ?").run(id);
+}
+
+export async function markInterruptedChatRuns(): Promise<void> {
+  const db = await getDb();
+  db.prepare(
+    "UPDATE chat_runs SET status = 'interrupted', " +
+      "error = COALESCE(error, 'Aplikasi berhenti saat chat run berjalan.'), " +
+      "finished_at = COALESCE(finished_at, datetime('now')) WHERE status = 'running'",
+  ).run();
+}
+
+export async function pruneChatRuns(keepHours: number): Promise<void> {
+  const db = await getDb();
+  const modifier = `-${Math.max(1, Math.floor(keepHours))} hours`;
+  db.prepare(
+    "DELETE FROM chat_runs WHERE COALESCE(finished_at, created_at) < datetime('now', ?)",
+  ).run(modifier);
 }

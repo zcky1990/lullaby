@@ -2,6 +2,7 @@ import { appendEvent, getDb, markInterruptedWorkflowRuns, pruneEvents } from "..
 import { ensureChatSessionTombstones } from "../db/chat-tombstones.ts";
 import { migratePlaintextSecrets } from "../secrets/migrate.ts";
 import { readChatToolsSettings } from "../server/chat/settings.ts";
+import { rehydrateChatRuns } from "../server/chat/persist.ts";
 import { syncConfiguredCursorModels } from "../server/chat/cursor-models.ts";
 import { installDefaultSkills } from "../server/skills.ts";
 import { startWorkflowScheduler } from "../server/workflow/scheduler.ts";
@@ -31,6 +32,14 @@ export async function bootstrap(): Promise<void> {
   }
   await pruneEvents(1000);
   await markInterruptedWorkflowRuns();
+  try {
+    // Run chat yang terputus ditandai `interrupted` lalu dimuat ulang agar tab
+    // Review tetap bisa me-revert perubahan yang sudah diterapkan ke disk.
+    const restored = await rehydrateChatRuns();
+    if (restored > 0) log.info("restored chat runs", { runs: restored });
+  } catch (error) {
+    log.warn("chat run rehydration skipped", { error: String(error) });
+  }
   const installedSkills = await installDefaultSkills();
   if (installedSkills.length > 0) {
     log.info("installed default skills", { skills: installedSkills });

@@ -78,6 +78,30 @@ Always allow / No* di langkah chat). Kebijakannya terpusat di `src/server/chat/a
   dipanggil. UI: Global Settings → Tools (+ **Enable all**).
 - Hanya chat interaktif; workflow `action: agent` tetap auto-write dan tidak memakai deny-list ini.
 
+## Review setelah restart (`chat_runs`)
+
+Run chat tidak lagi hanya hidup di memori. Setiap run menulis snapshot ke tabel
+`chat_runs`:
+
+- `running` — record dibuat saat run mulai dan diperbarui setiap kali `write_file`
+  diterapkan (mode review `end`), jadi perubahan yang sudah menyentuh disk tetap
+  bisa di-revert walau app crash di tengah run.
+- `review` — run selesai tetapi masih ada perubahan yang menunggu Keep/Revert.
+- `interrupted` — saat bootstrap, semua record `running` ditandai `interrupted`
+  (pola `workflow_runs`) lalu dihidrasi ulang ke memori.
+
+Hanya perubahan yang sudah diaplikasikan ke disk yang dipersist (hunk mode
+`before` belum menyentuh disk sehingga tidak disimpan). Baris dihapus otomatis
+saat antrean review kosong atau kedaluwarsa (`chat_review_keep_hours`).
+
+UI: tab Review (`web/src/components/ReviewTab.tsx`) membaca state dari
+`GET /api/chat/review?runId=` (bukan dari state stream chat), dan
+`ChatSidebar` memanggil `GET /api/projects/:id/chat/review` saat project aktif
+untuk membuka kembali tab Review setelah restart. Run `interrupted` ditandai
+jelas di tab Review.
+
+Tests: `test/chat-run-persist.test.ts` (persist, rehidrasi, run terputus).
+
 ## Cursor SDK provider
 
 Provider LLM dengan `provider: cursor` memakai `@cursor/sdk` (lihat `src/server/chat/cursor.ts`).

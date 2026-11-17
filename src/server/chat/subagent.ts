@@ -511,7 +511,7 @@ export async function runSpawnAgent(
               const prepared = await prepareWriteChange(parent, call);
               if (prepared.change) {
                 result = await applyWriteFile(parent.workspace, call);
-                recordAppliedWrite(parent, prepared.change, options.deferReview);
+                await recordAppliedWrite(parent, prepared.change, options.deferReview);
                 filesTouched.push(prepared.change.path);
                 if (options.deferReview) {
                   emitChatStep(parent, {

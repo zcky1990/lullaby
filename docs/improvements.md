@@ -23,7 +23,7 @@ Skala yang dipakai:
 | --- | --- | --- | --- | --- | --- |
 | PERF-1 | Ganti favicon 1,5 MB PNG → WebP | Bundle | Tinggi | S | Open |
 | PERF-2 | Tree-shake bahasa Monaco (~90 bahasa ter-bundle) | Bundle | Tinggi | M | Open |
-| PERF-4 | Mermaid hanya dimuat bila ada blok diagram | Bundle | Tinggi | S | Open |
+| PERF-4 | Mermaid hanya dimuat bila ada blok diagram | Bundle | Tinggi | S | Selesai |
 | PERF-5 | Kompresi aset embedded (brotli) di `build-assets` | Bundle | Tinggi | M | Open |
 | PERF-6 | Cache header + memoize decode di `static.ts` | Runtime | Sedang | S | Open |
 | CI-1 | Jalankan unit test `web/` (vitest) di CI | Kualitas | Tinggi | S | Open |
@@ -52,6 +52,7 @@ perubahan agar klaim "lebih cepat/lebih kecil" bisa dibuktikan.
 | Chunk utama `index-*.js` | **1,19 MB** | idem |
 | CSS utama | 98 KB | idem |
 | Chunk `MarkdownView-*.js` (mermaid) | **778 KB** + chunk diagram (elk 1,48 MB, cynefin 658 KB, cytoscape 444 KB, katex 262 KB) | idem |
+| Chunk `Mermaid-*.js` (setelah PERF-4) | **618 KB**, lazy; renderer per tipe jadi file terpisah (flow 64 KB, sequence 119 KB, elk 1,48 MB, cynefin 658 KB, cytoscape 444 KB) dan hanya di-fetch bila tipe itu dipakai | `ls -S web/dist/assets \| head` |
 | `web/public/lullaby.png` (favicon) | **1,54 MB** (`.webp` yang sudah ada: 72 KB) | `ls -lh web/public` |
 | File sumber terbesar | `router.ts` 77 KB · `App.tsx` 69 KB · `ChatSidebar.tsx` 58 KB · `api.ts` 36 KB | `ls -S` |
 | Test backend / web | 15 file `test/` · 11 file `web/src/lib/*.test.ts` | hitung file |
@@ -119,6 +120,42 @@ chunk 778 KB + seluruh renderer diagram ikut terunduh walau dokumen tidak punya 
 3. Untuk diagram statis di dokumen bawaan, pertimbangkan menyimpan SVG hasil render.
 
 **Dampak**: −778 KB pada jalur baca dokumen biasa; −2 sampai −3 MB bila renderer dipangkas.
+
+**Bukti pelaksanaan (2026-11-14)**
+
+- **Langkah 1** (sudah ada sebelumnya): `web/src/components/MarkdownView.tsx` memakai
+  `lazy(() => import("@/components/Mermaid"))` + `<Suspense>` (fallback `Skeleton`) hanya pada blok
+  `language-mermaid`.
+- **Langkah 2 — audit**: hanya ada **1** blok mermaid di seluruh dokumen repo, yaitu
+  `docs/architecture.md` dengan tipe `flowchart` (`flowchart TB`). Tidak ada diagram di dokumen
+  bawaan (`web/src/docs/wiki-*.md`, `web/src/docs/workflow-docs.md`, `src/fs/documents.ts`); di
+  `web/src` hanya `Mermaid.tsx` yang menyentuh mermaid.
+- **Langkah 2 — temuan teknis**: pada `mermaid@12.2.0` entry utama `dist/mermaid.core.mjs` sudah
+  mendaftarkan tiap diagram sebagai detector ringan + loader
+  `async () => await import("./chunks/mermaid.core/<x>Diagram-*.mjs")` (±37 diagram). Artinya setiap
+  renderer SUDAH menjadi chunk sendiri dan hanya renderer yang terdeteksi pada source diagram yang
+  di-fetch. Bukti di output build: `Mermaid-*.js` 618 KB (core) dan file terpisah `flowDiagram-*.js`
+  64 KB, `sequenceDiagram-*.js` 119 KB, `elk-*.js` 1,48 MB, `cynefin-*.js` 658 KB,
+  `cytoscape.esm-*.js` 444 KB. Karena registrasi diagram hard-coded di dalam `mermaid.core.mjs` dan
+  v12 tidak menyediakan API registrasi selektif/unregister, memangkas chunk renderer saat build =
+  mematikan tipe diagram yang sah ditulis pengguna. Jadi langkah 2 sengaja dihentikan pada audit +
+  verifikasi mekanisme lazy v12; sisa ukuran ditangani PERF-5 (kompresi/embed) dan PERF-7 (code
+  split panel).
+- **Langkah 3 — cache SVG**: `web/src/lib/mermaid-svg-cache.ts` menyimpan hasil render di
+  `localStorage` dengan key hash FNV-1a + djb2 dari `MERMAID_CACHE_VERSION` + tema + source
+  (sehingga source tidak terbaca di key; batas 256 KB/entri, 40 entri, 2 MB total, entri tertua
+  dievakuasi; id SVG ditulis ulang per instance lewat `rewriteSvgIds`). `web/src/lib/mermaid-render.ts`
+  menjadi satu-satunya tempat `import("mermaid")` (dinamis), dan
+  `web/src/components/Mermaid.tsx` sekarang **tidak** mengimpor mermaid sama sekali — cache dicek
+  lebih dulu. Efek: dokumen yang diagramnya sudah pernah dirender tidak mengunduh chunk mermaid
+  618 KB lagi, termasuk setelah restart aplikasi.
+- **Guard test**: `web/src/lib/mermaid-svg-cache.test.ts` dan `web/src/lib/mermaid-lazy.test.ts`
+  (memastikan tidak ada impor statis mermaid, `MarkdownView` tetap lazy + `Suspense`, dan tiap
+  renderer diagram di `mermaid.core.mjs` dimuat lewat dynamic import).
+- **Verifikasi manual (masih harus dijalankan manusia)**: `npm --prefix web run build`;
+  `ls -S web/dist/assets | head`; buka dokumen **tanpa** diagram (tidak boleh ada request
+  `Mermaid-*.js`); buka dokumen **dengan** diagram (render normal, lalu buka kedua kali tanpa request
+  chunk); lalu `npm --prefix web run test` dan `npm --prefix web run typecheck`.
 
 ### PERF-5 — Kompresi aset embedded
 

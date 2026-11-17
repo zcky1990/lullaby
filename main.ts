@@ -1,6 +1,7 @@
 import { bootstrap, bootstrapBackground } from "./src/core/bootstrap.ts";
 import { createMainWindow } from "./src/desktop/window.ts";
 import { handleBackupRequest } from "./src/server/routes/backup.ts";
+import { handleChatReviewRequest } from "./src/server/routes/chat-review.ts";
 import { handleRequest as handleCoreRequest } from "./src/server/router.ts";
 
 await bootstrap();
@@ -22,7 +23,10 @@ createMainWindow({ title: "Lullaby" });
 
 Deno.serve(
   opts,
-  async (req) => (await handleBackupRequest(req)) ?? await handleCoreRequest(req),
+  async (req) =>
+    (await handleChatReviewRequest(req)) ??
+    (await handleBackupRequest(req)) ??
+    await handleCoreRequest(req),
 );
 bootstrapBackground();
 

@@ -16,6 +16,9 @@ import {
 } from "../src/server/chat/tools.ts";
 import type { Run } from "../src/server/chat/types.ts";
 
+const dataDir = await Deno.makeTempDir();
+Deno.env.set("RND_APP_DATA_DIR", dataDir);
+
 const PROVIDER: LlmProviderRow = {
   id: "test",
   name: "test",
@@ -140,7 +143,7 @@ Deno.test("child write merges into parent pendingChanges", async () => {
     equal(Boolean(prepared.change), true);
     if (!prepared.change) return;
     await applyWriteFile(root, call);
-    recordAppliedWrite(parent, prepared.change, true);
+    await recordAppliedWrite(parent, prepared.change, true);
     equal(await Deno.readTextFile(join(root, "note.txt")), "after\n");
     equal(parent.pendingChanges.size, 1);
     const change = [...parent.pendingChanges.values()][0];
@@ -173,4 +176,16 @@ Deno.test("toolsFor strips spawn_agent for headless/child by default", () => {
     CHAT_TOOL_CATALOG.some((tool) => tool.name === SPAWN_AGENT_TOOL_NAME),
     true,
   );
+});
+
+Deno.test({
+  name: "subagent: cleanup temp data dir",
+  sanitizeResources: false,
+  sanitizeOps: false,
+  fn: async () => {
+    const { closeDb } = await import("../src/db/db.ts");
+    closeDb();
+    Deno.env.delete("RND_APP_DATA_DIR");
+    await Deno.remove(dataDir, { recursive: true });
+  },
 });

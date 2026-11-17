@@ -1,29 +1,57 @@
-import { useState } from "react";
-import { FileCode2 } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { CircleAlert, FileCode2, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { api, type PendingFileChange } from "@/lib/api";
+import {
+  type ChatReviewRun,
+  fetchChatReview,
+  type ReviewFileChange,
+} from "@/lib/chat-review-api";
 import { dispatchChatResponse } from "@/lib/review-events";
 import { cn } from "@/lib/utils";
 
-/** `pendingChanges[].applied` = perubahan sudah ditulis ke disk (review di akhir). */
-type ReviewFileChange = PendingFileChange & { applied?: boolean };
-
-function isAppliedReview(changes: PendingFileChange[]): boolean {
-  return changes.length > 0 &&
-    changes.every((change) => (change as ReviewFileChange).applied === true);
-}
-
+/**
+ * Tab Review. Datanya dibaca dari API (`GET /api/chat/review?runId=` →
+ * tabel `chat_runs`), bukan dari state stream chat, sehingga tetap tersedia
+ * setelah aplikasi restart/crash.
+ */
 export function ReviewTab({
   runId,
   changes,
 }: {
   runId: string;
-  changes: PendingFileChange[];
+  changes?: PendingFileChange[];
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | undefined>();
-  const applied = isAppliedReview(changes);
+  const [review, setReview] = useState<ChatReviewRun | null | undefined>(undefined);
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await fetchChatReview(runId);
+      setReview(data);
+    } catch (e) {
+      setReview(undefined);
+      setError((e as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  }, [runId]);
+
+  useEffect(() => {
+    setReview(undefined);
+    setError(undefined);
+    void load();
+  }, [load]);
+
+  const items: ReviewFileChange[] = review === undefined
+    ? (changes ?? [])
+    : review?.pendingChanges ?? [];
+  const applied = items.length > 0 && items.every((change) => change.applied === true);
+  const interrupted = review?.interrupted === true;
 
   const applyDecision = async (work: () => Promise<Awaited<ReturnType<typeof api.chatChange>>>) => {
     setBusy(true);
@@ -36,6 +64,7 @@ export function ReviewTab({
       setError((e as Error).message);
     } finally {
       setBusy(false);
+      await load();
     }
   };
 
@@ -44,10 +73,23 @@ export function ReviewTab({
 
   const decideAll = (accept: boolean) => applyDecision(() => api.chatChangeAll({ runId, accept }));
 
-  if (changes.length === 0) {
+  if (loading && items.length === 0) {
     return (
-      <div className="flex h-full items-center justify-center p-8 text-xs text-muted-foreground">
-        Tidak ada perubahan yang menunggu review.
+      <div className="flex h-full items-center justify-center gap-2 p-8 text-xs text-muted-foreground">
+        <Spinner />
+        Memuat state review dari server…
+      </div>
+    );
+  }
+
+  if (items.length === 0) {
+    return (
+      <div className="flex h-full flex-col items-center justify-center gap-2 p-8 text-xs text-muted-foreground">
+        <p>Tidak ada perubahan yang menunggu review.</p>
+        <Button size="sm" variant="ghost" className="h-7 gap-1 text-xs" onClick={() => void load()}>
+          <RefreshCw className="size-3" />
+          Muat ulang
+        </Button>
       </div>
     );
   }
@@ -60,13 +102,25 @@ export function ReviewTab({
             {applied ? "Review perubahan AI (sudah diterapkan)" : "Review perubahan AI"}
           </h1>
           <p className="text-xs text-muted-foreground">
-            {changes.length} file · {applied
+            {items.length} file · {applied
               ? "Keep untuk mempertahankan, Revert untuk mengembalikan file ke kondisi sebelum chat"
               : "accept/reject per hunk"}
+            {review ? " · data dari server" : ""}
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          {busy ? <Spinner /> : null}
+          {busy || loading ? <Spinner /> : null}
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-7 gap-1 px-2 text-xs"
+            onClick={() => void load()}
+            disabled={busy}
+            title="Muat ulang state review dari server"
+          >
+            <RefreshCw className="size-3" />
+            Muat ulang
+          </Button>
           <Button size="sm" onClick={() => decideAll(true)} disabled={busy}>
             {applied ? "Keep all" : "Accept all"}
           </Button>
@@ -76,11 +130,22 @@ export function ReviewTab({
         </div>
       </div>
 
+      {interrupted ? (
+        <div className="flex items-start gap-2 border-b bg-amber-500/10 px-4 py-2 text-xs text-amber-700 dark:text-amber-300">
+          <CircleAlert className="mt-0.5 size-3.5 shrink-0" />
+          <p>
+            <span className="font-medium">Run terputus.</span>{" "}
+            Aplikasi berhenti saat chat masih berjalan (status <code>interrupted</code>), tetapi
+            perubahan berikut sudah tertulis di disk — Keep/Revert tetap bisa dilakukan.
+          </p>
+        </div>
+      ) : null}
+
       {error ? <p className="border-b px-4 py-2 text-xs text-destructive">{error}</p> : null}
 
       <div className="min-h-0 flex-1 overflow-y-auto p-4">
         <div className="flex flex-col gap-4">
-          {changes.map((change) => (
+          {items.map((change) => (
             <div key={change.callId} className="overflow-hidden rounded-md border">
               <div className="flex items-center gap-2 bg-muted/50 px-3 py-2">
                 <FileCode2 className="size-4 shrink-0 text-muted-foreground" />

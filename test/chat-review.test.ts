@@ -20,6 +20,9 @@ import {
 } from "../src/server/chat/state.ts";
 import type { PendingChange, Run, ToolCall } from "../src/server/chat/types.ts";
 
+const dataDir = await Deno.makeTempDir();
+Deno.env.set("RND_APP_DATA_DIR", dataDir);
+
 const PROVIDER: LlmProviderRow = {
   id: "test",
   name: "test",
@@ -69,7 +72,7 @@ async function applyDeferredWrite(
   const prepared = await prepareWriteChange(run, call);
   if (!prepared.change) throw new Error(prepared.result || "no_change");
   await writeWorkspaceFile(workspace, path, after);
-  recordAppliedWrite(run, prepared.change, true);
+  await recordAppliedWrite(run, prepared.change, true);
   return prepared.change;
 }
 
@@ -256,4 +259,16 @@ Deno.test("decideChatChange reports a clear error when the run is gone", async (
   const response = await decideChatChange("missing-run", "missing-call", 0, true);
   equal(response.status, "error");
   equal(response.status === "error" ? response.error.includes("tidak tersedia") : false, true);
+});
+
+Deno.test({
+  name: "deferred review: cleanup temp data dir",
+  sanitizeResources: false,
+  sanitizeOps: false,
+  fn: async () => {
+    const { closeDb } = await import("../src/db/db.ts");
+    closeDb();
+    Deno.env.delete("RND_APP_DATA_DIR");
+    await Deno.remove(dataDir, { recursive: true });
+  },
 });

@@ -73,6 +73,9 @@ import {
   projectSlug,
 } from "../src/server/skills.ts";
 
+const dataDir = await Deno.makeTempDir();
+Deno.env.set("RND_APP_DATA_DIR", dataDir);
+
 Deno.test("ProjectInput trims and drops empty optional fields", () => {
   throws(() => ProjectInput.parse({ name: "" }));
   const parsed = ProjectInput.parse({ name: "  Checkout ", docmostSpaceId: "" });
@@ -904,4 +907,16 @@ Deno.test("systemPrompt honors custom global prompts", () => {
   equal(build.startsWith("CUSTOM BUILD PROMPT"), true);
   const plan = systemPrompt("/tmp/ws", "plan", [], undefined, null, prompts);
   equal(plan.startsWith("CUSTOM PLAN PROMPT"), true);
+});
+
+Deno.test({
+  name: "unit: cleanup temp data dir",
+  sanitizeResources: false,
+  sanitizeOps: false,
+  fn: async () => {
+    const { closeDb } = await import("../src/db/db.ts");
+    closeDb();
+    Deno.env.delete("RND_APP_DATA_DIR");
+    await Deno.remove(dataDir, { recursive: true });
+  },
 });

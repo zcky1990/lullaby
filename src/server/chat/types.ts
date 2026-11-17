@@ -134,6 +134,8 @@ export interface Run {
   createdAt: number;
   /** Set when the run completed but keeps pending changes for end-of-run review. */
   finishedAt?: number;
+  /** true = run dihidrasi ulang dari `chat_runs` setelah app berhenti di tengah run. */
+  interrupted?: boolean;
   emit?: (step: ChatStep) => void;
   abort?: AbortController;
   cancelled?: boolean;
