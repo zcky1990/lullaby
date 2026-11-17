@@ -5,6 +5,7 @@
   "tasks": {
     "build": "deno task build:web && deno task assets",
     "build:web": "npm --prefix web run build",
+    "web:install": "npm --prefix web ci",
     "assets": "deno run -A scripts/build-assets.ts",
     "web:dev": "npm --prefix web run dev",
     "dev": "deno task build && deno desktop --hmr --icon ./icons/lullaby.png --allow-read --allow-write --allow-net --allow-env --allow-run --allow-ffi --allow-sys main.ts",

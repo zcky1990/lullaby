@@ -6,10 +6,34 @@
 - **Node.js + npm** (hanya untuk build client Vite di `web/`)
 - macOS / Windows / Linux sesuai target `deno.json` → `desktop.output`
 
+## Langkah setup (sekali)
+
+Dependensi client **tidak** ikut ter-commit, jadi `web/node_modules` harus dipasang dulu sebelum
+build pertama:
+
+```bash
+deno task web:install   # = npm --prefix web ci (pakai web/package-lock.json)
+```
+
+Build Vite memakai `vite.config.ts` yang mengimpor plugin dari `web/node_modules`
+(`@vitejs/plugin-react`, `@tailwindcss/vite`). Bila langkah ini dilewati, Vite gagal saat memuat
+config dengan pesan seperti:
+
+```
+vite.config.ts (2:18) [UNRESOLVED_IMPORT] Could not resolve "@vitejs/plugin-react"
+vite.config.ts (3:24) [UNRESOLVED_IMPORT] Could not resolve "@tailwindcss/vite"
+```
+
+Itu **bukan** bug konfigurasi/kode — hanya dependensi client belum ada di mesin itu (atau perintah
+dijalankan dari root repo sehingga `web/node_modules` tidak terlihat). Perbaikan: jalankan
+`deno task web:install`, lalu `deno task build`. Bila perlu bersih total:
+`rm -rf web/node_modules && deno task web:install`.
+
 ## Perintah utama
 
 | Perintah | Fungsi |
 | --- | --- |
+| `deno task web:install` | Pasang dependensi client (`npm --prefix web ci`) |
 | `deno task build` | Build Vite (`web/dist`) + embed ke `src/ui/assets.generated.ts` |
 | `deno task dev` | Build lalu jalankan desktop + HMR |
 | `deno task start` | Build lalu jalankan tanpa shell desktop (`deno run`) |
