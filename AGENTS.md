@@ -37,6 +37,10 @@ finishing a change.
   layout; Ticket keeps create/filter/refresh in its sidebar; Global = one page). State lives in
   `App.tsx` (tab list, and file/doc selection). All activity-bar menus use the outer `<aside>`;
   Global Settings keeps its section nav in that panel instead of inside the tab.
+  Right-clicking a tab opens a VS Code-style context menu (close / close others / close to the
+  right / close to the left / close all; middle click closes). `TabsBar` holds no tab state: it
+  dispatches `rnd:tab-menu` requests via `web/src/lib/tab-menu.ts`, handled in `useEditorTabs` by
+  `closeOtherTabs` / `closeTabsAfter` / `closeTabsBefore` / `closeAllTabs`.
 - **Layout (deep work)**: `web/src/lib/layout-mode.ts` stores `standard` | `focus` in localStorage
   (`rnd.layout:v1`) and sets `data-layout` on `<html>`; `web/src/focus-layout.css` hides the
   activity bar, left panel, `TabsBar`, and status bar so only the tab area + chat remain. Read it
@@ -73,8 +77,8 @@ finishing a change.
   `spawn_agent` for depth-1 child agents (`src/server/chat/subagent.ts`); child writes merge into
   the parent Review queue; headless/workflow agents do not get this tool. After each successful Build run that used tools,
   `src/server/chat/skill-learn.ts` writes a deterministic project skill. Chat composer supports
-  `/skill-name` (autocomplete + `skillName` on `POST .../chat`) which injects the skill body into
-  the system prompt. Builtin `/code-review` forces Plan mode and prepends git status/diff context
+  `/skill-name` (autocomplete + `skillName` on `POST .../chat`) which injects the skill body into the
+  system prompt. Builtin `/code-review` forces Plan mode and prepends git status/diff context
   (`src/server/code-review.ts`). Reserved slash `/autoskill` runs `npx autoskills -y -a cursor` in
   the project workspace (`POST /api/projects/:id/autoskills`) and installs into `.agents/skills`
   (needs Node >= 22.6, network, `--allow-run`). Enabled state lives in `app_settings`

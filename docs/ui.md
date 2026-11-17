@@ -43,7 +43,24 @@ Jenis tab: `workspace` | `ticket` | `workflow` | `workflow-docs` | `cron` | `cro
 Menu Workflows membuka tab home; klik file workflow di panel membuka tab `workflow:<project>:<slug>`
 (dinamis). Menu Cron membuka singleton `cron` + panel jadwal.
 
-State tab: `web/src/hooks/useEditorTabs.ts`, dikelola dari `App.tsx`.
+### Klik kanan tab (menu VS Code)
+
+Klik kanan pada tab membuka context menu (`ContextMenu` shadcn, per tab di `TabsBar`):
+
+| Item                 | Aksi                                                            |
+| -------------------- | --------------------------------------------------------------- |
+| Tutup                | tutup tab yang di-klik kanan                                    |
+| Tutup tab lain       | tutup semua tab kecuali tab itu (nonaktif bila hanya satu tab)   |
+| Tutup tab di kanan   | tutup semua tab setelahnya (nonaktif bila tab paling kanan)      |
+| Tutup tab di kiri    | tutup semua tab sebelumnya (nonaktif bila tab paling kiri)       |
+| Tutup semua tab      | tutup seluruh tab                                                |
+
+Klik tengah (middle click) pada tab juga menutup tab tersebut. `TabsBar` tidak memegang state
+tab: setiap aksi mengirim event `rnd:tab-menu` lewat `web/src/lib/tab-menu.ts`
+(`requestTabMenuAction`), lalu `useEditorTabs` menanganinya (`closeOtherTabs`, `closeTabsAfter`,
+`closeTabsBefore`, `closeAllTabs`) dan memindahkan tab aktif ke tetangga terdekat yang tersisa.
+
+State tab: `web/src/hooks/useEditorTabs.ts` (termasuk aksi tutup banyak tab), dikelola dari `App.tsx`.
 
 ## Layout deep work (Kanban + Chat)
 

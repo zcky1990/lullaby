@@ -1,17 +1,29 @@
 import {
+  ArrowLeftToLine,
+  ArrowRightToLine,
   BookOpen,
+  CircleX,
   Clock,
   File as FileIcon,
   FileText,
   GitBranch,
   GitCompare,
   LayoutGrid,
+  ListX,
   Settings,
   SlidersHorizontal,
   Ticket,
   Workflow,
   X,
 } from "lucide-react";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
+import { requestTabMenuAction } from "@/lib/tab-menu";
 import { cn } from "@/lib/utils";
 
 export type TabKind =
@@ -73,43 +85,113 @@ export function TabsBar({ tabs, activeId, onSelect, onClose }: Props) {
   if (tabs.length === 0) return null;
   return (
     <div className="flex items-stretch overflow-x-auto border-b bg-[var(--tabbar)]">
-      {tabs.map((tab) => {
-        const Icon = ICONS[tab.kind];
-        const active = tab.id === activeId;
-        return (
-          <div
-            key={tab.id}
+      {tabs.map((tab, index) => (
+        <TabItem
+          key={tab.id}
+          tab={tab}
+          index={index}
+          total={tabs.length}
+          active={tab.id === activeId}
+          onSelect={onSelect}
+          onClose={onClose}
+        />
+      ))}
+    </div>
+  );
+}
+
+function TabItem({
+  tab,
+  index,
+  total,
+  active,
+  onSelect,
+  onClose,
+}: {
+  tab: EditorTab;
+  index: number;
+  total: number;
+  active: boolean;
+  onSelect: (id: string) => void;
+  onClose: (id: string) => void;
+}) {
+  const Icon = ICONS[tab.kind];
+  const hasAfter = index < total - 1;
+  const hasBefore = index > 0;
+
+  return (
+    <ContextMenu>
+      <ContextMenuTrigger asChild>
+        <div
+          data-tab-id={tab.id}
+          className={cn(
+            "group flex h-[35px] items-center gap-2 border-t border-r border-t-transparent px-3 text-xs",
+            active
+              ? "border-t-primary bg-background text-foreground"
+              : "text-muted-foreground hover:bg-accent",
+          )}
+          onAuxClick={(event) => {
+            if (event.button !== 1) return;
+            event.preventDefault();
+            onClose(tab.id);
+          }}
+        >
+          <button
+            type="button"
+            onClick={() => onSelect(tab.id)}
+            className="flex max-w-[14rem] items-center gap-2"
+            title={tab.title}
+          >
+            <Icon className="size-3.5 shrink-0" />
+            <span className="truncate">{tab.title}</span>
+            {tab.dirty ? <span className="size-1.5 shrink-0 rounded-full bg-primary" /> : null}
+          </button>
+          <button
+            type="button"
+            onClick={() => onClose(tab.id)}
+            aria-label={`Tutup ${tab.title}`}
             className={cn(
-              "group flex h-[35px] items-center gap-2 border-t border-r border-t-transparent px-3 text-xs",
-              active
-                ? "border-t-primary bg-background text-foreground"
-                : "text-muted-foreground hover:bg-accent",
+              "rounded p-0.5 hover:bg-accent",
+              active ? "opacity-60" : "opacity-0 group-hover:opacity-60",
             )}
           >
-            <button
-              type="button"
-              onClick={() => onSelect(tab.id)}
-              className="flex max-w-[14rem] items-center gap-2"
-              title={tab.title}
-            >
-              <Icon className="size-3.5 shrink-0" />
-              <span className="truncate">{tab.title}</span>
-              {tab.dirty ? <span className="size-1.5 shrink-0 rounded-full bg-primary" /> : null}
-            </button>
-            <button
-              type="button"
-              onClick={() => onClose(tab.id)}
-              aria-label={`Tutup ${tab.title}`}
-              className={cn(
-                "rounded p-0.5 hover:bg-accent",
-                active ? "opacity-60" : "opacity-0 group-hover:opacity-60",
-              )}
-            >
-              <X className="size-3" />
-            </button>
-          </div>
-        );
-      })}
-    </div>
+            <X className="size-3" />
+          </button>
+        </div>
+      </ContextMenuTrigger>
+      <ContextMenuContent className="w-56">
+        <ContextMenuItem onSelect={() => onClose(tab.id)}>
+          <X />
+          Tutup
+        </ContextMenuItem>
+        <ContextMenuItem
+          disabled={total <= 1}
+          onSelect={() => requestTabMenuAction("close-others", tab.id)}
+        >
+          <CircleX />
+          Tutup tab lain
+        </ContextMenuItem>
+        <ContextMenuSeparator />
+        <ContextMenuItem
+          disabled={!hasAfter}
+          onSelect={() => requestTabMenuAction("close-after", tab.id)}
+        >
+          <ArrowRightToLine />
+          Tutup tab di kanan
+        </ContextMenuItem>
+        <ContextMenuItem
+          disabled={!hasBefore}
+          onSelect={() => requestTabMenuAction("close-before", tab.id)}
+        >
+          <ArrowLeftToLine />
+          Tutup tab di kiri
+        </ContextMenuItem>
+        <ContextMenuSeparator />
+        <ContextMenuItem onSelect={() => requestTabMenuAction("close-all")}>
+          <ListX />
+          Tutup semua tab
+        </ContextMenuItem>
+      </ContextMenuContent>
+    </ContextMenu>
   );
 }
