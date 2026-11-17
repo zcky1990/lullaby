@@ -8,6 +8,7 @@ import { EDITOR_FONT_STACKS, useTheme } from "@/components/ThemeProvider";
 import { Button } from "@/components/ui/button";
 import type { TerminalShell } from "@/lib/api";
 import { registerFinder } from "@/lib/find";
+import { useI18n } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 const DARK_THEME = {
@@ -87,6 +88,7 @@ function safeFit(fit: FitAddon | null, host: HTMLElement | null): boolean {
 }
 
 export function TerminalSession({ projectId, shell, active, onStatus, onReady }: Props) {
+  const { t } = useI18n();
   const hostRef = useRef<HTMLDivElement>(null);
   const fitRef = useRef<FitAddon | null>(null);
   const searchRef = useRef<SearchAddon | null>(null);
@@ -301,7 +303,7 @@ export function TerminalSession({ projectId, shell, active, onStatus, onReady }:
                 find(event.shiftKey);
               }
             }}
-            placeholder="Find"
+            placeholder={t("terminal.session.findPlaceholder")}
             className="h-7 min-w-0 flex-1 bg-transparent px-1 text-xs outline-none"
           />
           <Button
@@ -309,8 +311,8 @@ export function TerminalSession({ projectId, shell, active, onStatus, onReady }:
             variant="ghost"
             className="size-7"
             onClick={() => find(true)}
-            aria-label="Previous match"
-            title="Previous"
+            aria-label={t("terminal.session.previousMatch")}
+            title={t("terminal.session.previous")}
           >
             <ChevronUp />
           </Button>
@@ -319,8 +321,8 @@ export function TerminalSession({ projectId, shell, active, onStatus, onReady }:
             variant="ghost"
             className="size-7"
             onClick={() => find(false)}
-            aria-label="Next match"
-            title="Next"
+            aria-label={t("terminal.session.nextMatch")}
+            title={t("terminal.session.next")}
           >
             <ChevronDown />
           </Button>
@@ -332,8 +334,8 @@ export function TerminalSession({ projectId, shell, active, onStatus, onReady }:
               setFindOpen(false);
               termRef.current?.focus();
             }}
-            aria-label="Close find"
-            title="Close"
+            aria-label={t("terminal.session.closeFind")}
+            title={t("terminal.session.close")}
           >
             <X />
           </Button>

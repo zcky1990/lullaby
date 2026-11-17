@@ -2,9 +2,11 @@ import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Spinner } from "@/components/ui/spinner";
+import { useI18n } from "@/lib/i18n";
 import { api, type PromptsSettings as PromptsData } from "@/lib/api";
 
 export function PromptsSettings() {
+  const { t } = useI18n();
   const [data, setData] = useState<PromptsData | null>(null);
   const [systemPrompt, setSystemPrompt] = useState("");
   const [planPrompt, setPlanPrompt] = useState("");
@@ -43,26 +45,23 @@ export function PromptsSettings() {
     <section className="flex w-full flex-col gap-4">
       <div className="flex flex-col gap-2">
         <h2 className="text-xs font-medium tracking-wider text-muted-foreground uppercase">
-          Prompts
+          {t("settings.prompts.title")}
         </h2>
-        <p className="text-xs text-muted-foreground">
-          Override system prompt global untuk mode Build dan Plan. Persona role (jika aktif) tetap
-          ditambahkan di atas prompt ini.
-        </p>
+        <p className="text-xs text-muted-foreground">{t("settings.prompts.description")}</p>
         <Separator />
       </div>
 
       {loading ? (
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <Spinner />
-          Memuat prompts…
+          {t("settings.prompts.loading")}
         </div>
       ) : (
         <>
           <div className="flex flex-col gap-2">
             <div className="flex items-center justify-between">
               <span className="text-xs font-medium text-muted-foreground">
-                SYSTEM PROMPT (Build)
+                {t("settings.prompts.systemLabel")}
               </span>
               <Button
                 size="sm"
@@ -74,7 +73,7 @@ export function PromptsSettings() {
                 }}
                 disabled={!data}
               >
-                Reset ke default
+                {t("settings.prompts.resetDefault")}
               </Button>
             </div>
             <textarea
@@ -87,15 +86,21 @@ export function PromptsSettings() {
               className="border-input focus-visible:border-ring focus-visible:ring-ring/50 w-full resize-y rounded-md border bg-transparent px-3 py-2 font-mono text-xs shadow-xs outline-none focus-visible:ring-[3px]"
             />
             {data?.customized.systemPrompt ? (
-              <span className="text-[11px] text-muted-foreground">Menggunakan prompt kustom.</span>
+              <span className="text-[11px] text-muted-foreground">
+                {t("settings.prompts.custom")}
+              </span>
             ) : (
-              <span className="text-[11px] text-muted-foreground">Menggunakan default.</span>
+              <span className="text-[11px] text-muted-foreground">
+                {t("settings.prompts.default")}
+              </span>
             )}
           </div>
 
           <div className="flex flex-col gap-2">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-medium text-muted-foreground">PLAN PROMPT</span>
+              <span className="text-xs font-medium text-muted-foreground">
+                {t("settings.prompts.planLabel")}
+              </span>
               <Button
                 size="sm"
                 variant="ghost"
@@ -106,7 +111,7 @@ export function PromptsSettings() {
                 }}
                 disabled={!data}
               >
-                Reset ke default
+                {t("settings.prompts.resetDefault")}
               </Button>
             </div>
             <textarea
@@ -119,9 +124,13 @@ export function PromptsSettings() {
               className="border-input focus-visible:border-ring focus-visible:ring-ring/50 w-full resize-y rounded-md border bg-transparent px-3 py-2 font-mono text-xs shadow-xs outline-none focus-visible:ring-[3px]"
             />
             {data?.customized.planPrompt ? (
-              <span className="text-[11px] text-muted-foreground">Menggunakan prompt kustom.</span>
+              <span className="text-[11px] text-muted-foreground">
+                {t("settings.prompts.custom")}
+              </span>
             ) : (
-              <span className="text-[11px] text-muted-foreground">Menggunakan default.</span>
+              <span className="text-[11px] text-muted-foreground">
+                {t("settings.prompts.default")}
+              </span>
             )}
           </div>
 
@@ -130,9 +139,11 @@ export function PromptsSettings() {
           <div className="flex items-center gap-2">
             <Button size="sm" onClick={save} disabled={saving}>
               {saving ? <Spinner /> : null}
-              Simpan
+              {t("common.save")}
             </Button>
-            {saved ? <span className="text-xs text-muted-foreground">Tersimpan.</span> : null}
+            {saved ? (
+              <span className="text-xs text-muted-foreground">{t("settings.prompts.saved")}</span>
+            ) : null}
           </div>
         </>
       )}

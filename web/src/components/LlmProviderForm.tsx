@@ -12,6 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useI18n } from "@/lib/i18n";
 import { PROVIDER_FIELDS } from "@/lib/integrations";
 import {
   api,
@@ -32,6 +33,7 @@ interface Props {
 type ProviderKind = "custom" | "cursor";
 
 export function LlmProviderForm({ provider, onSave, onTest, onDelete, onCancel }: Props) {
+  const { t } = useI18n();
   const [kind, setKind] = useState<ProviderKind>(
     provider?.provider === "cursor" ? "cursor" : "custom",
   );
@@ -172,7 +174,7 @@ export function LlmProviderForm({ provider, onSave, onTest, onDelete, onCancel }
   };
 
   const remove = async () => {
-    if (!confirm("Hapus provider ini?")) return;
+    if (!confirm(t("settings.llm.form.confirmDelete"))) return;
     setBusy(true);
     try {
       await onDelete();
@@ -185,15 +187,15 @@ export function LlmProviderForm({ provider, onSave, onTest, onDelete, onCancel }
     <div className="flex flex-col gap-4">
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="grid gap-1.5">
-          <Label htmlFor={`llm-${suffix}-kind`}>Jenis provider</Label>
+          <Label htmlFor={`llm-${suffix}-kind`}>{t("settings.llm.form.kind")}</Label>
           <Select value={kind} onValueChange={(value) => changeKind(value as ProviderKind)}>
             <SelectTrigger id={`llm-${suffix}-kind`}>
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
               <SelectGroup>
-                <SelectItem value="custom">Custom (OpenAI-compatible)</SelectItem>
-                <SelectItem value="cursor">Cursor SDK</SelectItem>
+                <SelectItem value="custom">{t("settings.llm.form.kindCustom")}</SelectItem>
+                <SelectItem value="cursor">{t("settings.llm.form.kindCursor")}</SelectItem>
               </SelectGroup>
             </SelectContent>
           </Select>
@@ -212,7 +214,7 @@ export function LlmProviderForm({ provider, onSave, onTest, onDelete, onCancel }
                     value={config[field.key] ?? ""}
                     placeholder={
                       field.secret && (provider?.hasApiKey || provider?.apiKey)
-                        ? "Tersimpan — isi untuk mengganti"
+                        ? t("settings.llm.form.savedPlaceholder")
                         : field.placeholder
                     }
                     onChange={(e) => setConfig((c) => ({ ...c, [field.key]: e.target.value }))}
@@ -220,7 +222,7 @@ export function LlmProviderForm({ provider, onSave, onTest, onDelete, onCancel }
                 </div>
               ))}
               <div className="grid gap-1.5">
-                <Label htmlFor={`llm-${suffix}-mode`}>Mode</Label>
+                <Label htmlFor={`llm-${suffix}-mode`}>{t("settings.llm.form.mode")}</Label>
                 <Select value={mode} onValueChange={setMode}>
                   <SelectTrigger id={`llm-${suffix}-mode`}>
                     <SelectValue />
@@ -238,7 +240,7 @@ export function LlmProviderForm({ provider, onSave, onTest, onDelete, onCancel }
           : (
             <>
               <div className="grid gap-1.5">
-                <Label htmlFor={`llm-${suffix}-cursor-name`}>Nama</Label>
+                <Label htmlFor={`llm-${suffix}-cursor-name`}>{t("common.name")}</Label>
                 <Input
                   id={`llm-${suffix}-cursor-name`}
                   value={config.name ?? ""}
@@ -247,19 +249,21 @@ export function LlmProviderForm({ provider, onSave, onTest, onDelete, onCancel }
                 />
               </div>
               <div className="grid gap-1.5">
-                <Label htmlFor={`llm-${suffix}-cursor-key`}>API Key</Label>
+                <Label htmlFor={`llm-${suffix}-cursor-key`}>{t("settings.llm.form.apiKey")}</Label>
                 <Input
                   id={`llm-${suffix}-cursor-key`}
                   type="password"
                   autoComplete="off"
                   value={config.apiKey ?? ""}
-                  placeholder={hasStoredKey ? "Tersimpan — isi untuk mengganti" : "Cursor API key"}
+                  placeholder={hasStoredKey
+                    ? t("settings.llm.form.savedPlaceholder")
+                    : t("settings.llm.form.cursorKeyPlaceholder")}
                   onChange={(e) => setConfig((c) => ({ ...c, apiKey: e.target.value }))}
                 />
               </div>
               <div className="grid gap-1.5 sm:col-span-2">
                 <div className="flex items-center justify-between gap-2">
-                  <Label htmlFor={`llm-${suffix}-cursor-model`}>Model (dari Cursor SDK)</Label>
+                  <Label htmlFor={`llm-${suffix}-cursor-model`}>{t("settings.llm.form.model")}</Label>
                   <Button
                     type="button"
                     size="sm"
@@ -270,7 +274,7 @@ export function LlmProviderForm({ provider, onSave, onTest, onDelete, onCancel }
                     data-icon="inline-start"
                   >
                     {modelsLoading ? <RefreshCw className="animate-spin" /> : <RefreshCw />}
-                    Muat ulang
+                    {t("common.refresh")}
                   </Button>
                 </div>
                 <Select
@@ -281,10 +285,10 @@ export function LlmProviderForm({ provider, onSave, onTest, onDelete, onCancel }
                   <SelectTrigger id={`llm-${suffix}-cursor-model`}>
                     <SelectValue
                       placeholder={modelsLoading
-                        ? "Memuat model…"
+                        ? t("settings.llm.form.loadingModels")
                         : cursorKeyMissing
-                        ? "Isi API key dulu"
-                        : "Pilih model"}
+                        ? t("settings.llm.form.needKey")
+                        : t("settings.llm.form.selectModel")}
                     />
                   </SelectTrigger>
                   <SelectContent>
@@ -299,24 +303,24 @@ export function LlmProviderForm({ provider, onSave, onTest, onDelete, onCancel }
                 </Select>
                 {modelsError ? (
                   <p className="text-xs text-destructive">
-                    Gagal memuat model: {modelsError}{" "}
+                    {t("settings.llm.form.modelsError", { message: modelsError })}{" "}
                     <button
                       type="button"
                       className="underline underline-offset-2"
                       onClick={() => void loadModels()}
                     >
-                      Coba lagi
+                      {t("common.retry")}
                     </button>
                   </p>
                 ) : null}
                 {!modelsError && models.length > 0 ? (
-                  <p className="text-xs text-muted-foreground">{models.length} model tersedia.</p>
+                  <p className="text-xs text-muted-foreground">
+                    {t("settings.llm.form.modelsCount", { count: models.length })}
+                  </p>
                 ) : null}
               </div>
               <p className="text-xs text-muted-foreground sm:col-span-2">
-                Cursor SDK memakai API key Cursor. Agent boleh membaca dan mengedit workspace; edit
-                dijalankan pada salinan sementara lalu masuk ke Review aplikasi. Shell/delete
-                dinonaktifkan.
+                {t("settings.llm.form.cursorHint")}
               </p>
             </>
           )}
@@ -324,7 +328,7 @@ export function LlmProviderForm({ provider, onSave, onTest, onDelete, onCancel }
 
       <div className="flex flex-wrap items-center gap-2">
         <Button size="sm" onClick={save} disabled={busy || cursorKeyMissing}>
-          Simpan
+          {t("common.save")}
         </Button>
         <Button
           size="sm"
@@ -332,20 +336,20 @@ export function LlmProviderForm({ provider, onSave, onTest, onDelete, onCancel }
           onClick={test}
           disabled={busy || cursorKeyMissing}
         >
-          Test Connection
+          {t("settings.llm.form.testConnection")}
         </Button>
         {provider && (
           <Button size="sm" variant="ghost" onClick={remove} disabled={busy} data-icon="inline-start">
             <Trash2 />
-            Hapus
+            {t("common.delete")}
           </Button>
         )}
         {onCancel && (
           <Button size="sm" variant="ghost" onClick={onCancel} disabled={busy}>
-            Batal
+            {t("common.cancel")}
           </Button>
         )}
-        {saved ? <Badge variant="success">Tersimpan</Badge> : null}
+        {saved ? <Badge variant="success">{t("common.saved")}</Badge> : null}
         {result ? (
           <span className={`text-xs ${result.ok ? "text-success" : "text-destructive"}`}>
             {result.message} ({result.latencyMs}ms)

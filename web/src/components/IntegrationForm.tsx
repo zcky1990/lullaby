@@ -11,6 +11,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useI18n } from "@/lib/i18n";
 import type { FieldDef } from "@/lib/integrations";
 import { SECRET_MASK, type Integration, type IntegrationPayload, type TestResult } from "@/lib/api";
 
@@ -39,6 +40,7 @@ export function IntegrationForm({ kind, fields, value, onSave, onTest, onCancel 
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
   const [result, setResult] = useState<TestResult | null>(null);
+  const { t } = useI18n();
 
   const payload = (): IntegrationPayload => {
     const clean: Record<string, string> = {};
@@ -110,7 +112,7 @@ export function IntegrationForm({ kind, fields, value, onSave, onTest, onCancel 
                 value={config[field.key] ?? ""}
                 placeholder={
                   field.secret && value?.hasSecrets
-                    ? "Tersimpan — isi untuk mengganti"
+                    ? t("settings.integration.savedPlaceholder")
                     : field.placeholder
                 }
                 onChange={(e) => setConfig((c) => ({ ...c, [field.key]: e.target.value }))}
@@ -119,7 +121,7 @@ export function IntegrationForm({ kind, fields, value, onSave, onTest, onCancel 
           </div>
         ))}
         <div className="grid gap-1.5">
-          <Label htmlFor={`${kind}-mode`}>Mode</Label>
+          <Label htmlFor={`${kind}-mode`}>{t("settings.integration.mode")}</Label>
           <Select value={mode} onValueChange={setMode}>
             <SelectTrigger id={`${kind}-mode`}>
               <SelectValue />
@@ -127,7 +129,7 @@ export function IntegrationForm({ kind, fields, value, onSave, onTest, onCancel 
             <SelectContent>
               <SelectGroup>
                 <SelectItem value="api">api</SelectItem>
-                <SelectItem value="mcp">mcp (belum dieksekusi)</SelectItem>
+                <SelectItem value="mcp">{t("settings.integration.mcpNotExecuted")}</SelectItem>
               </SelectGroup>
             </SelectContent>
           </Select>
@@ -136,17 +138,17 @@ export function IntegrationForm({ kind, fields, value, onSave, onTest, onCancel 
 
       <div className="flex flex-wrap items-center gap-2">
         <Button size="sm" onClick={save} disabled={busy}>
-          Simpan
+          {t("common.save")}
         </Button>
         <Button size="sm" variant="outline" onClick={test} disabled={busy}>
-          Test Connection
+          {t("settings.integration.testConnection")}
         </Button>
         {onCancel && (
           <Button size="sm" variant="ghost" onClick={onCancel} disabled={busy}>
-            Batal
+            {t("common.cancel")}
           </Button>
         )}
-        {saved ? <Badge variant="success">Tersimpan</Badge> : null}
+        {saved ? <Badge variant="success">{t("common.saved")}</Badge> : null}
         {result ? (
           <span className={cnText(result.ok)}>
             {result.message} ({result.latencyMs}ms)

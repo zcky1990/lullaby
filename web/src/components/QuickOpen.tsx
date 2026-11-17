@@ -3,6 +3,7 @@ import { File, Search } from "lucide-react";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Spinner } from "@/components/ui/spinner";
 import { api } from "@/lib/api";
+import { useI18n } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 const indexCache = new Map<string, string[]>();
@@ -44,6 +45,7 @@ interface Props {
 }
 
 export function QuickOpen({ open, projectId, onOpenChange, onOpenFile }: Props) {
+  const { t } = useI18n();
   const [query, setQuery] = useState("");
   const [files, setFiles] = useState<string[]>([]);
   const [truncated, setTruncated] = useState(false);
@@ -130,7 +132,7 @@ export function QuickOpen({ open, projectId, onOpenChange, onOpenFile }: Props) 
           inputRef.current?.focus();
         }}
       >
-        <DialogTitle className="sr-only">Quick Open</DialogTitle>
+        <DialogTitle className="sr-only">{t("explorer.quickOpen.title")}</DialogTitle>
         <div className="flex items-center gap-2 border-b px-3">
           <Search className="size-4 shrink-0 text-muted-foreground" />
           <input
@@ -150,9 +152,9 @@ export function QuickOpen({ open, projectId, onOpenChange, onOpenFile }: Props) 
                 if (path) choose(path);
               }
             }}
-            placeholder="Cari file berdasarkan nama…"
+            placeholder={t("explorer.quickOpen.placeholder")}
             className="h-11 w-full bg-transparent text-xs outline-none placeholder:text-muted-foreground"
-            aria-label="Cari file"
+            aria-label={t("explorer.quickOpen.searchAria")}
             autoComplete="off"
             spellCheck={false}
           />
@@ -165,13 +167,15 @@ export function QuickOpen({ open, projectId, onOpenChange, onOpenFile }: Props) 
           {loading ? (
             <div className="flex items-center gap-2 px-3 py-3 text-xs text-muted-foreground">
               <Spinner />
-              Memuat file…
+              {t("explorer.quickOpen.loading")}
             </div>
           ) : error ? (
             <p className="px-3 py-3 text-xs text-destructive">{error}</p>
           ) : results.length === 0 ? (
             <p className="px-3 py-3 text-xs text-muted-foreground">
-              {files.length === 0 ? "Tidak ada file di workspace." : "Tidak ada file yang cocok."}
+              {files.length === 0
+                ? t("explorer.quickOpen.empty")
+                : t("explorer.quickOpen.noMatch")}
             </p>
           ) : (
             results.map((path, index) => (
@@ -200,10 +204,12 @@ export function QuickOpen({ open, projectId, onOpenChange, onOpenFile }: Props) 
 
         <div className="flex items-center justify-between border-t px-3 py-1.5 text-[10px] text-muted-foreground">
           <span>
-            {results.length} file{query ? ` cocok untuk “${query}”` : ""}
-            {truncated ? " · indeks dipotong" : ""}
+            {query
+              ? t("explorer.quickOpen.resultsQuery", { count: results.length, query })
+              : t("explorer.quickOpen.results", { count: results.length })}
+            {truncated ? t("explorer.quickOpen.truncatedSuffix") : ""}
           </span>
-          <span>↑↓ pilih · enter buka</span>
+          <span>{t("explorer.quickOpen.hint")}</span>
         </div>
       </DialogContent>
     </Dialog>

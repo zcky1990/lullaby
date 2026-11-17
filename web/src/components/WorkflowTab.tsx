@@ -45,6 +45,7 @@ import {
   type WorkflowSummary,
 } from "@/lib/api";
 import { formatApiError } from "@/lib/api-error";
+import { useI18n } from "@/lib/i18n";
 import {
   runBadgeVariant,
   stepBadgeVariant,
@@ -96,6 +97,7 @@ export function WorkflowTab({
   onDeleted,
 }: Props) {
   const { resolvedEditorTheme } = useTheme();
+  const { t } = useI18n();
   const [yaml, setYaml] = useState("");
   const [definition, setDefinition] = useState<WorkflowDefinition | null>(null);
   const [summary, setSummary] = useState<WorkflowSummary | null>(null);
@@ -252,7 +254,7 @@ export function WorkflowTab({
 
   const removeRun = async (runId: string) => {
     if (!projectId) return;
-    if (!confirm("Hapus run ini dari riwayat?")) return;
+    if (!confirm(t("workflow.tab.confirmDeleteRun"))) return;
     setError(undefined);
     try {
       await api.deleteWorkflowRun(projectId, runId);
@@ -300,7 +302,13 @@ export function WorkflowTab({
 
   const remove = async () => {
     if (!projectId || !slug) return;
-    if (!confirm(`Hapus workflow "${summary?.name ?? slug}"?`)) return;
+    if (
+      !confirm(
+        t("workflow.tab.confirmDeleteWorkflow", { name: summary?.name ?? slug }),
+      )
+    ) {
+      return;
+    }
     try {
       await api.deleteWorkflow(projectId, slug);
       onDeleted();
@@ -444,7 +452,7 @@ export function WorkflowTab({
   if (!slug) {
     return (
       <div className="flex h-full items-center justify-center p-8 text-xs text-muted-foreground">
-        Pilih workflow di panel kiri atau buat workflow baru.
+        {t("workflow.tab.noSelection")}
       </div>
     );
   }
@@ -509,7 +517,7 @@ export function WorkflowTab({
             size="sm"
             variant="outline"
             onClick={remove}
-            aria-label="Hapus workflow"
+            aria-label={t("workflow.tab.deleteWorkflow")}
             className="text-destructive"
           >
             <Trash2 />
@@ -527,7 +535,7 @@ export function WorkflowTab({
       {summary?.error
         ? (
           <p className="border-b px-3 py-2 text-xs text-destructive">
-            YAML error: {summary.error}
+            {t("workflow.tab.yamlError", { error: summary.error })}
           </p>
         )
         : null}
@@ -557,13 +565,15 @@ export function WorkflowTab({
             {summary.schedule.nextRunAt && summary.schedule.enabled
               ? (
                 <span className="text-muted-foreground">
-                  next: {formatNextRun(summary.schedule.nextRunAt)}
+                  {t("workflow.tab.nextRun", {
+                    value: formatNextRun(summary.schedule.nextRunAt) ?? "",
+                  })}
                 </span>
               )
               : null}
             <div className="ml-auto flex items-center gap-2">
               <Label htmlFor="workflow-schedule-enabled" className="text-[11px]">
-                Schedule
+                {t("workflow.tab.schedule")}
               </Label>
               <Switch
                 id="workflow-schedule-enabled"
@@ -587,7 +597,7 @@ export function WorkflowTab({
               data-icon="inline-start"
             >
               <FileCode2 />
-              Editor
+              {t("workflow.tab.editor")}
             </Button>
             <Button
               size="sm"
@@ -597,7 +607,7 @@ export function WorkflowTab({
               data-icon="inline-start"
             >
               <Network />
-              Graph
+              {t("workflow.tab.graph")}
             </Button>
           </div>
 
@@ -642,7 +652,7 @@ export function WorkflowTab({
           <div className="h-[220px] shrink-0 overflow-auto border-t bg-background">
             <div className="flex items-center justify-between gap-2 border-b px-3 py-1.5">
               <span className="truncate font-mono text-[11px]">
-                {selectedStepData?.stepId ?? "Log"}
+                {selectedStepData?.stepId ?? t("workflow.tab.log")}
               </span>
               {selectedStepData
                 ? (
@@ -666,7 +676,7 @@ export function WorkflowTab({
                 $ {selectedStepData?.command ?? ""}
               </p>
               <pre className="font-mono text-[11px] whitespace-pre-wrap">
-                {selectedStepData?.log || "(belum ada log)"}
+                {selectedStepData?.log || t("workflow.tab.noLog")}
               </pre>
             </div>
           </div>
@@ -675,14 +685,14 @@ export function WorkflowTab({
         <aside className="flex w-72 shrink-0 flex-col overflow-y-auto border-l">
           <div className="flex items-center justify-between border-b px-3 py-1.5">
             <span className="text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">
-              Runs
+              {t("workflow.runs.title")}
             </span>
             <Button
               size="icon"
               variant="ghost"
               className="size-6"
               onClick={() => void load()}
-              aria-label="Refresh workflow"
+              aria-label={t("workflow.runs.refresh")}
             >
               <RefreshCw className="size-3" />
             </Button>
@@ -690,7 +700,7 @@ export function WorkflowTab({
           {runs.length === 0
             ? (
               <p className="px-3 py-2 text-xs text-muted-foreground">
-                Belum ada run.
+                {t("workflow.runs.empty")}
               </p>
             )
             : (
@@ -732,8 +742,10 @@ export function WorkflowTab({
                       event.stopPropagation();
                       void removeRun(run.id);
                     }}
-                    aria-label={`Hapus run ${run.id.slice(0, 8)}`}
-                    title="Hapus run"
+                    aria-label={t("workflow.runs.deleteAria", {
+                      id: run.id.slice(0, 8),
+                    })}
+                    title={t("workflow.runs.delete")}
                   >
                     <Trash2 className="size-3" />
                   </Button>
@@ -743,7 +755,7 @@ export function WorkflowTab({
 
           <div className="border-b px-3 py-1.5">
             <span className="text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">
-              Steps
+              {t("workflow.tab.steps")}
             </span>
           </div>
           {(steps.length > 0 ? steps : definition?.steps.map((step) => ({

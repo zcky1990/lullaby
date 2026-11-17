@@ -3,6 +3,7 @@ import { LlmProviderForm } from "@/components/LlmProviderForm";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Separator } from "@/components/ui/separator";
+import { useI18n } from "@/lib/i18n";
 import type { LlmProvider, LlmProviderPayload, TestResult } from "@/lib/api";
 
 interface Props {
@@ -22,17 +23,16 @@ export function LlmProvidersSettings({
   onSaveLlm,
   onDeleteLlm,
 }: Props) {
+  const { t } = useI18n();
   return (
     <section className="flex w-full flex-col gap-6">
       <div className="flex flex-col gap-2">
         <div className="flex items-center justify-between">
           <div className="flex flex-col gap-1">
             <h2 className="text-xs font-medium tracking-wider text-muted-foreground uppercase">
-              LLM Providers
+              {t("settings.llm.title")}
             </h2>
-            <p className="text-xs text-muted-foreground">
-              Provider LLM global, dipakai semua project (chat dan generate ticket).
-            </p>
+            <p className="text-xs text-muted-foreground">{t("settings.llm.description")}</p>
           </div>
           <Button
             size="sm"
@@ -41,16 +41,14 @@ export function LlmProvidersSettings({
             data-icon="inline-start"
           >
             <Plus />
-            Provider
+            {t("settings.llm.add")}
           </Button>
         </div>
         <Separator />
       </div>
 
       {providers.length === 0 && !addingProvider ? (
-        <p className="text-xs text-muted-foreground">
-          Belum ada provider LLM. Tambahkan minimal satu untuk chat dan generate ticket.
-        </p>
+        <p className="text-xs text-muted-foreground">{t("settings.llm.empty")}</p>
       ) : null}
 
       {providers.map((provider) => (
@@ -83,7 +81,7 @@ export function LlmProvidersSettings({
         <Collapsible defaultOpen className="rounded-md border">
           <CollapsibleTrigger asChild>
             <Button variant="ghost" className="w-full justify-between px-3">
-              Provider baru
+              {t("settings.llm.newProvider")}
               <ChevronDown className="size-4 shrink-0" />
             </Button>
           </CollapsibleTrigger>

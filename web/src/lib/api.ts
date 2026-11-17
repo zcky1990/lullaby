@@ -479,6 +479,7 @@ export interface UiPreferences {
   chatFontSize?: number;
   iconSize?: "sm" | "md" | "lg";
   iconWeight?: "light" | "regular" | "bold";
+  language?: "id" | "en";
 }
 
 export interface LspProbeResult {

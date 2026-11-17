@@ -25,6 +25,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { api, type TicketDetail, type TicketProvider, type TicketSource } from "@/lib/api";
 import { dispatchAutoBuild } from "@/lib/auto-build-events";
 import { requestChatOpen } from "@/lib/chat-drag";
+import { useI18n } from "@/lib/i18n";
 import { sanitizeHtml } from "@/lib/sanitize-html";
 import { cn } from "@/lib/utils";
 
@@ -59,6 +60,7 @@ export function TicketDetailDialog({
   onChanged,
   onWorkOnTicket,
 }: Props) {
+  const { t } = useI18n();
   const [ticket, setTicket] = useState<TicketDetail | null>(null);
   const [loading, setLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
@@ -151,7 +153,7 @@ export function TicketDetailDialog({
   const saveEdit = async () => {
     if (!projectId || !localId) return;
     if (!title.trim()) {
-      setActionError("Judul tiket wajib diisi.");
+      setActionError(t("tickets.detail.titleRequired"));
       return;
     }
     setSaving(true);
@@ -177,7 +179,7 @@ export function TicketDetailDialog({
 
   const removeTicket = async () => {
     if (!projectId || !localId || !ticketKey) return;
-    if (!confirm(`Hapus tiket ${ticketKey}? Tindakan ini tidak bisa dibatalkan.`)) return;
+    if (!confirm(t("tickets.detail.deleteConfirm", { key: ticketKey }))) return;
     setDeleting(true);
     setActionError(undefined);
     try {
@@ -253,20 +255,22 @@ export function TicketDetailDialog({
                   : "outline"}
               >
                 {ticket.syncStatus === "synced"
-                  ? "Synced"
+                  ? t("tickets.detail.synced")
                   : ticket.syncStatus === "error"
-                  ? "Sync error"
-                  : "Local"}
+                  ? t("tickets.detail.syncError")
+                  : t("tickets.detail.local")}
               </Badge>
             ) : null}
           </div>
           <DialogTitle className="text-left text-xl leading-snug font-semibold">
             {editing
-              ? "Edit tiket"
-              : ticket?.summary ?? (loading ? "Memuat…" : "Detail tiket")}
+              ? t("tickets.detail.editTitle")
+              : ticket?.summary ?? (loading
+                ? t("tickets.detail.loading")
+                : t("tickets.detail.title"))}
           </DialogTitle>
           <DialogDescription className="sr-only">
-            Detail tiket {displayKey}
+            {t("tickets.detail.description", { key: displayKey })}
           </DialogDescription>
           {!editing && ticket && !loading && !error ? (
             <div className="flex flex-wrap items-center gap-2 pt-1">
@@ -274,10 +278,10 @@ export function TicketDetailDialog({
                 size="sm"
                 onClick={() => workOnTicket(ticket)}
                 data-icon="inline-start"
-                title="Buka chat dan mulai kerjakan tiket ini"
+                title={t("tickets.detail.workOnTicketHint")}
               >
                 <Play />
-                Kerjakan tiket
+                {t("tickets.detail.workOnTicket")}
               </Button>
               {isLocal ? (
                 <Button
@@ -287,7 +291,7 @@ export function TicketDetailDialog({
                   data-icon="inline-start"
                 >
                   <Pencil />
-                  Edit
+                  {t("tickets.detail.edit")}
                 </Button>
               ) : null}
               {canSync ? (
@@ -299,7 +303,11 @@ export function TicketDetailDialog({
                         setSyncProvider(value as TicketProvider)
                       }
                     >
-                      <SelectTrigger size="sm" className="w-[7.5rem]" aria-label="Provider sync">
+                      <SelectTrigger
+                        size="sm"
+                        className="w-[7.5rem]"
+                        aria-label={t("tickets.detail.syncProvider")}
+                      >
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -320,7 +328,7 @@ export function TicketDetailDialog({
                     data-icon="inline-start"
                   >
                     {syncing ? <Spinner /> : <Upload />}
-                    Sync ke {syncLabel}
+                    {t("tickets.detail.syncTo", { provider: syncLabel })}
                   </Button>
                 </>
               ) : null}
@@ -328,7 +336,7 @@ export function TicketDetailDialog({
                 <Button asChild size="sm" variant="outline" data-icon="inline-start">
                   <a href={ticket.url} target="_blank" rel="noreferrer">
                     <ExternalLink />
-                    Buka di {remoteLabel}
+                    {t("tickets.detail.openIn", { provider: remoteLabel })}
                   </a>
                 </Button>
               ) : null}
@@ -342,7 +350,7 @@ export function TicketDetailDialog({
                   className="text-destructive hover:text-destructive"
                 >
                   {deleting ? <Spinner /> : <Trash2 />}
-                  Hapus
+                  {t("tickets.detail.delete")}
                 </Button>
               ) : null}
             </div>
@@ -353,7 +361,7 @@ export function TicketDetailDialog({
           {loading ? (
             <div className="flex items-center gap-2 py-8 text-xs text-muted-foreground">
               <Spinner />
-              Memuat detail tiket…
+              {t("tickets.detail.loadingDetail")}
             </div>
           ) : null}
           {error ? <p className="text-xs text-destructive">{error}</p> : null}
@@ -361,7 +369,7 @@ export function TicketDetailDialog({
           {ticket && !loading && !error && editing ? (
             <div className="flex flex-col gap-4 text-xs">
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="ticket-edit-title">Judul</Label>
+                <Label htmlFor="ticket-edit-title">{t("tickets.detail.titleLabel")}</Label>
                 <Input
                   id="ticket-edit-title"
                   value={title}
@@ -369,18 +377,22 @@ export function TicketDetailDialog({
                 />
               </div>
               <div className="flex flex-col gap-1.5">
-                <Label>Deskripsi</Label>
+                <Label>{t("tickets.detail.descriptionLabel")}</Label>
                 <RichTextEditor
                   value={description}
                   onChange={setDescription}
-                  placeholder="Konteks, langkah reproduksi, atau acceptance criteria…"
+                  placeholder={t("tickets.detail.descriptionPlaceholder")}
                 />
               </div>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                 <div className="flex flex-col gap-1.5">
-                  <Label>Status</Label>
+                  <Label>{t("tickets.detail.statusLabel")}</Label>
                   <Select value={status} onValueChange={setStatus}>
-                    <SelectTrigger size="sm" className="w-full" aria-label="Status tiket">
+                    <SelectTrigger
+                      size="sm"
+                      className="w-full"
+                      aria-label={t("tickets.detail.statusAria")}
+                    >
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -395,14 +407,18 @@ export function TicketDetailDialog({
                   </Select>
                 </div>
                 <div className="flex flex-col gap-1.5">
-                  <Label>Prioritas</Label>
+                  <Label>{t("tickets.detail.priorityLabel")}</Label>
                   <Select value={priority} onValueChange={setPriority}>
-                    <SelectTrigger size="sm" className="w-full" aria-label="Prioritas tiket">
+                    <SelectTrigger
+                      size="sm"
+                      className="w-full"
+                      aria-label={t("tickets.detail.priorityAria")}
+                    >
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectGroup>
-                        <SelectItem value="none">Tanpa</SelectItem>
+                        <SelectItem value="none">{t("tickets.detail.priorityNone")}</SelectItem>
                         {PRIORITIES.map((item) => (
                           <SelectItem key={item} value={item}>
                             {item}
@@ -413,9 +429,13 @@ export function TicketDetailDialog({
                   </Select>
                 </div>
                 <div className="flex flex-col gap-1.5">
-                  <Label>Tipe</Label>
+                  <Label>{t("tickets.detail.typeLabel")}</Label>
                   <Select value={type} onValueChange={setType}>
-                    <SelectTrigger size="sm" className="w-full" aria-label="Tipe tiket">
+                    <SelectTrigger
+                      size="sm"
+                      className="w-full"
+                      aria-label={t("tickets.detail.typeAria")}
+                    >
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -432,7 +452,7 @@ export function TicketDetailDialog({
               </div>
               {ticket.syncStatus === "synced" ? (
                 <p className="text-xs text-muted-foreground">
-                  Tiket sudah synced ke Jira — perubahan lokal tidak otomatis dikirim ke Jira.
+                  {t("tickets.detail.syncedNotice")}
                 </p>
               ) : null}
               {actionError ? <p className="text-xs text-destructive">{actionError}</p> : null}
@@ -452,16 +472,16 @@ export function TicketDetailDialog({
               ) : null}
 
               <div className="grid grid-cols-2 gap-3 rounded-lg border bg-muted/20 p-3 sm:grid-cols-4">
-                <Field label="Assignee" value={ticket.assignee} />
-                <Field label="Reporter" value={ticket.reporter} />
-                <Field label="Type" value={ticket.type} />
-                <Field label="Updated" value={formatDate(ticket.updated)} />
+                <Field label={t("tickets.detail.assignee")} value={ticket.assignee} />
+                <Field label={t("tickets.detail.reporter")} value={ticket.reporter} />
+                <Field label={t("tickets.detail.typeField")} value={ticket.type} />
+                <Field label={t("tickets.detail.updated")} value={formatDate(ticket.updated)} />
               </div>
 
               {ticket.labels.length > 0 ? (
                 <div className="flex flex-col gap-1.5">
                   <p className="text-[11px] font-medium tracking-wider text-muted-foreground uppercase">
-                    Labels
+                    {t("tickets.detail.labels")}
                   </p>
                   <div className="flex flex-wrap gap-1.5">
                     {ticket.labels.map((label) => (
@@ -475,7 +495,7 @@ export function TicketDetailDialog({
 
               <div className="flex flex-col gap-1.5">
                 <p className="text-[11px] font-medium tracking-wider text-muted-foreground uppercase">
-                  Deskripsi
+                  {t("tickets.detail.descriptionSection")}
                 </p>
                 {ticket.description ? (
                   isHtmlDescription ? (
@@ -493,7 +513,7 @@ export function TicketDetailDialog({
                   )
                 ) : (
                   <p className="rounded-lg border border-dashed px-4 py-6 text-center text-xs text-muted-foreground">
-                    Tidak ada deskripsi
+                    {t("tickets.detail.noDescription")}
                   </p>
                 )}
               </div>
@@ -506,11 +526,11 @@ export function TicketDetailDialog({
             <p className="text-xs text-muted-foreground">{displayKey}</p>
             <div className="flex items-center gap-2">
               <Button size="sm" variant="outline" onClick={cancelEdit} disabled={saving}>
-                Batal
+                {t("tickets.detail.cancel")}
               </Button>
               <Button size="sm" onClick={saveEdit} disabled={saving} data-icon="inline-start">
                 {saving ? <Spinner /> : null}
-                Simpan
+                {t("tickets.detail.save")}
               </Button>
             </div>
           </DialogFooter>

@@ -23,6 +23,7 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
+import { useI18n } from "@/lib/i18n";
 import {
   api,
   SECRET_MASK,
@@ -31,26 +32,26 @@ import {
   type NotificationSettings,
 } from "@/lib/api";
 
-const CHANNEL_TYPES: { id: NotificationChannelType; label: string; hint: string }[] = [
+const CHANNEL_TYPES: { id: NotificationChannelType; labelKey: string; hintKey: string }[] = [
   {
     id: "slack",
-    label: "Slack",
-    hint: "Incoming Webhook URL dari Slack app / workspace",
+    labelKey: "settings.notifications.type.slack",
+    hintKey: "settings.notifications.type.slackHint",
   },
   {
     id: "google_chat",
-    label: "Google Chat",
-    hint: "Incoming webhook URL dari space Google Chat",
+    labelKey: "settings.notifications.type.googleChat",
+    hintKey: "settings.notifications.type.googleChatHint",
   },
   {
     id: "discord",
-    label: "Discord",
-    hint: "Webhook URL channel Discord",
+    labelKey: "settings.notifications.type.discord",
+    hintKey: "settings.notifications.type.discordHint",
   },
   {
     id: "webhook",
-    label: "Generic webhook",
-    hint: "POST JSON event ke URL kustom",
+    labelKey: "settings.notifications.type.webhook",
+    hintKey: "settings.notifications.type.webhookHint",
   },
 ];
 
@@ -80,6 +81,7 @@ export function NotificationSettings() {
   const [message, setMessage] = useState<string | undefined>();
   const [editorOpen, setEditorOpen] = useState(false);
   const [draft, setDraft] = useState<DraftChannel>(emptyDraft());
+  const { t } = useI18n();
 
   useEffect(() => {
     let cancelled = false;
@@ -137,11 +139,11 @@ export function NotificationSettings() {
     const name = draft.name.trim();
     const webhookUrl = draft.webhookUrl.trim();
     if (!name) {
-      setError("Nama channel wajib diisi.");
+      setError(t("settings.notifications.errorNameRequired"));
       return;
     }
     if (webhookUrl !== SECRET_MASK && !/^https?:\/\//i.test(webhookUrl)) {
-      setError("Webhook URL harus http(s).");
+      setError(t("settings.notifications.errorWebhookUrl"));
       return;
     }
     const channel: NotificationChannel = {
@@ -157,7 +159,9 @@ export function NotificationSettings() {
     try {
       await persist({ channels });
       setEditorOpen(false);
-      setMessage(draft.id ? "Channel diperbarui." : "Channel ditambahkan.");
+      setMessage(
+        draft.id ? t("settings.notifications.updated") : t("settings.notifications.added"),
+      );
     } catch {
       // keep dialog open
     }
@@ -168,7 +172,7 @@ export function NotificationSettings() {
       await persist({
         channels: settings.channels.filter((channel) => channel.id !== id),
       });
-      setMessage("Channel dihapus.");
+      setMessage(t("settings.notifications.removed"));
     } catch {
       // error already set
     }
@@ -197,14 +201,17 @@ export function NotificationSettings() {
       if (res.ok) {
         setMessage(
           channelId
-            ? "Test notifikasi terkirim."
-            : `Test terkirim ke ${res.results.length} channel.`,
+            ? t("settings.notifications.testSent")
+            : t("settings.notifications.testSentCount", { count: res.results.length }),
         );
       } else {
         const failed = res.results.filter((item) => !item.ok);
         setError(
-          failed.map((item) => `${item.channelName}: ${item.error ?? "gagal"}`).join("; ") ||
-            "Test gagal.",
+          failed
+            .map((item) =>
+              `${item.channelName}: ${item.error ?? t("settings.notifications.failed")}`
+            )
+            .join("; ") || t("settings.notifications.testFailed"),
         );
       }
     } catch (e) {
@@ -221,15 +228,14 @@ export function NotificationSettings() {
       <div className="flex flex-col gap-2">
         <h2 className="flex items-center gap-2 text-xs font-medium tracking-wider text-muted-foreground uppercase">
           <Bell className="size-3.5" />
-          Notifications
+          {t("settings.notifications.title")}
         </h2>
         <p className="text-xs text-muted-foreground">
-          Daftarkan channel (Slack / Google Chat / Discord / webhook). Di workflow YAML, kirim
-          pesan lewat step{" "}
+          {t("settings.notifications.description")}{" "}
           <code className="font-mono">action: notification</code>{" "}
-          dengan{" "}
+          {t("settings.notifications.descriptionWith")}{" "}
           <code className="font-mono">with.channel</code>{" "}
-          sesuai nama channel di sini.
+          {t("settings.notifications.descriptionOutro")}
         </p>
         <Separator />
       </div>
@@ -237,13 +243,13 @@ export function NotificationSettings() {
       {loading ? (
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <Spinner />
-          Memuat…
+          {t("settings.notifications.loading")}
         </div>
       ) : (
         <>
           <div className="flex items-center justify-between gap-2">
             <span className="text-xs text-muted-foreground">
-              {settings.channels.length} channel
+              {t("settings.notifications.channelCount", { count: settings.channels.length })}
             </span>
             <div className="flex items-center gap-1">
               <Button
@@ -253,87 +259,89 @@ export function NotificationSettings() {
                 onClick={() => void testChannel()}
               >
                 {testingId === "all" ? <Spinner /> : <Send className="size-3.5" />}
-                Test semua
+                {t("settings.notifications.testAll")}
               </Button>
               <Button size="sm" onClick={openCreate} disabled={busy}>
                 <Plus className="size-3.5" />
-                Tambah channel
+                {t("settings.notifications.addChannel")}
               </Button>
             </div>
           </div>
 
           {settings.channels.length === 0 ? (
             <p className="rounded-md border border-dashed p-4 text-xs text-muted-foreground">
-              Belum ada channel. Tambahkan Slack / Google Chat / Discord / webhook, lalu
-              referensikan namanya di step{" "}
+              {t("settings.notifications.emptyBefore")}{" "}
+              {t("settings.notifications.emptyAfter")}{" "}
               <code className="font-mono">action: notification</code>.
             </p>
           ) : (
             <div className="flex flex-col gap-2">
-              {settings.channels.map((channel) => (
-                <div
-                  key={channel.id}
-                  className="flex flex-wrap items-center gap-3 rounded-md border px-3 py-2"
-                >
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-xs font-medium">{channel.name}</span>
-                      <Badge variant="outline" className="h-5 px-1.5 text-[10px]">
-                        {CHANNEL_TYPES.find((item) => item.id === channel.type)?.label ??
-                          channel.type}
-                      </Badge>
-                      {!channel.enabled
-                        ? (
-                          <Badge variant="secondary" className="h-5 px-1.5 text-[10px]">
-                            Off
-                          </Badge>
-                        )
-                        : null}
+              {settings.channels.map((channel) => {
+                const meta = CHANNEL_TYPES.find((item) => item.id === channel.type);
+                return (
+                  <div
+                    key={channel.id}
+                    className="flex flex-wrap items-center gap-3 rounded-md border px-3 py-2"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-xs font-medium">{channel.name}</span>
+                        <Badge variant="outline" className="h-5 px-1.5 text-[10px]">
+                          {meta ? t(meta.labelKey) : channel.type}
+                        </Badge>
+                        {!channel.enabled
+                          ? (
+                            <Badge variant="secondary" className="h-5 px-1.5 text-[10px]">
+                              {t("common.off")}
+                            </Badge>
+                          )
+                          : null}
+                      </div>
+                      <p className="truncate font-mono text-[11px] text-muted-foreground">
+                        {channel.webhookUrl === SECRET_MASK
+                          ? t("settings.notifications.webhookSaved")
+                          : channel.webhookUrl}
+                      </p>
                     </div>
-                    <p className="truncate font-mono text-[11px] text-muted-foreground">
-                      {channel.webhookUrl === SECRET_MASK
-                        ? "Webhook tersimpan"
-                        : channel.webhookUrl}
-                    </p>
+                    <Switch
+                      checked={channel.enabled}
+                      onCheckedChange={(next) => void toggleChannel(channel.id, next)}
+                      disabled={busy}
+                      aria-label={t("settings.notifications.enableChannel", { name: channel.name })}
+                    />
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 px-2"
+                      disabled={busy || testingId !== null || !channel.enabled}
+                      onClick={() => void testChannel(channel.id)}
+                    >
+                      {testingId === channel.id ? <Spinner /> : <Send className="size-3.5" />}
+                      {t("settings.notifications.test")}
+                    </Button>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="size-7"
+                      disabled={busy}
+                      onClick={() => openEdit(channel)}
+                      aria-label={t("settings.notifications.editChannel", { name: channel.name })}
+                    >
+                      <Pencil className="size-3.5" />
+                    </Button>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="size-7"
+                      disabled={busy}
+                      onClick={() => void removeChannel(channel.id)}
+                      aria-label={t("settings.notifications.deleteChannel", { name: channel.name })}
+                    >
+                      <Trash2 className="size-3.5" />
+                    </Button>
                   </div>
-                  <Switch
-                    checked={channel.enabled}
-                    onCheckedChange={(next) => void toggleChannel(channel.id, next)}
-                    disabled={busy}
-                    aria-label={`Aktifkan ${channel.name}`}
-                  />
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="h-7 px-2"
-                    disabled={busy || testingId !== null || !channel.enabled}
-                    onClick={() => void testChannel(channel.id)}
-                  >
-                    {testingId === channel.id ? <Spinner /> : <Send className="size-3.5" />}
-                    Test
-                  </Button>
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    className="size-7"
-                    disabled={busy}
-                    onClick={() => openEdit(channel)}
-                    aria-label={`Edit ${channel.name}`}
-                  >
-                    <Pencil className="size-3.5" />
-                  </Button>
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    className="size-7"
-                    disabled={busy}
-                    onClick={() => void removeChannel(channel.id)}
-                    aria-label={`Hapus ${channel.name}`}
-                  >
-                    <Trash2 className="size-3.5" />
-                  </Button>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </>
@@ -345,15 +353,18 @@ export function NotificationSettings() {
       <Dialog open={editorOpen} onOpenChange={setEditorOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>{draft.id ? "Edit channel" : "Tambah channel"}</DialogTitle>
+            <DialogTitle>
+              {draft.id ? t("settings.notifications.editTitle") : t("settings.notifications.addTitle")}
+            </DialogTitle>
             <DialogDescription>
-              Nama channel dipakai di YAML sebagai{" "}
-              <code className="font-mono">with.channel</code>. Webhook URL hanya disimpan lokal.
+              {t("settings.notifications.dialogDescription")}{" "}
+              <code className="font-mono">with.channel</code>.{" "}
+              {t("settings.notifications.dialogDescriptionOutro")}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3 py-2">
             <div className="space-y-1.5">
-              <Label htmlFor="notif-name">Nama</Label>
+              <Label htmlFor="notif-name">{t("settings.notifications.name")}</Label>
               <Input
                 id="notif-name"
                 value={draft.name}
@@ -365,7 +376,7 @@ export function NotificationSettings() {
               />
             </div>
             <div className="space-y-1.5">
-              <Label>Tipe</Label>
+              <Label>{t("settings.notifications.typeLabel")}</Label>
               <Select
                 value={draft.type}
                 onValueChange={(value) =>
@@ -381,18 +392,18 @@ export function NotificationSettings() {
                   <SelectGroup>
                     {CHANNEL_TYPES.map((item) => (
                       <SelectItem key={item.id} value={item.id}>
-                        {item.label}
+                        {t(item.labelKey)}
                       </SelectItem>
                     ))}
                   </SelectGroup>
                 </SelectContent>
               </Select>
               {typeMeta
-                ? <p className="text-[11px] text-muted-foreground">{typeMeta.hint}</p>
+                ? <p className="text-[11px] text-muted-foreground">{t(typeMeta.hintKey)}</p>
                 : null}
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="notif-url">Webhook URL</Label>
+              <Label htmlFor="notif-url">{t("settings.notifications.webhookUrl")}</Label>
               <Input
                 id="notif-url"
                 value={draft.webhookUrl}
@@ -404,22 +415,22 @@ export function NotificationSettings() {
               />
             </div>
             <div className="flex items-center justify-between gap-3 rounded-md border px-3 py-2">
-              <span className="text-xs font-medium">Aktif</span>
+              <span className="text-xs font-medium">{t("settings.notifications.active")}</span>
               <Switch
                 checked={draft.enabled}
                 onCheckedChange={(next) =>
                   setDraft((current) => ({ ...current, enabled: next }))}
-                aria-label="Channel aktif"
+                aria-label={t("settings.notifications.channelActiveAria")}
               />
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditorOpen(false)} disabled={busy}>
-              Batal
+              {t("common.cancel")}
             </Button>
             <Button onClick={() => void saveChannel()} disabled={busy}>
               {busy ? <Spinner /> : null}
-              Simpan
+              {t("common.save")}
             </Button>
           </DialogFooter>
         </DialogContent>

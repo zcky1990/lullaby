@@ -12,6 +12,7 @@ import {
   Underline,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useI18n } from "@/lib/i18n";
 import { sanitizeHtml } from "@/lib/sanitize-html";
 import { cn } from "@/lib/utils";
 
@@ -24,18 +25,19 @@ interface Props {
 }
 
 const ACTIONS = [
-  { label: "Bold", icon: Bold, command: "bold" },
-  { label: "Italic", icon: Italic, command: "italic" },
-  { label: "Underline", icon: Underline, command: "underline" },
-  { label: "Strikethrough", icon: Strikethrough, command: "strikeThrough" },
-  { label: "Heading", icon: Heading2, command: "formatBlock", arg: "h2" },
-  { label: "Bullet list", icon: List, command: "insertUnorderedList" },
-  { label: "Numbered list", icon: ListOrdered, command: "insertOrderedList" },
-  { label: "Quote", icon: Quote, command: "formatBlock", arg: "blockquote" },
-  { label: "Code block", icon: Code2, command: "formatBlock", arg: "pre" },
+  { labelKey: "documents.richText.bold", icon: Bold, command: "bold" },
+  { labelKey: "documents.richText.italic", icon: Italic, command: "italic" },
+  { labelKey: "documents.richText.underline", icon: Underline, command: "underline" },
+  { labelKey: "documents.richText.strikethrough", icon: Strikethrough, command: "strikeThrough" },
+  { labelKey: "documents.richText.heading", icon: Heading2, command: "formatBlock", arg: "h2" },
+  { labelKey: "documents.richText.bulletList", icon: List, command: "insertUnorderedList" },
+  { labelKey: "documents.richText.numberedList", icon: ListOrdered, command: "insertOrderedList" },
+  { labelKey: "documents.richText.quote", icon: Quote, command: "formatBlock", arg: "blockquote" },
+  { labelKey: "documents.richText.codeBlock", icon: Code2, command: "formatBlock", arg: "pre" },
 ];
 
 export function RichTextEditor({ value, onChange, placeholder, disabled, className }: Props) {
+  const { t } = useI18n();
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -76,15 +78,15 @@ export function RichTextEditor({ value, onChange, placeholder, disabled, classNa
       )}
     >
       <div className="flex flex-wrap items-center gap-0.5 border-b p-1">
-        {ACTIONS.map(({ label, icon: Icon, command, arg }) => (
+        {ACTIONS.map(({ labelKey, icon: Icon, command, arg }) => (
           <Button
-            key={label}
+            key={labelKey}
             type="button"
             size="icon"
             variant="ghost"
             className="size-7"
-            aria-label={label}
-            title={label}
+            aria-label={t(labelKey)}
+            title={t(labelKey)}
             disabled={disabled}
             onMouseDown={(event) => event.preventDefault()}
             onClick={() => exec(command, arg)}
@@ -97,8 +99,8 @@ export function RichTextEditor({ value, onChange, placeholder, disabled, classNa
           size="icon"
           variant="ghost"
           className="size-7"
-          aria-label="Hapus format"
-          title="Hapus format"
+          aria-label={t("documents.richText.clearFormat")}
+          title={t("documents.richText.clearFormat")}
           disabled={disabled}
           onMouseDown={(event) => event.preventDefault()}
           onClick={() => exec("removeFormat")}
@@ -112,7 +114,7 @@ export function RichTextEditor({ value, onChange, placeholder, disabled, classNa
           contentEditable={!disabled}
           role="textbox"
           aria-multiline="true"
-          aria-label={placeholder ?? "Rich text editor"}
+          aria-label={placeholder ?? t("documents.richText.ariaLabel")}
           onInput={emit}
           onBlur={emit}
           onPaste={onPaste}

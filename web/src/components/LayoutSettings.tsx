@@ -1,32 +1,34 @@
 import { Maximize2, Rows3 } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { useI18n } from "@/lib/i18n";
 import { type LayoutMode, LAYOUT_SHORTCUT, setLayoutMode } from "@/lib/layout-mode";
 import { useLayoutMode } from "@/hooks/useLayoutMode";
 
-const LAYOUT_OPTIONS: { id: LayoutMode; label: string; icon: typeof Rows3 }[] = [
-  { id: "standard", label: "Standard", icon: Rows3 },
-  { id: "focus", label: "Deep work", icon: Maximize2 },
+const LAYOUT_OPTIONS: { id: LayoutMode; labelKey: string; icon: typeof Rows3 }[] = [
+  { id: "standard", labelKey: "settings.layout.modeStandard", icon: Rows3 },
+  { id: "focus", labelKey: "settings.layout.modeFocus", icon: Maximize2 },
 ];
 
 /** Global Settings → Appearance: shell layout (`web/src/lib/layout-mode.ts`). */
 export function LayoutSettings() {
   const layout = useLayoutMode();
+  const { t } = useI18n();
   return (
     <section className="flex flex-col gap-4">
       <div className="flex flex-col gap-2">
         <h2 className="text-xs font-medium tracking-wider text-muted-foreground uppercase">
-          Layout
+          {t("settings.layout.title")}
         </h2>
         <p className="text-xs text-muted-foreground">
-          <span className="font-medium">Deep work</span> menyembunyikan activity bar, panel kiri,
-          tab strip, dan status bar sehingga tersisa Kanban + chat. Toggle cepat{" "}
+          <span className="font-medium">{t("settings.layout.deepWork")}</span>{" "}
+          {t("settings.layout.descriptionPrefix")}{" "}
           <kbd className="rounded border px-1 font-mono text-[10px]">{LAYOUT_SHORTCUT}</kbd>.
         </p>
         <Separator />
       </div>
       <div className="flex flex-col gap-2">
-        <span className="text-xs text-muted-foreground">Mode layout</span>
+        <span className="text-xs text-muted-foreground">{t("settings.layout.modeLabel")}</span>
         <ToggleGroup
           type="single"
           variant="outline"
@@ -35,14 +37,14 @@ export function LayoutSettings() {
           className="w-fit"
         >
           {LAYOUT_OPTIONS.map((option) => (
-            <ToggleGroupItem key={option.id} value={option.id} aria-label={option.label}>
+            <ToggleGroupItem key={option.id} value={option.id} aria-label={t(option.labelKey)}>
               <option.icon />
-              {option.label}
+              {t(option.labelKey)}
             </ToggleGroupItem>
           ))}
         </ToggleGroup>
         <span className="text-xs text-muted-foreground">
-          Disimpan lokal di mesin ini (tidak ikut export/import config).
+          {t("settings.layout.savedLocally")}
         </span>
       </div>
     </section>

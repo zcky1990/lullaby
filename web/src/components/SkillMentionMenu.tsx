@@ -1,4 +1,5 @@
 import { Sparkles } from "lucide-react";
+import { useI18n } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 export interface SkillOption {
@@ -15,10 +16,12 @@ interface Props {
 }
 
 export function SkillMentionMenu({ skills, activeIndex, onSelect, onHover }: Props) {
+  const { t } = useI18n();
+
   if (skills.length === 0) {
     return (
       <div className="absolute bottom-full left-0 z-20 mb-1 w-full max-w-sm rounded-md border bg-popover p-2 text-xs text-muted-foreground shadow-md">
-        Tidak ada skill yang cocok.
+        {t("chat.skillMenu.empty")}
       </div>
     );
   }
@@ -26,7 +29,7 @@ export function SkillMentionMenu({ skills, activeIndex, onSelect, onHover }: Pro
   return (
     <div
       role="listbox"
-      aria-label="Pilih skill"
+      aria-label={t("chat.skillMenu.label")}
       className="absolute bottom-full left-0 z-20 mb-1 max-h-56 w-full max-w-sm overflow-y-auto rounded-md border bg-popover py-1 shadow-md"
     >
       {skills.map((skill, index) => (

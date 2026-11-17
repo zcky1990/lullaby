@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { Maximize2, MessageSquare, Minimize2, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { CHAT_OPEN_REQUEST_EVENT } from "@/lib/chat-drag";
+import { useI18n } from "@/lib/i18n";
 import { LAYOUT_SHORTCUT, setLayoutMode } from "@/lib/layout-mode";
 import { useLayoutMode } from "@/hooks/useLayoutMode";
 import { cn } from "@/lib/utils";
@@ -14,6 +15,7 @@ interface Props {
 }
 
 export function WindowToolbar({ projectName, workspace, chatOpen, onToggleChat }: Props) {
+  const { t } = useI18n();
   const layout = useLayoutMode();
   const focusMode = layout === "focus";
   const chatOpenRef = useRef(chatOpen);
@@ -45,7 +47,7 @@ export function WindowToolbar({ projectName, workspace, chatOpen, onToggleChat }
             {projectName ?? "Lullaby"}
           </span>
           <span className="truncate text-[10px] text-muted-foreground">
-            {workspace ?? "No workspace"}
+            {workspace ?? t("toolbar.noWorkspace")}
           </span>
         </div>
       </div>
@@ -61,9 +63,11 @@ export function WindowToolbar({ projectName, workspace, chatOpen, onToggleChat }
               ? "border-primary/20 bg-primary/10 text-primary shadow-sm hover:bg-primary/15"
               : "text-muted-foreground hover:bg-accent hover:text-foreground",
           )}
-          aria-label={focusMode ? "Keluar dari deep work" : "Deep work (Kanban + Chat)"}
+          aria-label={focusMode ? t("toolbar.focus.off") : t("toolbar.focus.on")}
           aria-pressed={focusMode}
-          title={`${focusMode ? "Keluar dari" : "Aktifkan"} deep work — ${LAYOUT_SHORTCUT}`}
+          title={`${
+            focusMode ? t("toolbar.focus.deactivate") : t("toolbar.focus.activate")
+          } — ${LAYOUT_SHORTCUT}`}
         >
           {focusMode ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
         </Button>
@@ -77,8 +81,8 @@ export function WindowToolbar({ projectName, workspace, chatOpen, onToggleChat }
               ? "border-primary/20 bg-primary/10 text-primary shadow-sm hover:bg-primary/15"
               : "text-muted-foreground hover:bg-accent hover:text-foreground",
           )}
-          aria-label="Chat"
-          title="Chat"
+          aria-label={t("toolbar.chat")}
+          title={t("toolbar.chat")}
           aria-pressed={chatOpen}
         >
           <MessageSquare className="size-4" />

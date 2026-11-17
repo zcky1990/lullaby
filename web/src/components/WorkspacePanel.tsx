@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PanelHeader } from "@/components/PanelHeader";
 import { canPickDirectory, chooseWorkspaceDirectory } from "@/lib/bindings";
+import { useI18n } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import type { Project } from "@/lib/api";
 
@@ -25,6 +26,7 @@ export function WorkspacePanel({
   onRename,
   onDelete,
 }: Props) {
+  const { t } = useI18n();
   const [name, setName] = useState("");
   const [workspacePath, setWorkspacePath] = useState("");
   const [busy, setBusy] = useState(false);
@@ -80,9 +82,7 @@ export function WorkspacePanel({
 
   const remove = async (project: Project) => {
     if (deletingId) return;
-    const ok = confirm(
-      `Hapus project "${project.name}"?\n\nData lokal (chat, tiket, sync meta) ikut terhapus. Folder workspace di disk tidak dihapus.`,
-    );
+    const ok = confirm(t("explorer.workspace.deleteConfirm", { name: project.name }));
     if (!ok) return;
     setDeletingId(project.id);
     try {
@@ -94,15 +94,16 @@ export function WorkspacePanel({
 
   return (
     <>
-      <PanelHeader title="Workspace" count={projects.length} />
+      <PanelHeader title={t("explorer.workspace.title")} count={projects.length} />
       <p className="px-3 pb-2 text-[11px] leading-snug text-muted-foreground">
-        Klik dua kali nama project (atau ikon pensil) untuk <span className="font-medium">ganti
-        nama</span>. Nama hanya label — folder workspace & data lokal tidak berubah.
+        {t("explorer.workspace.hintPrefix")}
+        <span className="font-medium">{t("explorer.workspace.hintAction")}</span>
+        {t("explorer.workspace.hintSuffix")}
       </p>
       <div className="flex flex-col gap-2 px-3 pb-3">
         <Input
           value={name}
-          placeholder="Nama project…"
+          placeholder={t("explorer.workspace.namePlaceholder")}
           onChange={(e) => setName(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "Enter") create();
@@ -111,7 +112,9 @@ export function WorkspacePanel({
         <div className="flex gap-2">
           <Input
             value={workspacePath}
-            placeholder={pickable ? "Folder workspace…" : "/path/ke/workspace"}
+            placeholder={pickable
+              ? t("explorer.workspace.pathPlaceholder")
+              : t("explorer.workspace.pathPlaceholderManual")}
             onChange={(e) => setWorkspacePath(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Enter") create();
@@ -122,8 +125,10 @@ export function WorkspacePanel({
             variant="outline"
             onClick={pick}
             disabled={!pickable}
-            title={pickable ? "Pilih folder" : "Folder picker hanya di app desktop"}
-            aria-label="Pilih folder workspace"
+            title={pickable
+              ? t("explorer.workspace.pickFolder")
+              : t("explorer.workspace.pickFolderUnsupported")}
+            aria-label={t("explorer.workspace.pickWorkspaceAria")}
           >
             <FolderOpen />
           </Button>
@@ -136,13 +141,15 @@ export function WorkspacePanel({
           data-icon="inline-start"
         >
           <Plus />
-          Buat project
+          {t("explorer.workspace.createProject")}
         </Button>
       </div>
 
       <div className="flex-1 overflow-y-auto px-2 pb-2">
         {projects.length === 0 && (
-          <p className="px-2 py-4 text-xs text-muted-foreground">Belum ada project.</p>
+          <p className="px-2 py-4 text-xs text-muted-foreground">
+            {t("explorer.workspace.empty")}
+          </p>
         )}
         {projects.map((project) => (
           <div
@@ -170,7 +177,7 @@ export function WorkspacePanel({
                       }
                     }}
                     className="h-7 min-w-0 flex-1 text-xs"
-                    aria-label={`Nama project ${project.name}`}
+                    aria-label={t("explorer.workspace.renameInputAria", { name: project.name })}
                     disabled={savingId === project.id}
                   />
                   <Button
@@ -179,8 +186,8 @@ export function WorkspacePanel({
                     className="size-7 shrink-0"
                     disabled={savingId === project.id || !draftName.trim()}
                     onClick={() => void commitEdit(project)}
-                    aria-label="Simpan nama project"
-                    title="Simpan"
+                    aria-label={t("explorer.workspace.saveNameAria")}
+                    title={t("common.save")}
                   >
                     <Check />
                   </Button>
@@ -190,8 +197,8 @@ export function WorkspacePanel({
                     className="size-7 shrink-0"
                     disabled={savingId === project.id}
                     onClick={cancelEdit}
-                    aria-label="Batal ganti nama"
-                    title="Batal"
+                    aria-label={t("explorer.workspace.cancelRenameAria")}
+                    title={t("common.cancel")}
                   >
                     <X />
                   </Button>
@@ -203,19 +210,19 @@ export function WorkspacePanel({
                     type="button"
                     onClick={() => onSelect(project.id)}
                     onDoubleClick={() => startEdit(project)}
-                    title="Klik untuk pilih, klik dua kali untuk ganti nama"
+                    title={t("explorer.workspace.itemTitle")}
                     className="flex min-w-0 flex-1 flex-col items-start gap-0.5 px-3 py-2 text-left text-xs"
                   >
                     <span className="flex w-full items-center justify-between gap-2">
                       <span className="truncate font-medium">{project.name}</span>
                       {project.id === currentId ? (
                         <Badge variant="secondary" className="shrink-0 px-1.5 text-[10px]">
-                          Aktif
+                          {t("explorer.workspace.activeBadge")}
                         </Badge>
                       ) : null}
                     </span>
                     <span className="w-full truncate text-xs text-muted-foreground">
-                      {project.workspace_path ?? "Belum ada workspace"}
+                      {project.workspace_path ?? t("explorer.workspace.noWorkspace")}
                     </span>
                   </button>
                   <div className="mt-1.5 mr-1 flex shrink-0 gap-0.5 opacity-60 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
@@ -227,8 +234,8 @@ export function WorkspacePanel({
                         event.stopPropagation();
                         startEdit(project);
                       }}
-                      aria-label={`Ganti nama project ${project.name}`}
-                      title="Ganti nama project"
+                      aria-label={t("explorer.workspace.renameAria", { name: project.name })}
+                      title={t("explorer.workspace.renameTitle")}
                     >
                       <Pencil />
                     </Button>
@@ -241,8 +248,8 @@ export function WorkspacePanel({
                         event.stopPropagation();
                         void remove(project);
                       }}
-                      aria-label={`Hapus project ${project.name}`}
-                      title="Hapus project"
+                      aria-label={t("explorer.workspace.deleteAria", { name: project.name })}
+                      title={t("explorer.workspace.deleteTitle")}
                     >
                       <Trash2 />
                     </Button>

@@ -20,6 +20,7 @@ import {
   mergeTextAttachments,
   readAttachment,
 } from "@/lib/chat-attachments";
+import { useI18n } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 interface AgentState {
@@ -86,6 +87,7 @@ function AgentParamField({
   running: boolean;
   onChange: (next: AgentState) => void;
 }) {
+  const { t } = useI18n();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
   const [error, setError] = useState<string | undefined>();
@@ -163,7 +165,7 @@ function AgentParamField({
                         ...state,
                         attachments: state.attachments.filter((row) => row.id !== item.id),
                       })}
-                    aria-label={`Hapus ${item.name}`}
+                    aria-label={t("workflow.params.removeAttachment", { name: item.name })}
                     className="text-muted-foreground hover:text-foreground"
                   >
                     <X className="size-3" />
@@ -178,7 +180,7 @@ function AgentParamField({
           value={state.text}
           rows={5}
           disabled={running}
-          placeholder="Prompt agent… lampirkan file atau seret ke sini"
+          placeholder={t("workflow.params.agentPlaceholder")}
           onChange={(event) => onChange({ ...state, text: event.target.value })}
           onPaste={(event) => {
             const files = Array.from(event.clipboardData.files);
@@ -209,8 +211,8 @@ function AgentParamField({
             className="size-7 shrink-0"
             disabled={running}
             onClick={() => fileInputRef.current?.click()}
-            aria-label="Lampirkan file"
-            title="Lampirkan gambar/file teks"
+            aria-label={t("workflow.params.attachFile")}
+            title={t("workflow.params.attachTitle")}
           >
             <Paperclip />
           </Button>
@@ -227,7 +229,7 @@ function AgentParamField({
       {providers.length === 0
         ? (
           <p className="text-[11px] text-muted-foreground">
-            Belum ada provider LLM (Global Settings → LLM Providers).
+            {t("workflow.params.noProviders")}
           </p>
         )
         : null}
@@ -243,6 +245,7 @@ export function WorkflowParamsDialog({
   onOpenChange,
   onConfirm,
 }: Props) {
+  const { t } = useI18n();
   const [values, setValues] = useState<Record<string, string>>({});
   const [agentStates, setAgentStates] = useState<Record<string, AgentState>>({});
   const hasAgent = params.some((param) => param.type === "agent");
@@ -293,11 +296,11 @@ export function WorkflowParamsDialog({
         )}
       >
         <DialogHeader className="shrink-0 border-b px-4 py-3">
-          <DialogTitle>Parameter workflow</DialogTitle>
+          <DialogTitle>{t("workflow.params.title")}</DialogTitle>
           <DialogDescription>
             {hasAgent
-              ? "Isi param sebelum run. Param bertipe agent mendukung prompt, lampiran file, dan pilihan model."
-              : "Isi nilai param sebelum menjalankan workflow. Default dari YAML sudah terisi."}
+              ? t("workflow.params.descriptionAgent")
+              : t("workflow.params.descriptionPlain")}
           </DialogDescription>
         </DialogHeader>
         <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4">
@@ -387,11 +390,11 @@ export function WorkflowParamsDialog({
             onClick={() => onOpenChange(false)}
             disabled={running}
           >
-            Batal
+            {t("workflow.params.cancel")}
           </Button>
           <Button onClick={submit} disabled={running} data-icon="inline-start">
             {running ? <Spinner /> : null}
-            Jalankan
+            {t("workflow.params.run")}
           </Button>
         </DialogFooter>
       </DialogContent>

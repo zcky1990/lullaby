@@ -1,14 +1,15 @@
 import { Database, FolderCog, Plug, ScrollText, type LucideIcon } from "lucide-react";
 import { PanelHeader } from "@/components/PanelHeader";
+import { useI18n } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 export type SettingsSection = "workspace" | "integrations" | "activity" | "backup";
 
-const SECTIONS: { id: SettingsSection; label: string; icon: LucideIcon }[] = [
-  { id: "workspace", label: "Workspace", icon: FolderCog },
-  { id: "integrations", label: "Integrations", icon: Plug },
-  { id: "activity", label: "Activity", icon: ScrollText },
-  { id: "backup", label: "Backup & Restore", icon: Database },
+const SECTIONS: { id: SettingsSection; labelKey: string; icon: LucideIcon }[] = [
+  { id: "workspace", labelKey: "settings.panel.workspace", icon: FolderCog },
+  { id: "integrations", labelKey: "settings.panel.integrations", icon: Plug },
+  { id: "activity", labelKey: "settings.panel.activity", icon: ScrollText },
+  { id: "backup", labelKey: "settings.panel.backup", icon: Database },
 ];
 
 interface Props {
@@ -17,9 +18,10 @@ interface Props {
 }
 
 export function SettingsPanel({ section, onSelect }: Props) {
+  const { t } = useI18n();
   return (
     <>
-      <PanelHeader title="Settings" />
+      <PanelHeader title={t("settings.panel.title")} />
       <div className="flex-1 overflow-y-auto px-2 pb-2">
         {SECTIONS.map((item) => {
           const Icon = item.icon;
@@ -33,7 +35,7 @@ export function SettingsPanel({ section, onSelect }: Props) {
               )}
             >
               <Icon className="size-4 text-muted-foreground" />
-              {item.label}
+              {t(item.labelKey)}
             </button>
           );
         })}

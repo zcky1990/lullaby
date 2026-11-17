@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { dispatchAddToChat } from "@/lib/add-to-chat-events";
 import { requestChatOpen } from "@/lib/chat-drag";
 import { clipContext } from "@/lib/chat-context";
+import { useI18n } from "@/lib/i18n";
 
 interface Props {
   open: boolean;
@@ -13,6 +14,7 @@ interface Props {
 }
 
 export function AddToChatDialog({ open, selection, sourceLabel, onOpenChange }: Props) {
+  const { t } = useI18n();
   const [prompt, setPrompt] = useState("");
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -51,15 +53,15 @@ export function AddToChatDialog({ open, selection, sourceLabel, onOpenChange }: 
           inputRef.current?.focus();
         }}
       >
-        <DialogTitle className="text-sm">Tambah ke chat</DialogTitle>
+        <DialogTitle className="text-sm">{t("chat.addToChat.title")}</DialogTitle>
         <DialogDescription className="text-xs">
-          Seleksi akan dilampirkan ke chat aktif. Tulis prompt lalu Enter.
-          {sourceLabel ? ` Sumber: ${sourceLabel}.` : ""}
+          {t("chat.addToChat.description")}
+          {sourceLabel ? t("chat.addToChat.source", { source: sourceLabel }) : ""}
         </DialogDescription>
 
         <div className="max-h-36 overflow-auto rounded-md border bg-muted/30 p-2">
           <pre className="whitespace-pre-wrap break-words font-mono text-[11px] text-muted-foreground">
-            {preview || "(seleksi kosong)"}
+            {preview || t("chat.addToChat.emptySelection")}
           </pre>
         </div>
 
@@ -74,16 +76,16 @@ export function AddToChatDialog({ open, selection, sourceLabel, onOpenChange }: 
             }
           }}
           rows={3}
-          placeholder="Prompt untuk chat… (Enter kirim ke composer)"
+          placeholder={t("chat.addToChat.placeholder")}
           className="min-h-[4.5rem] w-full resize-none rounded-md border bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
         />
 
         <div className="flex justify-end gap-2">
           <Button type="button" variant="ghost" size="sm" onClick={() => onOpenChange(false)}>
-            Batal
+            {t("chat.addToChat.cancel")}
           </Button>
           <Button type="button" size="sm" onClick={submit} disabled={!selection.trim()}>
-            Tambah ke chat
+            {t("chat.addToChat.submit")}
           </Button>
         </div>
       </DialogContent>

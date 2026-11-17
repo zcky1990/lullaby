@@ -13,6 +13,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useI18n } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 export type Menu =
@@ -30,16 +31,16 @@ export type Menu =
 
 const ITEMS: {
   id: Menu;
-  label: string;
+  labelKey: string;
   icon: LucideIcon;
   requiresProject?: boolean;
   requiresWorkspace?: boolean;
   group: "main" | "tools";
 }[] = [
-  { id: "workspace", label: "Workspace", icon: LayoutGrid, group: "main" },
+  { id: "workspace", labelKey: "nav.workspace", icon: LayoutGrid, group: "main" },
   {
     id: "files",
-    label: "Explorer",
+    labelKey: "nav.files",
     icon: FolderTree,
     requiresProject: true,
     requiresWorkspace: true,
@@ -47,17 +48,17 @@ const ITEMS: {
   },
   {
     id: "find",
-    label: "Find",
+    labelKey: "nav.find",
     icon: Search,
     requiresProject: true,
     requiresWorkspace: true,
     group: "main",
   },
-  { id: "document", label: "Document", icon: FileText, group: "main" },
-  { id: "ticket", label: "Ticket", icon: Ticket, group: "main" },
+  { id: "document", labelKey: "nav.document", icon: FileText, group: "main" },
+  { id: "ticket", labelKey: "nav.ticket", icon: Ticket, group: "main" },
   {
     id: "workflow",
-    label: "Workflows",
+    labelKey: "nav.workflow",
     icon: Workflow,
     requiresProject: true,
     requiresWorkspace: true,
@@ -65,7 +66,7 @@ const ITEMS: {
   },
   {
     id: "cron",
-    label: "Cron",
+    labelKey: "nav.cron",
     icon: Clock,
     requiresProject: true,
     requiresWorkspace: true,
@@ -73,27 +74,27 @@ const ITEMS: {
   },
   {
     id: "settings",
-    label: "Project Settings",
+    labelKey: "nav.settings",
     icon: Settings,
     requiresProject: true,
     group: "main",
   },
   {
     id: "terminal",
-    label: "Terminal",
+    labelKey: "nav.terminal",
     icon: SquareTerminal,
     requiresProject: true,
     group: "tools",
   },
   {
     id: "git",
-    label: "Git",
+    labelKey: "nav.git",
     icon: GitBranch,
     requiresProject: true,
     requiresWorkspace: true,
     group: "tools",
   },
-  { id: "global", label: "Global Settings", icon: SlidersHorizontal, group: "tools" },
+  { id: "global", labelKey: "nav.global", icon: SlidersHorizontal, group: "tools" },
 ];
 
 interface Props {
@@ -115,14 +116,17 @@ function MenuButton({
   terminalOpen?: boolean;
   onChange: (menu: Menu) => void;
 }) {
+  const { t } = useI18n();
   const Icon = item.icon;
   const selected = item.id === "terminal" ? !!terminalOpen : active === item.id;
+  const label = t(item.labelKey);
   return (
     <Button
       variant="ghost"
       size="icon"
-      title={item.label}
-      aria-label={item.label}
+      title={label}
+      aria-label={label}
+      data-menu={item.id}
       aria-current={selected ? "page" : undefined}
       onClick={() => onChange(item.id)}
       className={cn(

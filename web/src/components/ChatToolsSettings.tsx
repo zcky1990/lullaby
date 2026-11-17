@@ -14,6 +14,7 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
+import { useI18n } from "@/lib/i18n";
 import {
   api,
   type ChatToolCatalogEntry,
@@ -21,9 +22,9 @@ import {
   type WriteReviewMode,
 } from "@/lib/api";
 
-const REVIEW_MODES: Array<{ id: WriteReviewMode; label: string }> = [
-  { id: "end", label: "Setelah selesai" },
-  { id: "before", label: "Sebelum diterapkan" },
+const REVIEW_MODES: Array<{ id: WriteReviewMode; labelKey: string }> = [
+  { id: "end", labelKey: "settings.tools.reviewModeAfter" },
+  { id: "before", labelKey: "settings.tools.reviewModeBefore" },
 ];
 
 const DEFAULT_REVIEW_KEEP_HOURS = 24;
@@ -50,6 +51,7 @@ export function ChatToolsSettings() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | undefined>();
+  const { t } = useI18n();
 
   useEffect(() => {
     let cancelled = false;
@@ -121,7 +123,7 @@ export function ChatToolsSettings() {
     }
     const parsed = Number.parseInt(trimmed, 10);
     if (!Number.isFinite(parsed) || parsed < 1 || parsed > 200) {
-      setError("Max steps harus kosong (unlimited) atau angka 1–200.");
+      setError(t("settings.tools.maxStepsError"));
       setMaxStepsDraft(maxSteps == null ? "" : String(maxSteps));
       return;
     }
@@ -132,7 +134,7 @@ export function ChatToolsSettings() {
     const trimmed = reviewKeepDraft.trim();
     const parsed = Number.parseInt(trimmed, 10);
     if (!Number.isFinite(parsed) || parsed < 1 || parsed > 168) {
-      setError("Durasi simpan review harus angka 1–168 jam.");
+      setError(t("settings.tools.reviewKeepError"));
       setReviewKeepDraft(String(reviewKeepHours));
       return;
     }
@@ -143,11 +145,10 @@ export function ChatToolsSettings() {
     <section className="flex w-full flex-col gap-4">
       <div className="flex flex-col gap-2">
         <h2 className="text-xs font-medium tracking-wider text-muted-foreground uppercase">
-          Tools
+          {t("settings.tools.title")}
         </h2>
         <p className="text-xs text-muted-foreground">
-          Atur auto-approve dan cara review write file di chat Build, batas langkah agent, dan
-          enable/disable tool. Perubahan hanya berlaku untuk chat interaktif (bukan workflow agent).
+          {t("settings.tools.description")}
         </p>
         <Separator />
       </div>
@@ -156,24 +157,25 @@ export function ChatToolsSettings() {
         ? (
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <Spinner />
-            Memuat…
+            {t("common.loading")}
           </div>
         )
         : (
           <>
             <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border p-4">
               <div className="flex min-w-0 flex-col gap-1">
-                <span className="text-xs font-medium">Auto-approve file writes</span>
+                <span className="text-xs font-medium">{t("settings.tools.autoApproveTitle")}</span>
                 <span className="text-xs text-muted-foreground">
-                  Jika aktif, <code className="text-xs">write_file</code>{" "}
-                  langsung ditulis ke disk tanpa Review tab. Default nonaktif.
+                  {t("settings.tools.autoApproveBefore")}{" "}
+                  <code className="text-xs">write_file</code>{" "}
+                  {t("settings.tools.autoApproveAfter")}
                 </span>
               </div>
               <Switch
                 checked={autoApproveWrites}
                 onCheckedChange={(next) => void save({ autoApproveWrites: next })}
                 disabled={busy}
-                aria-label="Auto-approve file writes"
+                aria-label={t("settings.tools.autoApproveTitle")}
               />
             </div>
 
@@ -182,14 +184,13 @@ export function ChatToolsSettings() {
                 <>
                   <div className="flex flex-col gap-2 rounded-md border p-4">
                     <Label htmlFor="chat-write-review-mode" className="text-xs font-medium">
-                      Review perubahan AI
+                      {t("settings.tools.reviewTitle")}
                     </Label>
                     <p className="text-xs text-muted-foreground">
-                      <span className="font-medium">Setelah selesai</span> (default): perubahan
-                      langsung diterapkan selama agent bekerja, lalu semua file dikumpulkan di tab
-                      Review ketika chat selesai — chat tidak terblokir.{" "}
-                      <span className="font-medium">Sebelum diterapkan</span>: agent berhenti dan
-                      menunggu persetujuan per hunk sebelum menulis ke disk.
+                      <span className="font-medium">{t("settings.tools.reviewModeAfter")}</span>{" "}
+                      {t("settings.tools.reviewModeAfterHint")}{" "}
+                      <span className="font-medium">{t("settings.tools.reviewModeBefore")}</span>
+                      {t("settings.tools.reviewModeBeforeHint")}
                     </p>
                     <Select
                       value={writeReviewMode}
@@ -203,7 +204,7 @@ export function ChatToolsSettings() {
                         id="chat-write-review-mode"
                         size="sm"
                         className="h-8 w-full text-xs"
-                        aria-label="Mode review perubahan"
+                        aria-label={t("settings.tools.reviewModeAria")}
                       >
                         <SelectValue />
                       </SelectTrigger>
@@ -211,7 +212,7 @@ export function ChatToolsSettings() {
                         <SelectGroup>
                           {REVIEW_MODES.map((mode) => (
                             <SelectItem key={mode.id} value={mode.id} className="text-xs">
-                              {mode.label}
+                              {t(mode.labelKey)}
                             </SelectItem>
                           ))}
                         </SelectGroup>
@@ -221,11 +222,10 @@ export function ChatToolsSettings() {
 
                   <div className="flex flex-col gap-2 rounded-md border p-4">
                     <Label htmlFor="chat-review-keep-hours" className="text-xs font-medium">
-                      Durasi simpan antrean review
+                      {t("settings.tools.reviewKeepTitle")}
                     </Label>
                     <p className="text-xs text-muted-foreground">
-                      Berapa lama run dengan hunk Keep/Revert tetap di memori setelah chat selesai
-                      (1–168 jam). Default 24. Restart aplikasi tetap menghapus antrean Review.
+                      {t("settings.tools.reviewKeepDescription")}
                     </p>
                     <div className="flex flex-wrap items-center gap-2">
                       <Input
@@ -245,7 +245,9 @@ export function ChatToolsSettings() {
                         }}
                         disabled={busy}
                       />
-                      <span className="text-xs text-muted-foreground">jam</span>
+                      <span className="text-xs text-muted-foreground">
+                        {t("settings.tools.hours")}
+                      </span>
                       <Button
                         type="button"
                         variant="outline"
@@ -256,7 +258,7 @@ export function ChatToolsSettings() {
                           void save({ reviewKeepHours: DEFAULT_REVIEW_KEEP_HOURS });
                         }}
                       >
-                        Reset 24 jam
+                        {t("settings.tools.resetReviewKeep")}
                       </Button>
                     </div>
                   </div>
@@ -266,11 +268,10 @@ export function ChatToolsSettings() {
 
             <div className="flex flex-col gap-2 rounded-md border p-4">
               <Label htmlFor="chat-max-steps" className="text-xs font-medium">
-                Max agent steps
+                {t("settings.tools.maxStepsTitle")}
               </Label>
               <p className="text-xs text-muted-foreground">
-                Kosong = unlimited (seperti OpenCode). Jika diisi, langkah terakhir memaksa jawaban
-                teks saja (tanpa tool) + ringkasan progress.
+                {t("settings.tools.maxStepsDescription")}
               </p>
               <div className="flex flex-wrap items-center gap-2">
                 <Input
@@ -279,7 +280,7 @@ export function ChatToolsSettings() {
                   min={1}
                   max={200}
                   inputMode="numeric"
-                  placeholder="Unlimited"
+                  placeholder={t("settings.tools.unlimited")}
                   className="h-8 w-36 text-xs"
                   value={maxStepsDraft}
                   onChange={(event) => setMaxStepsDraft(event.target.value)}
@@ -301,22 +302,22 @@ export function ChatToolsSettings() {
                     void save({ maxSteps: null });
                   }}
                 >
-                  Unlimited
+                  {t("settings.tools.unlimited")}
                 </Button>
               </div>
             </div>
 
             <div className="flex flex-col gap-2 rounded-md border p-4">
               <div className="flex flex-col gap-1">
-                <span className="text-xs font-medium">Always allow (tool)</span>
+                <span className="text-xs font-medium">{t("settings.tools.alwaysAllowTitle")}</span>
                 <span className="text-xs text-muted-foreground">
-                  Tool di daftar ini dijalankan tanpa meminta izin di sidebar chat.
+                  {t("settings.tools.alwaysAllowDescription")}
                 </span>
               </div>
               {autoApproveTools.length === 0
                 ? (
                   <p className="text-xs text-muted-foreground">
-                    Belum ada. Pilih &quot;Always allow&quot; saat chat meminta izin tool.
+                    {t("settings.tools.alwaysAllowEmpty")}
                   </p>
                 )
                 : (
@@ -331,7 +332,7 @@ export function ChatToolsSettings() {
                           type="button"
                           className="text-muted-foreground hover:text-destructive"
                           disabled={busy}
-                          aria-label={`Cabut izin ${name}`}
+                          aria-label={t("settings.tools.revokeAria", { name })}
                           onClick={() =>
                             void save({
                               autoApproveTools: autoApproveTools.filter((item) => item !== name),
@@ -348,9 +349,9 @@ export function ChatToolsSettings() {
             <div className="flex flex-col gap-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="flex flex-col gap-1">
-                  <span className="text-xs font-medium">Tool chat</span>
+                  <span className="text-xs font-medium">{t("settings.tools.chatToolsTitle")}</span>
                   <span className="text-xs text-muted-foreground">
-                    Tool yang dimatikan tidak dikirim ke model dan ditolak jika dipanggil.
+                    {t("settings.tools.chatToolsDescription")}
                   </span>
                 </div>
                 <Button
@@ -360,7 +361,7 @@ export function ChatToolsSettings() {
                   disabled={busy || disabledTools.length === 0}
                   onClick={() => void save({ disabledTools: [] })}
                 >
-                  Enable all
+                  {t("settings.tools.enableAll")}
                 </Button>
               </div>
 
@@ -378,10 +379,10 @@ export function ChatToolsSettings() {
                           {tool.requiresApproval && (
                             <Badge variant="secondary" className="text-[10px]">
                               {autoApproveWrites
-                                ? "Auto-approve on"
+                                ? t("settings.tools.badgeAutoApproveOn")
                                 : writeReviewMode === "end"
-                                ? "Review di akhir"
-                                : "Needs approval"}
+                                ? t("settings.tools.badgeReviewEnd")
+                                : t("settings.tools.badgeNeedsApproval")}
                             </Badge>
                           )}
                         </div>
@@ -391,7 +392,7 @@ export function ChatToolsSettings() {
                         checked={enabled}
                         onCheckedChange={(next) => toggleTool(tool.name, next)}
                         disabled={busy}
-                        aria-label={`Enable ${tool.name}`}
+                        aria-label={t("settings.tools.enableToolAria", { name: tool.name })}
                       />
                     </li>
                   );

@@ -339,8 +339,21 @@ export async function saveUiPreferencesHandler(req: Request): Promise<Response> 
   if (!parsed.success) {
     return json({ error: "invalid_input", issues: parsed.error.issues }, 400);
   }
-  await setAppSetting(UI_PREFERENCES_KEY, JSON.stringify(parsed.data));
-  return json({ preferences: parsed.data });
+  const raw = await getAppSetting(UI_PREFERENCES_KEY);
+  let existing: Record<string, unknown> = {};
+  if (raw) {
+    try {
+      const stored = JSON.parse(raw);
+      if (stored && typeof stored === "object" && !Array.isArray(stored)) {
+        existing = stored as Record<string, unknown>;
+      }
+    } catch {
+      existing = {};
+    }
+  }
+  const preferences = { ...existing, ...parsed.data };
+  await setAppSetting(UI_PREFERENCES_KEY, JSON.stringify(preferences));
+  return json({ preferences });
 }
 
 export async function getLspSettingsHandler(): Promise<Response> {

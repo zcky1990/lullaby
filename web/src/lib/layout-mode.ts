@@ -9,7 +9,12 @@ export type LayoutMode = "standard" | "focus";
 
 const STORAGE_KEY = "rnd.layout:v1";
 const CHANGE_EVENT = "rnd:layout-change";
-const TICKET_BUTTON_SELECTOR = 'nav button[aria-label="Ticket"]';
+/**
+ * `data-menu` dipakai supaya selector tidak bergantung pada teks aria-label
+ * (label activity bar sekarang mengikuti bahasa UI).
+ */
+const TICKET_BUTTON_SELECTOR = 'nav button[data-menu="ticket"]';
+const LEGACY_TICKET_BUTTON_SELECTOR = 'nav button[aria-label="Ticket"]';
 
 export function normalizeLayoutMode(raw: string | null | undefined): LayoutMode {
   return raw?.trim().toLowerCase() === "focus" ? "focus" : "standard";
@@ -62,7 +67,8 @@ export function subscribeLayoutMode(listener: () => void): () => void {
  * same click path instead of reaching into shell state.
  */
 export function activateTicketBoard(doc: Document = document): boolean {
-  const button = doc.querySelector<HTMLElement>(TICKET_BUTTON_SELECTOR);
+  const button = doc.querySelector<HTMLElement>(TICKET_BUTTON_SELECTOR) ??
+    doc.querySelector<HTMLElement>(LEGACY_TICKET_BUTTON_SELECTOR);
   if (!button) return false;
   button.click();
   return true;

@@ -8,6 +8,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useI18n } from "@/lib/i18n";
 import { api, type CursorModel, type LlmProvider } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
@@ -30,6 +31,7 @@ export function LlmProviderModelSelect({
   className,
   onChange,
 }: Props) {
+  const { t } = useI18n();
   const [cursorModelsByProvider, setCursorModelsByProvider] = useState<
     Record<string, CursorModel[]>
   >({});
@@ -125,9 +127,9 @@ export function LlmProviderModelSelect({
           "h-7 min-w-0 flex-1 border-0 bg-transparent px-1 text-xs shadow-none focus-visible:ring-0 data-[size=sm]:h-7",
           className,
         )}
-        aria-label="Pilih provider / model"
+        aria-label={t("settings.llm.model.aria")}
       >
-        <SelectValue placeholder="Provider" />
+        <SelectValue placeholder={t("settings.llm.model.placeholder")} />
       </SelectTrigger>
       <SelectContent className="min-w-[14rem]">
         {providers.map((provider) => {
@@ -150,7 +152,7 @@ export function LlmProviderModelSelect({
                   ))
                   : (
                     <SelectItem value={provider.id} disabled className="text-xs">
-                      Memuat model…
+                      {t("settings.llm.model.loading")}
                     </SelectItem>
                   )}
               </SelectGroup>

@@ -12,6 +12,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import type { TicketSummary } from "@/lib/api";
 import { requestChatOpen, setChatDragData } from "@/lib/chat-drag";
+import { useI18n } from "@/lib/i18n";
 import { CANONICAL_COLUMNS, canonicalTicketColumn } from "@/lib/ticket-columns";
 import { cn } from "@/lib/utils";
 
@@ -61,6 +62,7 @@ interface Props {
 }
 
 export function TicketKanbanBoard({ tickets, onMove, onOpenDetail, onError }: Props) {
+  const { t } = useI18n();
   const board = useMemo(() => buildBoard(tickets), [tickets]);
   const [columns, setColumns] = useState<TicketColumns>(() => buildBoard(tickets).columns);
 
@@ -112,7 +114,7 @@ export function TicketKanbanBoard({ tickets, onMove, onOpenDetail, onError }: Pr
             >
               {items.length === 0 ? (
                 <div className="text-muted-foreground/60 flex min-h-24 flex-1 items-center justify-center rounded-md border border-dashed text-xs">
-                  Kosong
+                  {t("tickets.kanban.empty")}
                 </div>
               ) : null}
               {items.map((ticket) => (
@@ -156,8 +158,8 @@ export function TicketKanbanBoard({ tickets, onMove, onOpenDetail, onError }: Pr
                               requestChatOpen();
                             }}
                             onClick={(event) => event.stopPropagation()}
-                            aria-label={`Seret ${ticket.key} ke chat`}
-                            title="Seret ke chat"
+                            aria-label={t("tickets.kanban.dragAria", { key: ticket.key })}
+                            title={t("tickets.kanban.dragTitle")}
                             className="text-muted-foreground/60 hover:text-foreground -mt-0.5 -mr-1 shrink-0 cursor-grab rounded p-0.5 active:cursor-grabbing"
                           >
                             <GripVertical className="size-3.5" />
@@ -170,7 +172,9 @@ export function TicketKanbanBoard({ tickets, onMove, onOpenDetail, onError }: Pr
                                   : "secondary"}
                                 className="h-5 px-1.5 text-[10px]"
                               >
-                                {ticket.syncStatus === "error" ? "Sync error" : "Local"}
+                                {ticket.syncStatus === "error"
+                                  ? t("tickets.kanban.syncError")
+                                  : t("tickets.kanban.local")}
                               </Badge>
                             ) : null}
                             {ticket.priority ? (
@@ -191,7 +195,9 @@ export function TicketKanbanBoard({ tickets, onMove, onOpenDetail, onError }: Pr
                         {ticket.summary}
                       </p>
                       <div className="flex items-center justify-between gap-2 text-[11px] text-muted-foreground">
-                        <span className="truncate">{ticket.assignee ?? "Tanpa assignee"}</span>
+                        <span className="truncate">
+                          {ticket.assignee ?? t("tickets.kanban.unassigned")}
+                        </span>
                         {ticket.url ? (
                           <a
                             href={ticket.url}
@@ -210,7 +216,7 @@ export function TicketKanbanBoard({ tickets, onMove, onOpenDetail, onError }: Pr
                               : "Jira"}
                           </a>
                         ) : ticket.source === "local" ? (
-                          <span className="shrink-0">Belum sync</span>
+                          <span className="shrink-0">{t("tickets.kanban.notSynced")}</span>
                         ) : null}
                       </div>
                     </div>

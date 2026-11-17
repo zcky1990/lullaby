@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { api, type WorkspaceFindMatch, type WorkspaceFindResponse } from "@/lib/api";
+import { useI18n } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 interface Props {
@@ -26,6 +27,7 @@ function groupMatches(matches: WorkspaceFindMatch[]): Array<{
 }
 
 export function FindTab({ projectId, onOpenFile }: Props) {
+  const { t } = useI18n();
   const [query, setQuery] = useState("");
   const [caseSensitive, setCaseSensitive] = useState(false);
   const [regex, setRegex] = useState(false);
@@ -73,15 +75,15 @@ export function FindTab({ projectId, onOpenFile }: Props) {
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <PanelHeader title="Find" count={result?.matches.length} />
+      <PanelHeader title={t("explorer.find.title")} count={result?.matches.length} />
       <div className="flex flex-col gap-2 border-b px-3 py-2">
         <div className="relative">
           <Input
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Cari di file workspace…"
+            placeholder={t("explorer.find.placeholder")}
             className="h-8 pr-16"
-            aria-label="Cari di file"
+            aria-label={t("explorer.find.searchAria")}
             autoFocus
           />
           <div className="absolute inset-y-0 right-1 flex items-center gap-0.5">
@@ -90,8 +92,8 @@ export function FindTab({ projectId, onOpenFile }: Props) {
               variant={caseSensitive ? "secondary" : "ghost"}
               className="size-6 rounded-sm"
               onClick={() => setCaseSensitive((value) => !value)}
-              aria-label="Match case"
-              title="Match case"
+              aria-label={t("explorer.find.matchCase")}
+              title={t("explorer.find.matchCase")}
             >
               <CaseSensitive className="size-3.5" />
             </Button>
@@ -100,8 +102,8 @@ export function FindTab({ projectId, onOpenFile }: Props) {
               variant={regex ? "secondary" : "ghost"}
               className="size-6 rounded-sm"
               onClick={() => setRegex((value) => !value)}
-              aria-label="Regex"
-              title="Regex"
+              aria-label={t("explorer.find.regex")}
+              title={t("explorer.find.regex")}
             >
               <Regex className="size-3.5" />
             </Button>
@@ -110,11 +112,15 @@ export function FindTab({ projectId, onOpenFile }: Props) {
         <div className="flex items-center justify-between text-xs text-muted-foreground">
           <span>
             {loading
-              ? "Mencari…"
+              ? t("explorer.find.searching")
               : result
-              ? `${total} hasil di ${groups.length} file · ${result.scanned} file dipindai`
-              : "Ketik untuk mencari isi file"}
-            {result?.truncated ? " · hasil dipotong" : ""}
+              ? t("explorer.find.results", {
+                count: total,
+                files: groups.length,
+                scanned: result.scanned,
+              })
+              : t("explorer.find.idleHint")}
+            {result?.truncated ? t("explorer.find.truncatedSuffix") : ""}
           </span>
           {loading ? <Spinner className="size-3.5" /> : null}
         </div>
@@ -122,15 +128,15 @@ export function FindTab({ projectId, onOpenFile }: Props) {
 
       <div className="min-h-0 flex-1 overflow-y-auto px-2 py-2">
         {!projectId ? (
-          <p className="p-3 text-xs text-muted-foreground">Pilih project dengan workspace dulu.</p>
+          <p className="p-3 text-xs text-muted-foreground">{t("explorer.find.noProject")}</p>
         ) : error ? (
           <p className="p-3 text-xs text-destructive">{error}</p>
         ) : !result ? (
           <p className="p-3 text-xs text-muted-foreground">
-            Cari teks di seluruh file workspace. Klik hasil untuk membuka file pada baris tersebut.
+            {t("explorer.find.emptyPrompt")}
           </p>
         ) : total === 0 ? (
-          <p className="p-3 text-xs text-muted-foreground">Tidak ada hasil.</p>
+          <p className="p-3 text-xs text-muted-foreground">{t("explorer.find.noResults")}</p>
         ) : (
           <div className="flex flex-col gap-3">
             {groups.map((group) => (

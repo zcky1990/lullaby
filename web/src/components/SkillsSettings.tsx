@@ -23,6 +23,7 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
+import { useI18n } from "@/lib/i18n";
 import { api, type SkillInfo, type SkillsResponse } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
@@ -30,29 +31,34 @@ const SOURCE_ORDER: SkillInfo["source"][] = ["workspace", "project", "global", "
 
 const SOURCE_META: Record<
   SkillInfo["source"],
-  { label: string; description: string; icon: LucideIcon; badge: "default" | "secondary" | "outline" | "success" }
+  {
+    labelKey: string;
+    descriptionKey: string;
+    icon: LucideIcon;
+    badge: "default" | "secondary" | "outline" | "success";
+  }
 > = {
   workspace: {
-    label: "Workspace",
-    description: "Dibaca dari .agents/skills, prioritas tertinggi",
+    labelKey: "settings.skills.source.workspace",
+    descriptionKey: "settings.skills.source.workspaceDescription",
     icon: FolderTree,
     badge: "default",
   },
   project: {
-    label: "Project",
-    description: "Dibuat otomatis dari chat Build",
+    labelKey: "settings.skills.source.project",
+    descriptionKey: "settings.skills.source.projectDescription",
     icon: Briefcase,
     badge: "secondary",
   },
   global: {
-    label: "Global",
-    description: "Tersedia untuk semua project",
+    labelKey: "settings.skills.source.global",
+    descriptionKey: "settings.skills.source.globalDescription",
     icon: Globe,
     badge: "outline",
   },
   builtin: {
-    label: "Builtin",
-    description: "Bundled bersama aplikasi",
+    labelKey: "settings.skills.source.builtin",
+    descriptionKey: "settings.skills.source.builtinDescription",
     icon: Package,
     badge: "outline",
   },
@@ -72,6 +78,7 @@ export function SkillsSettings({ projectId }: { projectId: string | null }) {
   const [error, setError] = useState<string | undefined>();
   const [query, setQuery] = useState("");
   const [sourceFilter, setSourceFilter] = useState<"all" | SkillInfo["source"]>("all");
+  const { t } = useI18n();
 
   useEffect(() => {
     let cancelled = false;
@@ -160,21 +167,23 @@ export function SkillsSettings({ projectId }: { projectId: string | null }) {
               Skills
             </h2>
             <p className="max-w-2xl text-xs text-muted-foreground">
-              Skill adalah folder <span className="font-mono">SKILL.md</span> berisi frontmatter{" "}
+              {t("settings.skills.intro")} <span className="font-mono">SKILL.md</span>{" "}
+              {t("settings.skills.frontmatter")}{" "}
               <span className="font-mono">name</span>/<span className="font-mono">description</span>.
-              AI memilih skill lewat tool <span className="font-mono">use_skill</span> saat
-              deskripsinya cocok dengan tugas.
+              {" "}
+              {t("settings.skills.toolIntro")} <span className="font-mono">use_skill</span>{" "}
+              {t("settings.skills.toolOutro")}
             </p>
           </div>
           <div className="flex items-center gap-2 rounded-md border px-3 py-2">
             <span className="text-xs text-muted-foreground">
-              {data?.enabled ? "Skills aktif" : "Skills nonaktif"}
+              {data?.enabled ? t("settings.skills.active") : t("settings.skills.inactive")}
             </span>
             <Switch
               checked={!!data?.enabled}
               onCheckedChange={(next) => data && void save(next, data.disabled)}
               disabled={!data || busy}
-              aria-label="Aktifkan skills"
+              aria-label={t("settings.skills.toggleAria")}
             />
           </div>
         </div>
@@ -183,25 +192,28 @@ export function SkillsSettings({ projectId }: { projectId: string | null }) {
           <PlugZap className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
           <p className="text-xs text-muted-foreground">
             {integrationCount > 0
-              ? `${integrationCount} skill integrasi API (Docmost, Jira, Confluence, ClickUp) terpasang di Global. `
-              : "Skill integrasi API (Docmost, Jira, Confluence, ClickUp) otomatis dipasang ke Global saat aplikasi pertama dibuka. "}
-            Token integrasi diatur per project di{" "}
-            <span className="font-medium text-foreground">Project Settings → Integrations</span>{" "}
-            dan disimpan di <span className="font-mono">project_integrations.config</span>.
+              ? t("settings.skills.integrationCount", { count: integrationCount })
+              : t("settings.skills.integrationAuto")}{" "}
+            {t("settings.skills.integrationConfigIntro")}{" "}
+            <span className="font-medium text-foreground">
+              {t("settings.skills.integrationConfigLink")}
+            </span>{" "}
+            {t("settings.skills.integrationConfigOutro")}{" "}
+            <span className="font-mono">project_integrations.config</span>.
           </p>
         </div>
         <Separator />
       </div>
 
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-        <StatCard label="Total skill" value={data?.skills.length ?? 0} />
-        <StatCard label="Aktif" value={activeCount} icon={CheckCircle2} />
+        <StatCard label={t("settings.skills.statTotal")} value={data?.skills.length ?? 0} />
+        <StatCard label={t("settings.skills.statActive")} value={activeCount} icon={CheckCircle2} />
         <StatCard
-          label="Nonaktif"
+          label={t("settings.skills.statDisabled")}
           value={(data?.skills.length ?? 0) - activeCount}
           icon={Ban}
         />
-        <StatCard label="Sumber" value={sourcesCount} icon={Globe} />
+        <StatCard label={t("settings.skills.statSources")} value={sourcesCount} icon={Globe} />
       </div>
 
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
@@ -210,23 +222,23 @@ export function SkillsSettings({ projectId }: { projectId: string | null }) {
           <Input
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Cari nama, deskripsi, atau path skill…"
+            placeholder={t("settings.skills.searchPlaceholder")}
             className="pl-8"
-            aria-label="Cari skill"
+            aria-label={t("settings.skills.searchAria")}
           />
         </div>
         <Select
           value={sourceFilter}
           onValueChange={(value) => setSourceFilter(value as typeof sourceFilter)}
         >
-          <SelectTrigger className="w-full sm:w-[190px]" aria-label="Filter sumber skill">
-            <SelectValue placeholder="Semua sumber" />
+          <SelectTrigger className="w-full sm:w-[190px]" aria-label={t("settings.skills.filterAria")}>
+            <SelectValue placeholder={t("settings.skills.allSources")} />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">Semua sumber</SelectItem>
+            <SelectItem value="all">{t("settings.skills.allSources")}</SelectItem>
             {SOURCE_ORDER.map((source) => (
               <SelectItem key={source} value={source}>
-                {SOURCE_META[source].label}
+                {t(SOURCE_META[source].labelKey)}
               </SelectItem>
             ))}
           </SelectContent>
@@ -238,28 +250,31 @@ export function SkillsSettings({ projectId }: { projectId: string | null }) {
       {loading ? (
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <Spinner />
-          Memuat skills…
+          {t("settings.skills.loading")}
         </div>
       ) : (
         <>
           <div className="grid gap-2 rounded-md border bg-muted/20 p-3 sm:grid-cols-2">
             <LocationRow
-              label="Workspace"
+              label={t("settings.skills.source.workspace")}
               path={data?.workspacePath}
-              placeholder="(pilih project untuk skill workspace)"
+              placeholder={t("settings.skills.workspacePlaceholder")}
             />
             <LocationRow
-              label="Project"
+              label={t("settings.skills.source.project")}
               path={data?.projectPath}
-              placeholder="(pilih project untuk skill project)"
+              placeholder={t("settings.skills.projectPlaceholder")}
             />
-            <LocationRow label="Global" path={data?.globalPath} />
-            <LocationRow label="Builtin" path={data?.builtinPath} />
+            <LocationRow label={t("settings.skills.source.global")} path={data?.globalPath} />
+            <LocationRow label={t("settings.skills.source.builtin")} path={data?.builtinPath} />
           </div>
 
           <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
             <span>
-              Menampilkan {filteredCount} dari {data?.skills.length ?? 0} skill
+              {t("settings.skills.showing", {
+                filtered: filteredCount,
+                total: data?.skills.length ?? 0,
+              })}
             </span>
             {query || sourceFilter !== "all" ? (
               <button
@@ -270,19 +285,20 @@ export function SkillsSettings({ projectId }: { projectId: string | null }) {
                 }}
                 className="font-medium text-foreground underline-offset-4 hover:underline"
               >
-                Reset filter
+                {t("settings.skills.resetFilter")}
               </button>
             ) : null}
           </div>
 
           {!data || data.skills.length === 0 ? (
             <p className="rounded-md border border-dashed p-4 text-xs text-muted-foreground">
-              Belum ada skill. Jalankan chat Build, atau buat folder (mis.{" "}
-              <span className="font-mono">my-skill/SKILL.md</span>) di salah satu folder di atas.
+              {t("settings.skills.emptyBefore")}{" "}
+              <span className="font-mono">my-skill/SKILL.md</span>
+              {t("settings.skills.emptyAfter")}
             </p>
           ) : filteredCount === 0 ? (
             <p className="rounded-md border border-dashed p-4 text-xs text-muted-foreground">
-              Tidak ada skill yang cocok dengan filter.
+              {t("settings.skills.noMatch")}
             </p>
           ) : (
             <div className="flex flex-col gap-5">
@@ -293,11 +309,13 @@ export function SkillsSettings({ projectId }: { projectId: string | null }) {
                   <div key={group.source} className="flex flex-col gap-2">
                     <div className="flex flex-wrap items-center gap-2">
                       <Icon className="size-4 text-muted-foreground" />
-                      <span className="text-xs font-medium">{meta.label}</span>
+                      <span className="text-xs font-medium">{t(meta.labelKey)}</span>
                       <Badge variant="outline" className="h-5 px-1.5 text-[10px]">
                         {group.skills.length}
                       </Badge>
-                      <span className="text-xs text-muted-foreground">{meta.description}</span>
+                      <span className="text-xs text-muted-foreground">
+                        {t(meta.descriptionKey)}
+                      </span>
                     </div>
                     <div className="grid gap-2">
                       {group.skills.map((skill) => (
@@ -321,12 +339,12 @@ export function SkillsSettings({ projectId }: { projectId: string | null }) {
                             </Badge>
                             {INTEGRATION_SKILLS.has(skill.name) ? (
                               <Badge variant="secondary" className="h-5 px-1.5 text-[10px]">
-                                Integrasi API
+                                {t("settings.skills.integrationBadge")}
                               </Badge>
                             ) : null}
                             {!skill.enabled ? (
                               <Badge variant="outline" className="h-5 px-1.5 text-[10px]">
-                                nonaktif
+                                {t("settings.skills.disabledBadge")}
                               </Badge>
                             ) : null}
                             <div className="ml-auto flex items-center gap-2">
@@ -334,12 +352,17 @@ export function SkillsSettings({ projectId }: { projectId: string | null }) {
                                 checked={skill.enabled}
                                 onCheckedChange={(next) => toggleSkill(skill.id, next)}
                                 disabled={busy || !data.enabled}
-                                aria-label={`${skill.enabled ? "Nonaktifkan" : "Aktifkan"} ${skill.name}`}
+                                aria-label={t(
+                                  skill.enabled
+                                    ? "settings.skills.disableSkill"
+                                    : "settings.skills.enableSkill",
+                                  { name: skill.name },
+                                )}
                               />
                             </div>
                           </div>
                           <p className="line-clamp-2 text-xs text-muted-foreground">
-                            {skill.description || "(tanpa deskripsi)"}
+                            {skill.description || t("settings.skills.noDescription")}
                           </p>
                           <p
                             className="truncate font-mono text-[11px] text-muted-foreground"

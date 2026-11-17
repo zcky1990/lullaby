@@ -20,6 +20,7 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { canPickDirectory, chooseWorkspaceDirectory } from "@/lib/bindings";
+import { useI18n } from "@/lib/i18n";
 import { SINGLETONS } from "@/lib/integrations";
 import { cn } from "@/lib/utils";
 import type { IntegrationPayload, Project, ProjectDetail, TestResult } from "@/lib/api";
@@ -52,7 +53,7 @@ interface ProviderOption {
 
 interface IntegrationSectionDef {
   id: string;
-  title: string;
+  titleKey: string;
   kinds: string[];
   options: ProviderOption[];
 }
@@ -60,7 +61,7 @@ interface IntegrationSectionDef {
 const INTEGRATION_SECTIONS: IntegrationSectionDef[] = [
   {
     id: "document",
-    title: "Document",
+    titleKey: "settings.project.sectionDocument",
     kinds: ["docmost", "notion", "confluence"],
     options: [
       { label: "Docmost", kind: "docmost" },
@@ -70,7 +71,7 @@ const INTEGRATION_SECTIONS: IntegrationSectionDef[] = [
   },
   {
     id: "ticket",
-    title: "Ticket",
+    titleKey: "settings.project.sectionTicket",
     kinds: ["jira", "clickup"],
     options: [
       { label: "Jira", kind: "jira" },
@@ -80,7 +81,7 @@ const INTEGRATION_SECTIONS: IntegrationSectionDef[] = [
   },
   {
     id: "code",
-    title: "Code",
+    titleKey: "settings.project.sectionCode",
     kinds: ["github"],
     options: [
       { label: "GitHub", kind: "github" },
@@ -134,6 +135,7 @@ export function SettingsView({
 }: Props) {
   const { project, integrations } = detail;
   const [draftKinds, setDraftKinds] = useState<string[]>([]);
+  const { t } = useI18n();
 
   const addDraft = (kind: string) =>
     setDraftKinds((current) => (current.includes(kind) ? current : [...current, kind]));
@@ -141,12 +143,14 @@ export function SettingsView({
     setDraftKinds((current) => current.filter((item) => item !== kind));
 
   return (
-    <Suspense fallback={<p className="text-xs text-muted-foreground">Memuat…</p>}>
+    <Suspense
+      fallback={<p className="text-xs text-muted-foreground">{t("settings.project.loading")}</p>}
+    >
       <div className="flex w-full flex-col gap-8">
         <div>
           <h1 className="text-xl font-semibold">{project.name}</h1>
           <p className="text-xs text-muted-foreground">
-            Workspace: {project.workspace_path ?? "—"}
+            {t("settings.project.workspaceInfo", { path: project.workspace_path ?? "—" })}
           </p>
         </div>
 
@@ -154,7 +158,7 @@ export function SettingsView({
           <>
             <CollapsibleSection
               key={project.id + (project.workspace_path ?? "none")}
-              title="Workspace"
+              title={t("settings.project.workspace")}
             >
               <WorkspaceSection
                 path={project.workspace_path}
@@ -162,7 +166,10 @@ export function SettingsView({
                 onSave={onUpdateWorkspace}
               />
             </CollapsibleSection>
-            <CollapsibleSection title="Clone repository" defaultOpen={!!project.workspace_path}>
+            <CollapsibleSection
+              title={t("settings.project.cloneRepository")}
+              defaultOpen={!!project.workspace_path}
+            >
               <CloneSection
                 workspacePath={project.workspace_path}
                 onClone={onCloneRepository}
@@ -174,6 +181,7 @@ export function SettingsView({
         {section === "integrations" && (
           <div className="flex flex-col gap-6">
             {INTEGRATION_SECTIONS.map((def) => {
+              const title = t(def.titleKey);
               const visibleKinds = def.kinds.filter(
                 (kind) =>
                   integrations.some((item) => item.kind === kind) || draftKinds.includes(kind),
@@ -183,17 +191,21 @@ export function SettingsView({
               return (
                 <CollapsibleSection
                   key={def.id}
-                  title={def.title}
+                  title={title}
                   defaultOpen={showForms}
                   action={
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <Button size="icon" variant="ghost" aria-label={`Tambah ${def.title}`}>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          aria-label={t("settings.project.addSection", { section: title })}
+                        >
                           <Plus />
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        <DropdownMenuLabel>Pilih tipe</DropdownMenuLabel>
+                        <DropdownMenuLabel>{t("settings.project.chooseType")}</DropdownMenuLabel>
                         <DropdownMenuSeparator />
                         <DropdownMenuGroup>
                           {def.options.map((option) =>
@@ -209,7 +221,9 @@ export function SettingsView({
                             ) : (
                               <DropdownMenuItem key={option.label} disabled>
                                 {option.label}
-                                <span className="text-muted-foreground ml-auto text-xs">segera</span>
+                                <span className="text-muted-foreground ml-auto text-xs">
+                                  {t("settings.project.comingSoon")}
+                                </span>
                               </DropdownMenuItem>
                             ),
                           )}
@@ -243,8 +257,9 @@ export function SettingsView({
                     </div>
                   ) : (
                     <p className="text-xs text-muted-foreground">
-                      Belum ada {def.title.toLowerCase()}. Klik tombol{" "}
-                      <Plus className="inline size-3" /> untuk menambahkan.
+                      {t("settings.project.emptySection", { section: title.toLowerCase() })}{" "}
+                      <Plus className="inline size-3" />{" "}
+                      {t("settings.project.emptySectionOutro")}
                     </p>
                   )}
                 </CollapsibleSection>
@@ -276,6 +291,7 @@ function WorkspaceSection({
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | undefined>();
   const pickable = canPickDirectory();
+  const { t } = useI18n();
 
   const pick = async (apply: (path: string) => void) => {
     const chosen = await chooseWorkspaceDirectory();
@@ -299,17 +315,21 @@ function WorkspaceSection({
   return (
     <div className="flex flex-col gap-4">
       <p className="text-xs text-muted-foreground">
-        Folder repo/proyek di komputer ini. Menu <span className="font-medium">Explorer</span> muncul
-        setelah workspace diset. <span className="font-medium">Document workspace</span> adalah
-        folder markdown untuk dokumen lokal (bisa disync ke Docmost nanti).
+        {t("settings.project.workspaceFormDescription")}{" "}
+        <span className="font-medium">{t("settings.project.explorer")}</span>{" "}
+        {t("settings.project.workspaceFormDescriptionMid")}{" "}
+        <span className="font-medium">{t("settings.project.documentWorkspace")}</span>{" "}
+        {t("settings.project.workspaceFormDescriptionOutro")}
       </p>
       <div className="grid gap-1.5">
-        <Label htmlFor="workspace-path">Path workspace</Label>
+        <Label htmlFor="workspace-path">{t("settings.project.workspacePath")}</Label>
         <div className="flex gap-2">
           <Input
             id="workspace-path"
             value={value}
-            placeholder={pickable ? "Folder workspace…" : "/path/ke/workspace"}
+            placeholder={pickable
+              ? t("settings.project.workspacePlaceholder")
+              : "/path/ke/workspace"}
             onChange={(e) => {
               setValue(e.target.value);
               setSaved(false);
@@ -320,20 +340,24 @@ function WorkspaceSection({
             size="icon"
             onClick={() => pick(setValue)}
             disabled={!pickable}
-            title={pickable ? "Pilih folder" : "Folder picker hanya di app desktop"}
-            aria-label="Pilih folder workspace"
+            title={pickable
+              ? t("settings.project.pickFolder")
+              : t("settings.project.pickFolderDesktopOnly")}
+            aria-label={t("settings.project.pickWorkspaceFolderAria")}
           >
             <FolderOpen />
           </Button>
         </div>
       </div>
       <div className="grid gap-1.5">
-        <Label htmlFor="document-path">Document workspace</Label>
+        <Label htmlFor="document-path">{t("settings.project.documentWorkspace")}</Label>
         <div className="flex gap-2">
           <Input
             id="document-path"
             value={docValue}
-            placeholder={pickable ? "Folder dokumen lokal…" : "/path/ke/dokumen"}
+            placeholder={pickable
+              ? t("settings.project.documentPlaceholder")
+              : "/path/ke/dokumen"}
             onChange={(e) => {
               setDocValue(e.target.value);
               setSaved(false);
@@ -344,8 +368,10 @@ function WorkspaceSection({
             size="icon"
             onClick={() => pick(setDocValue)}
             disabled={!pickable}
-            title={pickable ? "Pilih folder" : "Folder picker hanya di app desktop"}
-            aria-label="Pilih folder document workspace"
+            title={pickable
+              ? t("settings.project.pickFolder")
+              : t("settings.project.pickFolderDesktopOnly")}
+            aria-label={t("settings.project.pickDocumentFolderAria")}
           >
             <FolderOpen />
           </Button>
@@ -353,9 +379,9 @@ function WorkspaceSection({
       </div>
       <div className="flex items-center gap-2">
         <Button size="sm" onClick={save} disabled={busy}>
-          Simpan
+          {t("common.save")}
         </Button>
-        {saved ? <Badge variant="success">Tersimpan</Badge> : null}
+        {saved ? <Badge variant="success">{t("common.saved")}</Badge> : null}
         {error ? <Badge variant="destructive">{error}</Badge> : null}
       </div>
     </div>
@@ -378,6 +404,7 @@ function CloneSection({
   const [message, setMessage] = useState<string | undefined>();
   const [error, setError] = useState<string | undefined>();
   const ready = Boolean(workspacePath?.trim());
+  const { t } = useI18n();
 
   const clone = async () => {
     const trimmedUrl = url.trim();
@@ -387,7 +414,7 @@ function CloneSection({
     setMessage(undefined);
     try {
       await onClone({ url: trimmedUrl, protocol });
-      setMessage(`Clone selesai ke ${workspacePath}`);
+      setMessage(t("settings.project.cloneDone", { path: workspacePath ?? "" }));
       setUrl("");
     } catch (e) {
       setError((e as Error).message);
@@ -399,20 +426,22 @@ function CloneSection({
   return (
     <div className="flex flex-col gap-4">
       <p className="text-xs text-muted-foreground">
-        Clone langsung ke path workspace di atas. Folder harus kosong. Auth memakai credential
-        mesin (HTTPS credential helper / SSH key).
+        {t("settings.project.cloneDescription")}
       </p>
       {!ready ? (
         <p className="text-xs text-muted-foreground">
-          Set dan simpan <span className="font-medium">Path workspace</span> dulu sebelum clone.
+          {t("settings.project.cloneNeedPathBefore")}{" "}
+          <span className="font-medium">{t("settings.project.workspacePath")}</span>{" "}
+          {t("settings.project.cloneNeedPathAfter")}
         </p>
       ) : (
         <p className="text-xs">
-          Tujuan: <span className="font-mono text-xs">{workspacePath}</span>
+          {t("settings.project.cloneTarget")}{" "}
+          <span className="font-mono text-xs">{workspacePath}</span>
         </p>
       )}
       <div className="grid gap-1.5">
-        <Label>Protokol</Label>
+        <Label>{t("settings.project.protocol")}</Label>
         <ToggleGroup
           type="single"
           variant="outline"
@@ -426,16 +455,16 @@ function CloneSection({
           }}
           disabled={!ready || busy}
         >
-          <ToggleGroupItem value="https" aria-label="Clone via HTTPS">
+          <ToggleGroupItem value="https" aria-label={t("settings.project.cloneViaHttps")}>
             HTTPS
           </ToggleGroupItem>
-          <ToggleGroupItem value="ssh" aria-label="Clone via SSH">
+          <ToggleGroupItem value="ssh" aria-label={t("settings.project.cloneViaSsh")}>
             SSH
           </ToggleGroupItem>
         </ToggleGroup>
       </div>
       <div className="grid gap-1.5">
-        <Label htmlFor="clone-url">Repository</Label>
+        <Label htmlFor="clone-url">{t("settings.project.repository")}</Label>
         <Input
           id="clone-url"
           value={url}
@@ -462,7 +491,7 @@ function CloneSection({
           data-icon="inline-start"
         >
           <GitBranchPlus />
-          {busy ? "Cloning…" : "Clone"}
+          {busy ? t("settings.project.cloning") : t("settings.project.clone")}
         </Button>
         {message ? <Badge variant="success">{message}</Badge> : null}
         {error ? <Badge variant="destructive">{error}</Badge> : null}

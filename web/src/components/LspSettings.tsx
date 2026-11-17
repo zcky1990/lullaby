@@ -15,6 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
+import { useI18n, type Translator } from "@/lib/i18n";
 import { dispatchLspSettingsChanged } from "@/lib/lsp-events";
 import {
   api,
@@ -52,17 +53,21 @@ function initOptionsText(value: Record<string, unknown> | undefined): string {
 
 function parseInitOptions(
   text: string,
+  t: Translator,
 ): { ok: true; value?: Record<string, unknown> } | { ok: false; error: string } {
   const trimmed = text.trim();
   if (!trimmed) return { ok: true, value: undefined };
   try {
     const parsed = JSON.parse(trimmed) as unknown;
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-      return { ok: false, error: "Initialization options harus objek JSON." };
+      return { ok: false, error: t("settings.lsp.initOptionsError") };
     }
     return { ok: true, value: parsed as Record<string, unknown> };
   } catch (error) {
-    return { ok: false, error: `JSON tidak valid: ${(error as Error).message}` };
+    return {
+      ok: false,
+      error: t("settings.lsp.jsonInvalid", { message: (error as Error).message }),
+    };
   }
 }
 
@@ -91,6 +96,7 @@ export function LspSettingsPanel() {
   const [initErrors, setInitErrors] = useState<Record<number, string | undefined>>({});
   const [initDrafts, setInitDrafts] = useState<Record<number, string>>({});
   const [probes, setProbes] = useState<Record<string, LspProbeResult | "loading">>({});
+  const { t } = useI18n();
 
   useEffect(() => {
     let cancelled = false;
@@ -171,11 +177,11 @@ export function LspSettingsPanel() {
       const nextErrors: Record<number, string | undefined> = {};
       for (let index = 0; index < settings.servers.length; index++) {
         const server = settings.servers[index]!;
-        const parsed = parseInitOptions(initDrafts[index] ?? "");
+        const parsed = parseInitOptions(initDrafts[index] ?? "", t);
         if (!parsed.ok) {
           nextErrors[index] = parsed.error;
           setInitErrors(nextErrors);
-          setError("Perbaiki initialization options sebelum menyimpan.");
+          setError(t("settings.lsp.fixInitOptions"));
           return;
         }
         nextErrors[index] = undefined;
@@ -227,13 +233,12 @@ export function LspSettingsPanel() {
       <div className="flex flex-col gap-2">
         <h2 className="flex items-center gap-2 text-xs font-medium tracking-wider text-muted-foreground uppercase">
           <ServerCog className="size-4" />
-          Language Servers
+          {t("settings.lsp.title")}
         </h2>
         <p className="max-w-3xl text-xs text-muted-foreground">
-          Hubungkan Monaco ke language server (LSP) untuk diagnostics, completion, hover, go to
-          definition, references, rename, dan formatting. Server dijalankan lokal dengan hak user.
-          Language server <span className="font-medium text-foreground">tidak di-bundle</span> —
-          install sendiri atau gunakan preset <span className="font-mono">npx</span>.
+          {t("settings.lsp.description")}{" "}
+          <span className="font-medium text-foreground">{t("settings.lsp.notBundled")}</span>{" "}
+          {t("settings.lsp.beforeNpx")} <span className="font-mono">npx</span>.
         </p>
         <Separator />
       </div>
@@ -241,38 +246,38 @@ export function LspSettingsPanel() {
       {loading ? (
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <Spinner />
-          Memuat konfigurasi LSP…
+          {t("settings.lsp.loading")}
         </div>
       ) : (
         <>
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border p-4">
             <div className="flex min-w-0 flex-col gap-1">
-              <span className="text-xs font-medium">Aktifkan LSP</span>
+              <span className="text-xs font-medium">{t("settings.lsp.enable")}</span>
               <span className="text-xs text-muted-foreground">
-                {enabledCount} server aktif. Setelah disimpan, tab file terbuka reconnect otomatis.
+                {t("settings.lsp.enableDescription", { count: enabledCount })}
               </span>
             </div>
             <div className="flex items-center gap-2">
-              {dirty ? <Badge variant="outline">Belum disimpan</Badge> : null}
+              {dirty ? <Badge variant="outline">{t("settings.lsp.unsaved")}</Badge> : null}
               <Switch
                 checked={settings.enabled}
                 onCheckedChange={(next) => update({ ...settings, enabled: next })}
                 disabled={busy}
-                aria-label="Aktifkan LSP"
+                aria-label={t("settings.lsp.enable")}
               />
             </div>
           </div>
 
           <div className="flex items-center justify-between gap-2">
             <span className="text-xs text-muted-foreground">
-              {settings.servers.length} server terkonfigurasi
+              {t("settings.lsp.configuredCount", { count: settings.servers.length })}
             </span>
             <div className="flex items-center gap-2">
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button size="sm" variant="outline" data-icon="inline-start">
                     <Plus />
-                    Tambah preset
+                    {t("settings.lsp.addPreset")}
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-72">
@@ -304,20 +309,23 @@ export function LspSettingsPanel() {
                 data-icon="inline-start"
               >
                 {busy ? <Spinner /> : <Save />}
-                Simpan
+                {t("common.save")}
               </Button>
             </div>
           </div>
 
           {settings.servers.length === 0 ? (
             <p className="rounded-md border border-dashed p-4 text-xs text-muted-foreground">
-              Belum ada language server. Tambahkan preset, lalu sesuaikan command/args bila perlu.
+              {t("settings.lsp.empty")}
             </p>
           ) : (
             <div className="flex flex-col gap-3">
               {settings.servers.map((server, index) => {
                 const probeKey = `${index}:${server.command}`;
                 const probeResult = probes[probeKey];
+                const probePath = probeResult && probeResult !== "loading"
+                  ? (probeResult.path ?? "")
+                  : "";
                 return (
                   <div key={server.id ?? index} className="flex flex-col gap-3 rounded-md border p-4">
                     <div className="flex flex-wrap items-center gap-2">
@@ -325,7 +333,7 @@ export function LspSettingsPanel() {
                         value={server.name}
                         onChange={(event) => patchServer(index, { name: event.target.value })}
                         className="h-8 max-w-64"
-                        aria-label="Nama server"
+                        aria-label={t("settings.lsp.serverName")}
                       />
                       <Badge variant={server.mode === "npx" ? "secondary" : "outline"}>
                         {server.mode}
@@ -345,17 +353,17 @@ export function LspSettingsPanel() {
                           data-icon="inline-start"
                         >
                           {probeResult === "loading" ? <Spinner /> : <ServerCog />}
-                          Cek
+                          {t("settings.lsp.probe")}
                         </Button>
                         <Switch
                           checked={server.enabled}
                           onCheckedChange={(next) => patchServer(index, { enabled: next })}
-                          aria-label={`Aktifkan ${server.name}`}
+                          aria-label={t("settings.lsp.enableServer", { name: server.name })}
                         />
                         <Button
                           size="icon"
                           variant="ghost"
-                          aria-label={`Hapus ${server.name}`}
+                          aria-label={t("settings.lsp.deleteServer", { name: server.name })}
                           className="size-7 text-destructive"
                           onClick={() => removeServer(index)}
                         >
@@ -366,7 +374,7 @@ export function LspSettingsPanel() {
 
                     <div className="grid gap-2 md:grid-cols-2">
                       <label className="flex flex-col gap-1 text-xs text-muted-foreground">
-                        Command
+                        {t("settings.lsp.command")}
                         <Input
                           value={server.command}
                           onChange={(event) => patchServer(index, { command: event.target.value })}
@@ -375,7 +383,7 @@ export function LspSettingsPanel() {
                         />
                       </label>
                       <label className="flex flex-col gap-1 text-xs text-muted-foreground">
-                        Languages (pisahkan koma)
+                        {t("settings.lsp.languages")}
                         <Input
                           value={server.languages.join(", ")}
                           onChange={(event) =>
@@ -392,7 +400,7 @@ export function LspSettingsPanel() {
                     </div>
 
                     <label className="flex flex-col gap-1 text-xs text-muted-foreground">
-                      Args (satu argumen per baris)
+                      {t("settings.lsp.args")}
                       <textarea
                         value={server.args.join("\n")}
                         onChange={(event) =>
@@ -406,7 +414,9 @@ export function LspSettingsPanel() {
                     </label>
 
                     <details className="text-xs text-muted-foreground">
-                      <summary className="cursor-pointer select-none">Environment (opsional)</summary>
+                      <summary className="cursor-pointer select-none">
+                        {t("settings.lsp.environment")}
+                      </summary>
                       <textarea
                         value={envText(server.env)}
                         onChange={(event) => patchServer(index, { env: parseEnv(event.target.value) })}
@@ -418,14 +428,14 @@ export function LspSettingsPanel() {
 
                     <details className="text-xs text-muted-foreground" open={Boolean(initDrafts[index])}>
                       <summary className="cursor-pointer select-none">
-                        Initialization options (JSON, opsional)
+                        {t("settings.lsp.initOptions")}
                       </summary>
                       <textarea
                         value={initDrafts[index] ?? ""}
                         onChange={(event) => {
                           const text = event.target.value;
                           setInitDrafts((current) => ({ ...current, [index]: text }));
-                          const parsed = parseInitOptions(text);
+                          const parsed = parseInitOptions(text, t);
                           setInitErrors((current) => ({
                             ...current,
                             [index]: parsed.ok ? undefined : parsed.error,
@@ -440,7 +450,8 @@ export function LspSettingsPanel() {
                         <p className="mt-1 text-destructive">{initErrors[index]}</p>
                       ) : (
                         <p className="mt-1">
-                          Dikirim ke language server sebagai <span className="font-mono">initializationOptions</span>.
+                          {t("settings.lsp.initOptionsHint")}{" "}
+                          <span className="font-mono">initializationOptions</span>.
                         </p>
                       )}
                     </details>
@@ -452,20 +463,21 @@ export function LspSettingsPanel() {
                         ? "text-xs text-emerald-600 dark:text-emerald-400"
                         : "text-xs text-destructive"}>
                         {probeResult === "loading"
-                          ? "Mengecek command…"
+                          ? t("settings.lsp.probing")
                           : probeResult.found
-                          ? `Ditemukan: ${probeResult.path}${
+                          ? `${t("settings.lsp.probeFound", { path: probePath })}${
                             server.mode === "npx"
-                              ? " (probe hanya mengecek binary npx, bukan package args)"
+                              ? ` ${t("settings.lsp.probeNpxNote")}`
                               : ""
                           }`
-                          : `Tidak ditemukan: ${probeResult.command}${
-                            probeResult.path ? ` (${probeResult.path})` : ""
+                          : `${t("settings.lsp.probeNotFound", { command: probeResult.command })}${
+                            probePath ? ` ${t("settings.lsp.probePathNote", { path: probePath })}` : ""
                           }`}
                       </p>
                     ) : server.mode === "npx" ? (
                       <p className="text-xs text-muted-foreground">
-                        Mode npx: tombol Cek hanya memverifikasi binary <span className="font-mono">npx</span>.
+                        {t("settings.lsp.npxModeHint")}{" "}
+                        <span className="font-mono">npx</span>.
                       </p>
                     ) : null}
                   </div>
@@ -477,9 +489,8 @@ export function LspSettingsPanel() {
           {error ? <p className="text-xs text-destructive">{error}</p> : null}
 
           <p className="text-xs text-muted-foreground">
-            Keamanan: language server adalah proses lokal yang Anda konfigurasi sendiri. Hanya
-            jalankan command tepercaya. Preset <span className="font-mono">npx</span> dapat
-            mengunduh package saat pertama kali dipakai dan membutuhkan Node + koneksi internet.
+            {t("settings.lsp.securityPrefix")} <span className="font-mono">npx</span>{" "}
+            {t("settings.lsp.securitySuffix")}
           </p>
         </>
       )}

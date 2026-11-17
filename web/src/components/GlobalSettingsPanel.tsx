@@ -15,6 +15,7 @@ import {
   Zap,
 } from "lucide-react";
 import { PanelHeader } from "@/components/PanelHeader";
+import { useI18n } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 export type GlobalSection =
@@ -32,20 +33,20 @@ export type GlobalSection =
   | "backup"
   | "about";
 
-const SECTIONS: { id: GlobalSection; label: string; icon: LucideIcon }[] = [
-  { id: "appearance", label: "Appearance & Editor", icon: Palette },
-  { id: "llm", label: "LLM Providers", icon: Cpu },
-  { id: "roles", label: "Roles", icon: Users },
-  { id: "prompts", label: "Prompts", icon: MessageSquareText },
-  { id: "mcp", label: "MCP", icon: Server },
-  { id: "skills", label: "Skills", icon: Sparkles },
-  { id: "tools", label: "Tools", icon: ShieldCheck },
-  { id: "lsp", label: "Language Servers", icon: ServerCog },
-  { id: "automation", label: "Automation", icon: Zap },
-  { id: "notifications", label: "Notifications", icon: Bell },
-  { id: "terminal", label: "Terminal", icon: SquareTerminal },
-  { id: "backup", label: "Backup & Restore", icon: Database },
-  { id: "about", label: "About", icon: Info },
+const SECTIONS: { id: GlobalSection; labelKey: string; icon: LucideIcon }[] = [
+  { id: "appearance", labelKey: "settings.global.section.appearance", icon: Palette },
+  { id: "llm", labelKey: "settings.global.section.llm", icon: Cpu },
+  { id: "roles", labelKey: "settings.global.section.roles", icon: Users },
+  { id: "prompts", labelKey: "settings.global.section.prompts", icon: MessageSquareText },
+  { id: "mcp", labelKey: "settings.global.section.mcp", icon: Server },
+  { id: "skills", labelKey: "settings.global.section.skills", icon: Sparkles },
+  { id: "tools", labelKey: "settings.global.section.tools", icon: ShieldCheck },
+  { id: "lsp", labelKey: "settings.global.section.lsp", icon: ServerCog },
+  { id: "automation", labelKey: "settings.global.section.automation", icon: Zap },
+  { id: "notifications", labelKey: "settings.global.section.notifications", icon: Bell },
+  { id: "terminal", labelKey: "settings.global.section.terminal", icon: SquareTerminal },
+  { id: "backup", labelKey: "settings.global.section.backup", icon: Database },
+  { id: "about", labelKey: "settings.global.section.about", icon: Info },
 ];
 
 interface Props {
@@ -54,9 +55,10 @@ interface Props {
 }
 
 export function GlobalSettingsPanel({ section, onSelect }: Props) {
+  const { t } = useI18n();
   return (
     <>
-      <PanelHeader title="Global Settings" />
+      <PanelHeader title={t("settings.global.title")} />
       <div className="flex-1 overflow-y-auto px-2 pb-2">
         {SECTIONS.map((item) => {
           const Icon = item.icon;
@@ -70,7 +72,7 @@ export function GlobalSettingsPanel({ section, onSelect }: Props) {
               )}
             >
               <Icon className="size-4 text-muted-foreground" />
-              {item.label}
+              {t(item.labelKey)}
             </button>
           );
         })}

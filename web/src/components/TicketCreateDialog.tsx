@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
 import { api } from "@/lib/api";
+import { useI18n } from "@/lib/i18n";
 
 const STATUSES = ["Backlog", "To Do", "In Progress", "Test", "Done"];
 const PRIORITIES = ["Low", "Medium", "High", "Urgent"];
@@ -35,6 +36,7 @@ interface Props {
 }
 
 export function TicketCreateDialog({ projectId, open, onOpenChange, onCreated }: Props) {
+  const { t } = useI18n();
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [status, setStatus] = useState("Backlog");
@@ -79,37 +81,41 @@ export function TicketCreateDialog({ projectId, open, onOpenChange, onCreated }:
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="flex max-h-[min(90vh,820px)] flex-col gap-0 overflow-hidden p-0 sm:max-w-xl">
         <DialogHeader className="shrink-0 space-y-1.5 border-b px-6 pt-6 pr-12 pb-4 text-left">
-          <DialogTitle>Tiket baru</DialogTitle>
+          <DialogTitle>{t("tickets.create.title")}</DialogTitle>
           <DialogDescription>
-            Disimpan lokal dulu. Sync ke Jira bisa dilakukan dari detail tiket.
+            {t("tickets.create.description")}
           </DialogDescription>
         </DialogHeader>
 
         <div className="min-h-0 flex-1 overflow-y-auto px-6 py-4">
           <div className="flex flex-col gap-4">
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor="ticket-title">Judul</Label>
+              <Label htmlFor="ticket-title">{t("tickets.create.titleLabel")}</Label>
               <Input
                 id="ticket-title"
                 value={title}
                 onChange={(event) => setTitle(event.target.value)}
-                placeholder="Mis. Perbaiki dropdown chat"
+                placeholder={t("tickets.create.titlePlaceholder")}
                 autoFocus
               />
             </div>
             <div className="flex flex-col gap-1.5">
-              <Label>Deskripsi</Label>
+              <Label>{t("tickets.create.descriptionLabel")}</Label>
               <RichTextEditor
                 value={description}
                 onChange={setDescription}
-                placeholder="Konteks, langkah reproduksi, atau acceptance criteria…"
+                placeholder={t("tickets.create.descriptionPlaceholder")}
               />
             </div>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               <div className="flex flex-col gap-1.5">
-                <Label>Status</Label>
+                <Label>{t("tickets.create.statusLabel")}</Label>
                 <Select value={status} onValueChange={setStatus}>
-                  <SelectTrigger size="sm" className="w-full" aria-label="Status tiket">
+                  <SelectTrigger
+                    size="sm"
+                    className="w-full"
+                    aria-label={t("tickets.create.statusAria")}
+                  >
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -124,14 +130,18 @@ export function TicketCreateDialog({ projectId, open, onOpenChange, onCreated }:
                 </Select>
               </div>
               <div className="flex flex-col gap-1.5">
-                <Label>Prioritas</Label>
+                <Label>{t("tickets.create.priorityLabel")}</Label>
                 <Select value={priority} onValueChange={setPriority}>
-                  <SelectTrigger size="sm" className="w-full" aria-label="Prioritas tiket">
+                  <SelectTrigger
+                    size="sm"
+                    className="w-full"
+                    aria-label={t("tickets.create.priorityAria")}
+                  >
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectGroup>
-                      <SelectItem value="none">Tanpa</SelectItem>
+                      <SelectItem value="none">{t("tickets.create.priorityNone")}</SelectItem>
                       {PRIORITIES.map((item) => (
                         <SelectItem key={item} value={item}>
                           {item}
@@ -142,9 +152,13 @@ export function TicketCreateDialog({ projectId, open, onOpenChange, onCreated }:
                 </Select>
               </div>
               <div className="flex flex-col gap-1.5">
-                <Label>Tipe</Label>
+                <Label>{t("tickets.create.typeLabel")}</Label>
                 <Select value={type} onValueChange={setType}>
-                  <SelectTrigger size="sm" className="w-full" aria-label="Tipe tiket">
+                  <SelectTrigger
+                    size="sm"
+                    className="w-full"
+                    aria-label={t("tickets.create.typeAria")}
+                  >
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -165,7 +179,7 @@ export function TicketCreateDialog({ projectId, open, onOpenChange, onCreated }:
 
         <DialogFooter className="shrink-0 border-t px-6 py-4">
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
-            Batal
+            {t("tickets.create.cancel")}
           </Button>
           <Button
             onClick={submit}
@@ -173,7 +187,7 @@ export function TicketCreateDialog({ projectId, open, onOpenChange, onCreated }:
             data-icon="inline-start"
           >
             {saving ? <Spinner /> : <Plus />}
-            Buat tiket
+            {t("tickets.create.submit")}
           </Button>
         </DialogFooter>
       </DialogContent>

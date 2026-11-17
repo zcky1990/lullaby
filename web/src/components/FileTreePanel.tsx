@@ -24,6 +24,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { PanelHeader } from "@/components/PanelHeader";
 import { Spinner } from "@/components/ui/spinner";
+import { useI18n } from "@/lib/i18n";
 import { api, type FileEntry, type GitStatus } from "@/lib/api";
 import { buildExplorerMarks, markForPath } from "@/lib/explorer-marks";
 import { useDirtyPaths } from "@/hooks/useDirtyPaths";
@@ -67,6 +68,7 @@ export function FileTreePanel({
   onOpenFile,
   onWorkspaceChange,
 }: Props) {
+  const { t } = useI18n();
   const [rootEntries, setRootEntries] = useState<FileEntry[]>([]);
   const [children, setChildren] = useState<Record<string, FileEntry[]>>({});
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -106,10 +108,10 @@ export function FileTreePanel({
       if (!projectId) return [];
       const res = await api.listFiles(projectId, path);
       setConfigured(res.configured);
-      setError(res.truncated ? "Sebagian entri dipotong (maks 1000)." : res.error);
+      setError(res.truncated ? t("explorer.tree.truncated") : res.error);
       return res.entries;
     },
-    [projectId],
+    [projectId, t],
   );
 
   const refreshDir = useCallback(
@@ -189,7 +191,7 @@ export function FileTreePanel({
     if (!projectId || !creating || createBusy) return;
     const name = createName.trim();
     if (!name) {
-      setCreateError("Nama wajib diisi.");
+      setCreateError(t("explorer.tree.nameRequired"));
       return;
     }
     setCreateBusy(true);
@@ -277,8 +279,10 @@ export function FileTreePanel({
 
   const deleteEntry = async (entry: FileEntry) => {
     if (!projectId || actionBusy) return;
-    const label = entry.type === "dir" ? `folder ${entry.name}` : entry.name;
-    if (!globalThis.confirm(`Hapus ${label}?`)) return;
+    const label = entry.type === "dir"
+      ? t("explorer.tree.folderLabel", { name: entry.name })
+      : entry.name;
+    if (!globalThis.confirm(t("explorer.tree.deleteConfirm", { label }))) return;
     setActionBusy(true);
     setError(undefined);
     try {
@@ -317,7 +321,9 @@ export function FileTreePanel({
             value={createName}
             disabled={createBusy}
             className="h-7 text-xs"
-            aria-label={creating.kind === "dir" ? "Nama folder baru" : "Nama file baru"}
+            aria-label={creating.kind === "dir"
+              ? t("explorer.tree.newFolderName")
+              : t("explorer.tree.newFileName")}
             onChange={(event) => setCreateName(event.target.value)}
             onKeyDown={(event) => {
               if (event.key === "Enter") {
@@ -354,9 +360,15 @@ export function FileTreePanel({
     const focused = focusPath === entry.path;
     const { git, dirty, cutPending } = entryTone(entry);
     const titleBits = [entry.name];
-    if (dirty && !isDir) titleBits.push("belum disimpan");
-    if (git === "added") titleBits.push(isDir ? "berisi file baru" : "file baru");
-    if (git === "modified") titleBits.push(isDir ? "berisi perubahan" : "diubah");
+    if (dirty && !isDir) titleBits.push(t("explorer.tree.titleUnsaved"));
+    if (git === "added") {
+      titleBits.push(isDir ? t("explorer.tree.titleNewChildren") : t("explorer.tree.titleNewFile"));
+    }
+    if (git === "modified") {
+      titleBits.push(
+        isDir ? t("explorer.tree.titleModifiedChildren") : t("explorer.tree.titleModified"),
+      );
+    }
     return (
       <button
         type="button"
@@ -443,7 +455,7 @@ export function FileTreePanel({
         {dirty && !isDir ? (
           <>
             <span aria-hidden="true" className="size-1.5 shrink-0 rounded-full bg-primary" />
-            <span className="sr-only">(belum disimpan)</span>
+            <span className="sr-only">{t("explorer.tree.unsavedMark")}</span>
           </>
         ) : null}
         {!dirty && git === "added" ? (
@@ -476,7 +488,7 @@ export function FileTreePanel({
             }}
           >
             <FilePlus />
-            File baru
+            {t("explorer.tree.newFile")}
           </ContextMenuItem>
           <ContextMenuItem
             disabled={actionBusy || createBusy}
@@ -487,7 +499,7 @@ export function FileTreePanel({
             }}
           >
             <FolderPlus />
-            Folder baru
+            {t("explorer.tree.newFolder")}
           </ContextMenuItem>
           <ContextMenuSeparator />
           <ContextMenuItem
@@ -499,7 +511,7 @@ export function FileTreePanel({
             }}
           >
             <Scissors />
-            Cut
+            {t("explorer.tree.cut")}
           </ContextMenuItem>
           <ContextMenuItem
             disabled={actionBusy}
@@ -510,14 +522,16 @@ export function FileTreePanel({
             }}
           >
             <Copy />
-            Copy
+            {t("explorer.tree.copy")}
           </ContextMenuItem>
           <ContextMenuItem
             disabled={!clipboard || actionBusy}
             onSelect={() => void pasteInto(pasteParent)}
           >
             <ClipboardPaste />
-            Paste{clipboard ? ` (${basenameOf(clipboard.path)})` : ""}
+            {clipboard
+              ? t("explorer.tree.pasteWithName", { name: basenameOf(clipboard.path) })
+              : t("explorer.tree.paste")}
           </ContextMenuItem>
           <ContextMenuSeparator />
           <ContextMenuItem
@@ -526,7 +540,7 @@ export function FileTreePanel({
             onSelect={() => void deleteEntry(entry)}
           >
             <Trash2 />
-            Delete
+            {t("explorer.tree.delete")}
           </ContextMenuItem>
         </ContextMenuContent>
       </ContextMenu>
@@ -556,15 +570,15 @@ export function FileTreePanel({
   return (
     <>
       <div className="flex items-center justify-between pr-2">
-        <PanelHeader title="Explorer" count={rootEntries.length} />
+        <PanelHeader title={t("explorer.tree.title")} count={rootEntries.length} />
         <div className="flex items-center gap-0.5">
           <Button
             variant="ghost"
             size="icon"
             onClick={() => void startCreate("file")}
             disabled={!projectId || !configured || loading || createBusy || actionBusy}
-            aria-label="Buat file baru"
-            title="Buat file baru"
+            aria-label={t("explorer.tree.createFile")}
+            title={t("explorer.tree.createFile")}
           >
             <FilePlus />
           </Button>
@@ -573,8 +587,8 @@ export function FileTreePanel({
             size="icon"
             onClick={() => void startCreate("dir")}
             disabled={!projectId || !configured || loading || createBusy || actionBusy}
-            aria-label="Buat folder baru"
-            title="Buat folder baru"
+            aria-label={t("explorer.tree.createFolder")}
+            title={t("explorer.tree.createFolder")}
           >
             <FolderPlus />
           </Button>
@@ -583,7 +597,7 @@ export function FileTreePanel({
             size="icon"
             onClick={refresh}
             disabled={!projectId || loading}
-            aria-label="Refresh files"
+            aria-label={t("explorer.tree.refresh")}
           >
             <RefreshCw />
           </Button>
@@ -591,13 +605,15 @@ export function FileTreePanel({
       </div>
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-2 pb-2 text-xs">
         {!configured && (
-          <p className="px-2 py-4 text-xs text-muted-foreground">Workspace belum diset.</p>
+          <p className="px-2 py-4 text-xs text-muted-foreground">
+            {t("explorer.tree.workspaceNotSet")}
+          </p>
         )}
         {configured && error && <p className="px-2 py-2 text-xs text-destructive">{error}</p>}
         {configured && loading && (
           <div className="flex items-center gap-2 px-2 py-4 text-xs text-muted-foreground">
             <Spinner />
-            Memuat file…
+            {t("explorer.tree.loading")}
           </div>
         )}
         {renderNodes(rootEntries, 0, "")}
@@ -605,7 +621,7 @@ export function FileTreePanel({
           <ContextMenuTrigger asChild>
             <div className="min-h-16 flex-1 px-2 py-3 text-xs text-muted-foreground">
               {configured && !loading && rootEntries.length === 0 && !creating
-                ? "Folder kosong. Klik kanan untuk menambah file/folder."
+                ? t("explorer.tree.empty")
                 : null}
             </div>
           </ContextMenuTrigger>
@@ -615,27 +631,30 @@ export function FileTreePanel({
               onSelect={() => void startCreate("file", "")}
             >
               <FilePlus />
-              File baru
+              {t("explorer.tree.newFile")}
             </ContextMenuItem>
             <ContextMenuItem
               disabled={!configured || actionBusy || createBusy}
               onSelect={() => void startCreate("dir", "")}
             >
               <FolderPlus />
-              Folder baru
+              {t("explorer.tree.newFolder")}
             </ContextMenuItem>
             <ContextMenuItem
               disabled={!clipboard || !configured || actionBusy}
               onSelect={() => void pasteInto("")}
             >
               <ClipboardPaste />
-              Paste di root
+              {t("explorer.tree.pasteIntoRoot")}
             </ContextMenuItem>
           </ContextMenuContent>
         </ContextMenu>
         {clipboard ? (
           <p className="px-2 pt-1 text-[10px] text-muted-foreground">
-            Clipboard: {clipboard.mode} {basenameOf(clipboard.path)}
+            {t("explorer.tree.clipboardInfo", {
+              mode: clipboard.mode,
+              name: basenameOf(clipboard.path),
+            })}
           </p>
         ) : null}
       </div>

@@ -2,6 +2,7 @@ import * as React from "react";
 import { createRoot } from "react-dom/client";
 import App from "@/App";
 import { ThemeProvider } from "@/components/ThemeProvider";
+import { I18nProvider } from "@/lib/i18n";
 import { applyLayoutMode, installLayoutShortcut, readLayoutMode } from "@/lib/layout-mode";
 import { installZoomShortcuts } from "@/lib/zoom";
 import "@/index.css";
@@ -17,7 +18,9 @@ if (!container) throw new Error("root element not found");
 createRoot(container).render(
   <React.StrictMode>
     <ThemeProvider>
-      <App />
+      <I18nProvider>
+        <App />
+      </I18nProvider>
     </ThemeProvider>
   </React.StrictMode>,
 );

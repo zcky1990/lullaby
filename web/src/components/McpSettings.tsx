@@ -24,6 +24,7 @@ import { Separator } from "@/components/ui/separator";
 import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
 import { useTheme } from "@/components/ThemeProvider";
+import { useI18n, type Translator } from "@/lib/i18n";
 import { api, type McpServer, type McpTool } from "@/lib/api";
 
 const MonacoViewer = lazy(() => import("@/components/MonacoViewer"));
@@ -73,15 +74,17 @@ function pairObject(value: unknown): Record<string, string> | undefined {
   return Object.keys(result).length ? result : undefined;
 }
 
-function serverFromJson(name: string, raw: unknown): McpServer {
+function serverFromJson(name: string, raw: unknown, t: Translator): McpServer {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
-    throw new Error(`"${name}": harus berupa objek.`);
+    throw new Error(t("settings.mcp.jsonErrorObject", { name }));
   }
   const cfg = raw as CursorServerJson;
   const command = typeof cfg.command === "string" ? cfg.command.trim() : "";
   const url = typeof cfg.url === "string" ? cfg.url.trim() : "";
-  if (!command && !url) throw new Error(`"${name}": butuh "command" atau "url".`);
-  if (url && !/^https?:\/\//i.test(url)) throw new Error(`"${name}": url harus http(s).`);
+  if (!command && !url) throw new Error(t("settings.mcp.jsonErrorCommandOrUrl", { name }));
+  if (url && !/^https?:\/\//i.test(url)) {
+    throw new Error(t("settings.mcp.jsonErrorUrlScheme", { name }));
+  }
   const args = Array.isArray(cfg.args) ? cfg.args.map(String) : [];
   return {
     id: "",
@@ -96,20 +99,20 @@ function serverFromJson(name: string, raw: unknown): McpServer {
   };
 }
 
-function parseMcpJson(text: string): Array<{ name: string; server: McpServer }> {
+function parseMcpJson(text: string, t: Translator): Array<{ name: string; server: McpServer }> {
   let parsed: unknown;
   try {
     parsed = JSON.parse(text);
   } catch (error) {
-    throw new Error(`JSON tidak valid: ${(error as Error).message}`);
+    throw new Error(t("settings.mcp.jsonErrorInvalid", { message: (error as Error).message }));
   }
   const servers = (parsed as { mcpServers?: unknown } | null)?.mcpServers;
   if (!servers || typeof servers !== "object" || Array.isArray(servers)) {
-    throw new Error('JSON harus berisi objek "mcpServers".');
+    throw new Error(t("settings.mcp.jsonErrorMissingServers"));
   }
   const entries = Object.entries(servers as Record<string, unknown>);
-  if (!entries.length) throw new Error("Minimal satu server di mcpServers.");
-  return entries.map(([name, raw]) => ({ name, server: serverFromJson(name, raw) }));
+  if (!entries.length) throw new Error(t("settings.mcp.jsonErrorEmptyServers"));
+  return entries.map(([name, raw]) => ({ name, server: serverFromJson(name, raw, t) }));
 }
 
 function serversToJson(servers: McpServer[]): string {
@@ -145,6 +148,7 @@ export function McpSettings() {
   const [jsonError, setJsonError] = useState<string | undefined>();
   const [jsonSaving, setJsonSaving] = useState(false);
   const { resolvedEditorTheme } = useTheme();
+  const { t } = useI18n();
 
   useEffect(() => {
     api
@@ -260,7 +264,7 @@ export function McpSettings() {
     setJsonSaving(true);
     setJsonError(undefined);
     try {
-      const entries = parseMcpJson(jsonText);
+      const entries = parseMcpJson(jsonText, t);
       let next: McpServer[];
       if (jsonMode === "edit") {
         const byName = new Map(servers.map((item) => [item.name, item]));
@@ -292,24 +296,26 @@ export function McpSettings() {
       <div className="flex flex-col gap-2">
         <h2 className="text-xs font-medium tracking-wider text-muted-foreground uppercase">MCP</h2>
         <p className="text-xs text-muted-foreground">
-          Server MCP global (Model Context Protocol). Tool yang aktif di-inject ke chat Plan/Build
-          dan workflow agent sebagai <span className="font-mono">mcp_&lt;server&gt;_&lt;tool&gt;</span>
-          (kecuali provider Cursor SDK). Nonaktifkan per-tool di bawah setelah Refresh tools.
+          {t("settings.mcp.descriptionPrefix")}{" "}
+          <span className="font-mono">mcp_&lt;server&gt;_&lt;tool&gt;</span>{" "}
+          {t("settings.mcp.descriptionSuffix")}
         </p>
         <Separator />
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-xs text-muted-foreground">{servers.length} server</span>
           <span className="text-xs text-muted-foreground">
-            {enabled ? "MCP aktif" : "MCP nonaktif"}
+            {t("settings.mcp.serverCount", { count: servers.length })}
+          </span>
+          <span className="text-xs text-muted-foreground">
+            {enabled ? t("settings.mcp.globalOn") : t("settings.mcp.globalOff")}
           </span>
           <Switch
             checked={enabled}
             onCheckedChange={() => toggleGlobal()}
             disabled={busy}
-            aria-label="Aktifkan MCP"
+            aria-label={t("settings.mcp.toggleGlobalAria")}
           />
         </div>
         <div className="flex items-center gap-2">
@@ -320,11 +326,11 @@ export function McpSettings() {
             onClick={() => openJson("edit")}
           >
             <Braces />
-            Edit JSON
+            {t("settings.mcp.editJson")}
           </Button>
           <Button size="sm" data-icon="inline-start" onClick={() => openJson("add")}>
             <Plus />
-            Tambah server
+            {t("settings.mcp.addServer")}
           </Button>
         </div>
       </div>
@@ -334,11 +340,11 @@ export function McpSettings() {
       {loading ? (
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <Spinner />
-          Memuat konfigurasi MCP…
+          {t("settings.mcp.loading")}
         </div>
       ) : servers.length === 0 ? (
         <p className="rounded-md border border-dashed p-4 text-xs text-muted-foreground">
-          Belum ada server MCP. Tambahkan server stdio (command) atau http (url).
+          {t("settings.mcp.empty")}
         </p>
       ) : (
         <div className="flex flex-col gap-2">
@@ -356,18 +362,21 @@ export function McpSettings() {
                     disabled={toolState[server.id]?.loading}
                   >
                     {toolState[server.id]?.loading ? <Spinner /> : <RefreshCw />}
-                    Tools
+                    {t("settings.mcp.tools")}
                   </Button>
                   <Switch
                     checked={server.enabled}
                     onCheckedChange={() => toggle(server)}
                     disabled={busy}
-                    aria-label={`${server.enabled ? "Nonaktifkan" : "Aktifkan"} ${server.name}`}
+                    aria-label={t(
+                      server.enabled ? "settings.mcp.disableServer" : "settings.mcp.enableServer",
+                      { name: server.name },
+                    )}
                   />
                   <Button
                     size="icon"
                     variant="ghost"
-                    aria-label={`Edit ${server.name}`}
+                    aria-label={t("settings.mcp.editServer", { name: server.name })}
                     onClick={() => {
                       setEditing(server);
                       setDialogOpen(true);
@@ -378,7 +387,7 @@ export function McpSettings() {
                   <Button
                     size="icon"
                     variant="ghost"
-                    aria-label={`Hapus ${server.name}`}
+                    aria-label={t("settings.mcp.deleteServer", { name: server.name })}
                     onClick={() => remove(server)}
                     disabled={busy}
                   >
@@ -397,7 +406,7 @@ export function McpSettings() {
               {toolsByServer[server.id] ? (
                 <div className="flex max-h-64 flex-col gap-2 overflow-y-auto border-t pt-2">
                   {toolsByServer[server.id].length === 0 ? (
-                    <p className="text-xs text-muted-foreground">Server tidak menyediakan tool.</p>
+                    <p className="text-xs text-muted-foreground">{t("settings.mcp.noTools")}</p>
                   ) : (
                     toolsByServer[server.id].map((tool) => {
                       const key = `${server.id}:${tool.name}`;
@@ -414,7 +423,10 @@ export function McpSettings() {
                             checked={active}
                             disabled={busy || !enabled || !server.enabled}
                             onCheckedChange={() => toggleTool(server, tool)}
-                            aria-label={`${active ? "Nonaktifkan" : "Aktifkan"} ${tool.name}`}
+                            aria-label={t(
+                              active ? "settings.mcp.disableTool" : "settings.mcp.enableTool",
+                              { name: tool.name },
+                            )}
                           />
                         </div>
                       );
@@ -438,12 +450,14 @@ export function McpSettings() {
         <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>
-              {jsonMode === "add" ? "Tambah server MCP (JSON)" : "Edit konfigurasi MCP (JSON)"}
+              {jsonMode === "add" ? t("settings.mcp.jsonAddTitle") : t("settings.mcp.jsonEditTitle")}
             </DialogTitle>
             <DialogDescription>
-              Format sama seperti <span className="font-mono">mcp.json</span> di Cursor:
-              <span className="font-mono"> mcpServers</span> berisi command/args/env atau
-              url/headers.
+              {t("settings.mcp.jsonFormatPrefix")}{" "}
+              <span className="font-mono">mcp.json</span>{" "}
+              {t("settings.mcp.jsonFormatCursor")}{" "}
+              <span className="font-mono">mcpServers</span>{" "}
+              {t("settings.mcp.jsonFormatSuffix")}
             </DialogDescription>
           </DialogHeader>
           <div className="h-80 overflow-hidden rounded-md border">
@@ -467,11 +481,11 @@ export function McpSettings() {
           {jsonError ? <p className="text-xs text-destructive">{jsonError}</p> : null}
           <DialogFooter>
             <Button variant="outline" onClick={() => setJsonOpen(false)} disabled={jsonSaving}>
-              Batal
+              {t("common.cancel")}
             </Button>
             <Button onClick={saveJson} disabled={jsonSaving} data-icon="inline-start">
               {jsonSaving ? <Spinner /> : <Braces />}
-              Simpan
+              {t("common.save")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -500,6 +514,7 @@ function McpServerDialog({
   const [env, setEnv] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | undefined>();
+  const { t } = useI18n();
 
   useEffect(() => {
     if (!open) return;
@@ -516,15 +531,15 @@ function McpServerDialog({
   const submit = async () => {
     const clean = name.trim();
     if (!clean) {
-      setError("Nama server wajib diisi.");
+      setError(t("settings.mcp.errorNameRequired"));
       return;
     }
     if (transport === "stdio" && !command.trim()) {
-      setError("Command wajib untuk transport stdio.");
+      setError(t("settings.mcp.errorCommandRequired"));
       return;
     }
     if (transport === "http" && !url.trim()) {
-      setError("URL wajib untuk transport http.");
+      setError(t("settings.mcp.errorUrlRequired"));
       return;
     }
     const payload: McpServer = {
@@ -555,36 +570,36 @@ function McpServerDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[88vh] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>{server ? "Edit server MCP" : "Tambah server MCP"}</DialogTitle>
-          <DialogDescription>
-            Konfigurasi disimpan lokal. Header/env dapat berisi token.
-          </DialogDescription>
+          <DialogTitle>
+            {server ? t("settings.mcp.dialogEditTitle") : t("settings.mcp.dialogAddTitle")}
+          </DialogTitle>
+          <DialogDescription>{t("settings.mcp.dialogDescription")}</DialogDescription>
         </DialogHeader>
 
         <div className="flex flex-col gap-3">
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="mcp-name">Nama</Label>
+            <Label htmlFor="mcp-name">{t("settings.mcp.name")}</Label>
             <Input
               id="mcp-name"
               value={name}
               onChange={(event) => setName(event.target.value)}
-              placeholder="mis. filesystem"
+              placeholder={t("settings.mcp.namePlaceholder")}
             />
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <Label>Transport</Label>
+            <Label>{t("settings.mcp.transport")}</Label>
             <Select
               value={transport}
               onValueChange={(value) => setTransport(value as "stdio" | "http")}
             >
-              <SelectTrigger size="sm" className="w-full" aria-label="Transport MCP">
+              <SelectTrigger size="sm" className="w-full" aria-label={t("settings.mcp.transportAria")}>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
                 <SelectGroup>
-                  <SelectItem value="stdio">stdio (command)</SelectItem>
-                  <SelectItem value="http">http (url)</SelectItem>
+                  <SelectItem value="stdio">{t("settings.mcp.transportStdio")}</SelectItem>
+                  <SelectItem value="http">{t("settings.mcp.transportHttp")}</SelectItem>
                 </SelectGroup>
               </SelectContent>
             </Select>
@@ -593,7 +608,7 @@ function McpServerDialog({
           {transport === "stdio" ? (
             <>
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="mcp-command">Command</Label>
+                <Label htmlFor="mcp-command">{t("settings.mcp.command")}</Label>
                 <Input
                   id="mcp-command"
                   value={command}
@@ -602,7 +617,7 @@ function McpServerDialog({
                 />
               </div>
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="mcp-args">Args (satu per baris)</Label>
+                <Label htmlFor="mcp-args">{t("settings.mcp.args")}</Label>
                 <textarea
                   id="mcp-args"
                   value={args}
@@ -613,7 +628,7 @@ function McpServerDialog({
                 />
               </div>
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="mcp-env">Env (KEY=VALUE per baris)</Label>
+                <Label htmlFor="mcp-env">{t("settings.mcp.env")}</Label>
                 <textarea
                   id="mcp-env"
                   value={env}
@@ -627,7 +642,7 @@ function McpServerDialog({
           ) : (
             <>
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="mcp-url">URL</Label>
+                <Label htmlFor="mcp-url">{t("settings.mcp.url")}</Label>
                 <Input
                   id="mcp-url"
                   value={url}
@@ -636,7 +651,7 @@ function McpServerDialog({
                 />
               </div>
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="mcp-headers">Headers (KEY=VALUE per baris)</Label>
+                <Label htmlFor="mcp-headers">{t("settings.mcp.headers")}</Label>
                 <textarea
                   id="mcp-headers"
                   value={headers}
@@ -654,11 +669,11 @@ function McpServerDialog({
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
-            Batal
+            {t("common.cancel")}
           </Button>
           <Button onClick={submit} disabled={saving} data-icon="inline-start">
             {saving ? <Spinner /> : <Plus />}
-            Simpan
+            {t("common.save")}
           </Button>
         </DialogFooter>
       </DialogContent>

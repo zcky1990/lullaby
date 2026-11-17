@@ -326,6 +326,7 @@ export const UiPreferencesInput = z
     chatFontSize: z.number().int().min(10).max(32).optional(),
     iconSize: z.enum(["sm", "md", "lg"]).optional(),
     iconWeight: z.enum(["light", "regular", "bold"]).optional(),
+    language: z.enum(["id", "en"]).optional(),
   })
   .strict();
 export type UiPreferencesInput = z.infer<typeof UiPreferencesInput>;

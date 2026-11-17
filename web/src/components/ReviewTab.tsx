@@ -8,6 +8,7 @@ import {
   fetchChatReview,
   type ReviewFileChange,
 } from "@/lib/chat-review-api";
+import { useI18n } from "@/lib/i18n";
 import { dispatchChatResponse } from "@/lib/review-events";
 import { cn } from "@/lib/utils";
 
@@ -23,6 +24,7 @@ export function ReviewTab({
   runId: string;
   changes?: PendingFileChange[];
 }) {
+  const { t } = useI18n();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | undefined>();
   const [review, setReview] = useState<ChatReviewRun | null | undefined>(undefined);
@@ -77,7 +79,7 @@ export function ReviewTab({
     return (
       <div className="flex h-full items-center justify-center gap-2 p-8 text-xs text-muted-foreground">
         <Spinner />
-        Memuat state review dari server…
+        {t("review.tab.loading")}
       </div>
     );
   }
@@ -85,10 +87,10 @@ export function ReviewTab({
   if (items.length === 0) {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-2 p-8 text-xs text-muted-foreground">
-        <p>Tidak ada perubahan yang menunggu review.</p>
+        <p>{t("review.tab.empty")}</p>
         <Button size="sm" variant="ghost" className="h-7 gap-1 text-xs" onClick={() => void load()}>
           <RefreshCw className="size-3" />
-          Muat ulang
+          {t("review.tab.reload")}
         </Button>
       </div>
     );
@@ -99,13 +101,14 @@ export function ReviewTab({
       <div className="flex flex-wrap items-center justify-between gap-2 border-b px-4 py-2">
         <div className="flex min-w-0 flex-col">
           <h1 className="text-xs font-semibold">
-            {applied ? "Review perubahan AI (sudah diterapkan)" : "Review perubahan AI"}
+            {applied ? t("review.tab.titleApplied") : t("review.tab.title")}
           </h1>
           <p className="text-xs text-muted-foreground">
-            {items.length} file · {applied
-              ? "Keep untuk mempertahankan, Revert untuk mengembalikan file ke kondisi sebelum chat"
-              : "accept/reject per hunk"}
-            {review ? " · data dari server" : ""}
+            {t("review.tab.meta", {
+              count: items.length,
+              mode: applied ? t("review.tab.keepHint") : t("review.tab.hunkHint"),
+            })}
+            {review ? t("review.tab.fromServer") : ""}
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-2">
@@ -116,16 +119,16 @@ export function ReviewTab({
             className="h-7 gap-1 px-2 text-xs"
             onClick={() => void load()}
             disabled={busy}
-            title="Muat ulang state review dari server"
+            title={t("review.tab.reloadTitle")}
           >
             <RefreshCw className="size-3" />
-            Muat ulang
+            {t("review.tab.reload")}
           </Button>
           <Button size="sm" onClick={() => decideAll(true)} disabled={busy}>
-            {applied ? "Keep all" : "Accept all"}
+            {applied ? t("review.tab.keepAll") : t("review.tab.acceptAll")}
           </Button>
           <Button size="sm" variant="outline" onClick={() => decideAll(false)} disabled={busy}>
-            Revert all
+            {t("review.tab.revertAll")}
           </Button>
         </div>
       </div>
@@ -134,9 +137,10 @@ export function ReviewTab({
         <div className="flex items-start gap-2 border-b bg-amber-500/10 px-4 py-2 text-xs text-amber-700 dark:text-amber-300">
           <CircleAlert className="mt-0.5 size-3.5 shrink-0" />
           <p>
-            <span className="font-medium">Run terputus.</span>{" "}
-            Aplikasi berhenti saat chat masih berjalan (status <code>interrupted</code>), tetapi
-            perubahan berikut sudah tertulis di disk — Keep/Revert tetap bisa dilakukan.
+            <span className="font-medium">{t("review.tab.interrupted.title")}</span>{" "}
+            {t("review.tab.interrupted.before")}
+            <code>interrupted</code>
+            {t("review.tab.interrupted.after")}
           </p>
         </div>
       ) : null}
@@ -151,8 +155,11 @@ export function ReviewTab({
                 <FileCode2 className="size-4 shrink-0 text-muted-foreground" />
                 <span className="min-w-0 flex-1 truncate font-mono text-xs">{change.path}</span>
                 <span className="shrink-0 text-[11px] text-muted-foreground">
-                  {change.action === "create" ? "baru" : "diubah"} · +{change.added} −
-                  {change.removed}
+                  {`${
+                    change.action === "create"
+                      ? t("review.tab.action.create")
+                      : t("review.tab.action.update")
+                  } · +${change.added} −${change.removed}`}
                 </span>
               </div>
 
@@ -160,9 +167,13 @@ export function ReviewTab({
                 <div key={index} className="border-t first:border-t-0">
                   <div className="flex items-center justify-between gap-2 bg-background px-3 py-1.5">
                     <span className="text-[11px] text-muted-foreground">
-                      Hunk {index + 1}
+                      {t("review.tab.hunk", { index: index + 1 })}
                       {hunk.decision !== "pending"
-                        ? ` · ${hunk.decision === "accepted" ? "accepted" : "rejected"}`
+                        ? t("review.tab.decision", {
+                          decision: hunk.decision === "accepted"
+                            ? t("review.tab.decision.accepted")
+                            : t("review.tab.decision.rejected"),
+                        })
                         : ""}
                     </span>
                     <div className="flex items-center gap-1">
@@ -173,7 +184,7 @@ export function ReviewTab({
                         disabled={busy || hunk.decision === "accepted"}
                         onClick={() => decide(change.callId, index, true)}
                       >
-                        {applied ? "Keep" : "Accept"}
+                        {applied ? t("review.tab.keep") : t("review.tab.accept")}
                       </Button>
                       <Button
                         size="sm"
@@ -182,7 +193,7 @@ export function ReviewTab({
                         disabled={busy || hunk.decision === "rejected"}
                         onClick={() => decide(change.callId, index, false)}
                       >
-                        {applied ? "Revert" : "Reject"}
+                        {applied ? t("review.tab.revert") : t("review.tab.reject")}
                       </Button>
                     </div>
                   </div>

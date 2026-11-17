@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { PanelHeader } from "@/components/PanelHeader";
 import { Spinner } from "@/components/ui/spinner";
 import type { GitBranch, GitRemoteBranch, GitStash, GitStatus } from "@/lib/api";
+import { useI18n } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 interface Props {
@@ -37,6 +38,7 @@ export function GitPanel({
   onCheckout,
   onApplyStash,
 }: Props) {
+  const { t } = useI18n();
   const [remotesOpen, setRemotesOpen] = useState(true);
   const [stashesOpen, setStashesOpen] = useState(true);
   const [openRemotes, setOpenRemotes] = useState<Record<string, boolean>>({});
@@ -67,8 +69,8 @@ export function GitPanel({
           className="mr-2 size-7 shrink-0"
           onClick={onRefresh}
           disabled={loading}
-          aria-label="Refresh git"
-          title="Refresh"
+          aria-label={t("git.panel.refresh")}
+          title={t("git.panel.refreshTitle")}
         >
           {loading ? <Spinner /> : <RefreshCw />}
         </Button>
@@ -78,15 +80,14 @@ export function GitPanel({
         <div className="flex flex-col gap-1 px-3 pb-3">
           <p className="text-xs text-destructive">{error}</p>
           <p className="text-xs text-muted-foreground">
-            Pastikan git terpasang dan workspace menunjuk ke folder di dalam repository (bukan
-            folder induk).
+            {t("git.panel.errorHint")}
           </p>
         </div>
       ) : (
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
           <div className="shrink-0 border-b px-3 py-2">
             <span className="text-[10px] font-semibold tracking-wider text-muted-foreground uppercase">
-              Workspace
+              {t("git.panel.workspace")}
             </span>
             <div className="mt-1.5 flex min-w-0 items-center gap-2">
               <GitBranchIcon className="size-3.5 shrink-0 text-primary" />
@@ -105,20 +106,25 @@ export function GitPanel({
               ) : null}
             </div>
             {status?.clean ? (
-              <p className="mt-1 text-xs text-muted-foreground">Working tree clean</p>
+              <p className="mt-1 text-xs text-muted-foreground">{t("git.panel.clean")}</p>
             ) : status ? (
               <p className="mt-1 text-xs text-muted-foreground">
-                {status.staged.length} staged · {status.unstaged.length} unstaged ·{" "}
-                {status.untracked.length} untracked
+                {t("git.panel.changeCounts", {
+                  staged: status.staged.length,
+                  unstaged: status.unstaged.length,
+                  untracked: status.untracked.length,
+                })}
               </p>
             ) : null}
           </div>
 
           <div className="min-h-0 flex-1 overflow-y-auto pb-2">
-            <SectionLabel>Branches</SectionLabel>
+            <SectionLabel>{t("git.panel.branches")}</SectionLabel>
             <div className="px-1">
               {branches.length === 0 ? (
-                <p className="px-2 py-1 text-xs text-muted-foreground">Belum ada branch lokal.</p>
+                <p className="px-2 py-1 text-xs text-muted-foreground">
+                  {t("git.panel.noBranches")}
+                </p>
               ) : (
                 branches.map((branch) => (
                   <button
@@ -126,13 +132,17 @@ export function GitPanel({
                     type="button"
                     onClick={() => {
                       if (branch.current) return;
-                      if (confirm(`Checkout branch "${branch.name}"?`)) onCheckout(branch.name);
+                      if (confirm(t("git.panel.confirmCheckout", { name: branch.name }))) {
+                        onCheckout(branch.name);
+                      }
                     }}
                     className={cn(
                       "flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-xs transition-colors hover:bg-accent",
                       branch.current && "bg-accent",
                     )}
-                    title={branch.current ? "Branch aktif" : `Checkout ${branch.name}`}
+                    title={branch.current
+                      ? t("git.panel.currentBranch")
+                      : t("git.panel.checkoutTitle", { name: branch.name })}
                   >
                     <GitBranchIcon
                       className={cn(
@@ -155,14 +165,14 @@ export function GitPanel({
               open={remotesOpen}
               onToggle={() => setRemotesOpen((value) => !value)}
               icon={<Cloud className="size-3.5" />}
-              label="Remotes"
+              label={t("git.panel.remotes")}
               count={remotes.length}
             />
             {remotesOpen ? (
               <div className="px-1 pb-1">
                 {remoteGroups.length === 0 ? (
                   <p className="px-2 py-1 text-xs text-muted-foreground">
-                    Belum ada remote branch (fetch dulu).
+                    {t("git.panel.noRemotes")}
                   </p>
                 ) : (
                   remoteGroups.map(([remoteName, items]) => (
@@ -196,14 +206,17 @@ export function GitPanel({
                             onClick={() => {
                               if (
                                 confirm(
-                                  `Checkout remote "${branch.name}" sebagai branch lokal "${branch.shortName}"?`,
+                                  t("git.panel.confirmCheckoutRemote", {
+                                    name: branch.name,
+                                    short: branch.shortName,
+                                  }),
                                 )
                               ) {
                                 onCheckout(branch.name);
                               }
                             }}
                             className="flex w-full items-center gap-2 rounded-md py-1 pr-2 pl-7 text-left text-xs transition-colors hover:bg-accent"
-                            title={`Checkout ${branch.name}`}
+                            title={t("git.panel.checkoutTitle", { name: branch.name })}
                           >
                             <GitBranchIcon className="size-3.5 shrink-0 text-muted-foreground" />
                             <span className="truncate font-mono text-xs">{branch.shortName}</span>
@@ -220,25 +233,34 @@ export function GitPanel({
               open={stashesOpen}
               onToggle={() => setStashesOpen((value) => !value)}
               icon={<Archive className="size-3.5" />}
-              label="Stashes"
+              label={t("git.panel.stashes")}
               count={stashes.length}
             />
             {stashesOpen ? (
               <div className="px-1 pb-1">
                 {stashes.length === 0 ? (
-                  <p className="px-2 py-1 text-xs text-muted-foreground">Tidak ada stash.</p>
+                  <p className="px-2 py-1 text-xs text-muted-foreground">
+                    {t("git.panel.noStashes")}
+                  </p>
                 ) : (
                   stashes.map((stash) => (
                     <button
                       key={stash.label}
                       type="button"
                       onClick={() => {
-                        if (confirm(`Apply ${stash.label}?\n\n${stash.message}`)) {
+                        if (
+                          confirm(
+                            t("git.panel.confirmApplyStash", {
+                              label: stash.label,
+                              message: stash.message,
+                            }),
+                          )
+                        ) {
                           onApplyStash(stash.index, false);
                         }
                       }}
                       className="flex w-full flex-col gap-0.5 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-accent"
-                      title={`Apply ${stash.label}`}
+                      title={t("git.panel.applyStashTitle", { label: stash.label })}
                     >
                       <div className="flex items-center gap-2">
                         <Archive className="size-3.5 shrink-0 text-muted-foreground" />

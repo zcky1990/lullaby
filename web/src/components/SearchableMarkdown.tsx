@@ -3,6 +3,7 @@ import { ChevronDown, ChevronUp, Search, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import MarkdownView from "@/components/MarkdownView";
 import { registerFinder } from "@/lib/find";
+import { useI18n } from "@/lib/i18n";
 import { registerSelectionProvider } from "@/lib/selection-to-chat";
 import { cn } from "@/lib/utils";
 
@@ -80,6 +81,7 @@ export default function SearchableMarkdown({
   fontFamily,
   className,
 }: Props) {
+  const { t } = useI18n();
   const rootRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const marksRef = useRef<HTMLElement[]>([]);
@@ -219,7 +221,7 @@ export default function SearchableMarkdown({
                   );
                 }
               }}
-              placeholder="Cari di markdown…"
+              placeholder={t("explorer.searchableMarkdown.placeholder")}
               className="h-7 min-w-0 flex-1 bg-transparent px-1 text-xs outline-none"
             />
             <span className="shrink-0 px-1 text-[10px] text-muted-foreground tabular-nums">
@@ -231,8 +233,8 @@ export default function SearchableMarkdown({
               className="size-7"
               onClick={() => jumpTo(currentRef.current - 1, marksRef.current)}
               disabled={total === 0}
-              aria-label="Previous match"
-              title="Previous"
+              aria-label={t("explorer.searchableMarkdown.previousMatch")}
+              title={t("explorer.searchableMarkdown.previous")}
             >
               <ChevronUp />
             </Button>
@@ -242,8 +244,8 @@ export default function SearchableMarkdown({
               className="size-7"
               onClick={() => jumpTo(currentRef.current + 1, marksRef.current)}
               disabled={total === 0}
-              aria-label="Next match"
-              title="Next"
+              aria-label={t("explorer.searchableMarkdown.nextMatch")}
+              title={t("explorer.searchableMarkdown.next")}
             >
               <ChevronDown />
             </Button>
@@ -252,8 +254,8 @@ export default function SearchableMarkdown({
               variant="ghost"
               className="size-7"
               onClick={closeFind}
-              aria-label="Close find"
-              title="Close"
+              aria-label={t("explorer.searchableMarkdown.closeAria")}
+              title={t("explorer.searchableMarkdown.close")}
             >
               <X />
             </Button>

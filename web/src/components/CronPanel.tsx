@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { PanelHeader } from "@/components/PanelHeader";
 import { Spinner } from "@/components/ui/spinner";
 import type { WorkflowSummary } from "@/lib/api";
+import { useI18n } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 interface Props {
@@ -32,6 +33,7 @@ export function CronPanel({
   onOpenDocs,
   onSelect,
 }: Props) {
+  const { t } = useI18n();
   const scheduled = workflows.filter((workflow) =>
     Boolean(
       workflow.schedule?.cron ||
@@ -41,7 +43,7 @@ export function CronPanel({
 
   return (
     <>
-      <PanelHeader title="Cron" count={scheduled.length} />
+      <PanelHeader title={t("workflow.cronPanel.title")} count={scheduled.length} />
       <div className="flex flex-col gap-2 px-3 pb-3">
         <div className="flex items-center gap-2">
           <Button
@@ -50,10 +52,10 @@ export function CronPanel({
             onClick={onOpenDocs}
             data-icon="inline-start"
             className="flex-1"
-            title="Dokumentasi cron & event"
+            title={t("workflow.cronPanel.docsTitle")}
           >
             <BookOpen />
-            Dokumentasi
+            {t("workflow.cronPanel.docs")}
           </Button>
           <Button
             size="icon"
@@ -61,14 +63,14 @@ export function CronPanel({
             className="size-8 shrink-0"
             onClick={onRefresh}
             disabled={loading}
-            aria-label="Refresh jadwal"
-            title="Refresh"
+            aria-label={t("workflow.cronPanel.refresh")}
+            title={t("workflow.cronPanel.refreshTitle")}
           >
             {loading ? <Spinner /> : <RefreshCw />}
           </Button>
         </div>
         <p className="text-[10px] text-muted-foreground">
-          Workflow dengan `schedule` atau `on` di YAML.
+          {t("workflow.cronPanel.hint")}
         </p>
       </div>
 
@@ -78,7 +80,7 @@ export function CronPanel({
         {scheduled.length === 0 && !loading
           ? (
             <p className="px-2 py-2 text-xs text-muted-foreground">
-              Belum ada jadwal. Tambahkan `schedule` / `on` di YAML workflow, lalu Save.
+              {t("workflow.cronPanel.empty")}
             </p>
           )
           : null}
@@ -105,18 +107,24 @@ export function CronPanel({
                   variant={schedule.enabled ? "secondary" : "outline"}
                   className="h-5 px-1.5 text-[10px]"
                 >
-                  {schedule.enabled ? "on" : "off"}
+                  {schedule.enabled
+                    ? t("workflow.cronPanel.on")
+                    : t("workflow.cronPanel.off")}
                 </Badge>
               </div>
               <span className="pl-5 font-mono text-[10px] text-muted-foreground">
                 {schedule.cron
                   ? schedule.cron
-                  : `${schedule.events.length} event`}
+                  : t("workflow.cronPanel.eventCount", {
+                    count: schedule.events.length,
+                  })}
               </span>
               {schedule.cron && schedule.enabled
                 ? (
                   <span className="pl-5 text-[10px] text-muted-foreground">
-                    next {formatNext(schedule.nextRunAt)}
+                    {t("workflow.cronPanel.next", {
+                      value: formatNext(schedule.nextRunAt),
+                    })}
                   </span>
                 )
                 : null}

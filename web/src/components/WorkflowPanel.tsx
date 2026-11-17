@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { PanelHeader } from "@/components/PanelHeader";
 import { Spinner } from "@/components/ui/spinner";
 import type { WorkflowRunSummary, WorkflowSummary } from "@/lib/api";
+import { useI18n } from "@/lib/i18n";
 import { runBadgeVariant } from "@/lib/workflow-status";
 import { cn } from "@/lib/utils";
 
@@ -34,9 +35,10 @@ export function WorkflowPanel({
   onSelect,
   onOpenRun,
 }: Props) {
+  const { t } = useI18n();
   return (
     <>
-      <PanelHeader title="Workflows" count={workflows.length} />
+      <PanelHeader title={t("workflow.panel.title")} count={workflows.length} />
       <div className="flex flex-col gap-2 px-3 pb-3">
         <div className="flex items-center gap-2">
           <Button
@@ -46,14 +48,14 @@ export function WorkflowPanel({
             className="flex-1"
           >
             <Plus />
-            Workflow baru
+            {t("workflow.panel.newWorkflow")}
           </Button>
           <Button
             size="sm"
             variant="outline"
             onClick={onOpenDocs}
             data-icon="inline-start"
-            title="Dokumentasi workflow"
+            title={t("workflow.panel.docsTitle")}
           >
             <BookOpen />
           </Button>
@@ -63,8 +65,8 @@ export function WorkflowPanel({
             className="size-8 shrink-0"
             onClick={onRefresh}
             disabled={loading}
-            aria-label="Refresh workflows"
-            title="Refresh"
+            aria-label={t("workflow.panel.refresh")}
+            title={t("workflow.panel.refreshTitle")}
           >
             {loading ? <Spinner /> : <RefreshCw />}
           </Button>
@@ -75,7 +77,12 @@ export function WorkflowPanel({
               className="truncate text-[10px] text-muted-foreground"
               title={root}
             >
-              {source === "workspace" ? "workspace" : "app data"}: {root}
+              {t("workflow.panel.sourceInfo", {
+                source: source === "workspace"
+                  ? t("workflow.panel.sourceWorkspace")
+                  : t("workflow.panel.sourceApp"),
+                root,
+              })}
             </p>
           )
           : null}
@@ -90,8 +97,7 @@ export function WorkflowPanel({
           {workflows.length === 0 && !loading
             ? (
               <p className="px-2 py-2 text-xs text-muted-foreground">
-                Belum ada workflow. Klik “Workflow baru” atau buat file `.yaml`
-                di folder di atas.
+                {t("workflow.panel.empty")}
               </p>
             )
             : null}
@@ -122,9 +128,10 @@ export function WorkflowPanel({
                   : null}
               </div>
               <span className="text-[10px] text-muted-foreground">
-                {workflow.slug} · {workflow.stepCount} step
+                {workflow.slug} ·{" "}
+                {t("workflow.panel.stepCount", { count: workflow.stepCount })}
                 {workflow.schedule?.cron
-                  ? ` · cron${workflow.schedule.enabled ? "" : " (off)"}`
+                  ? ` · cron${workflow.schedule.enabled ? "" : t("workflow.panel.cronOff")}`
                   : ""}
                 {(workflow.schedule?.events.length ?? 0) > 0 ? " · event" : ""}
                 {workflow.error ? " · YAML error" : ""}
@@ -135,12 +142,12 @@ export function WorkflowPanel({
 
         <div className="flex flex-col gap-1">
           <span className="px-2 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-            Recent runs
+            {t("workflow.panel.recentRuns")}
           </span>
           {runs.length === 0
             ? (
               <p className="px-2 text-xs text-muted-foreground">
-                Belum ada run.
+                {t("workflow.panel.noRuns")}
               </p>
             )
             : null}

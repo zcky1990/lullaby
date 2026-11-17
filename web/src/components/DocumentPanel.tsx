@@ -17,6 +17,7 @@ import { PanelHeader } from "@/components/PanelHeader";
 import { Spinner } from "@/components/ui/spinner";
 import { api, type DocSummary, type DocumentSource, type LocalDocSummary } from "@/lib/api";
 import { requestChatOpen, setChatDragData } from "@/lib/chat-drag";
+import { useI18n, type Translator } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 export type PanelDocSource = "local" | DocumentSource;
@@ -72,6 +73,7 @@ export function DocumentPanel({
   onRefreshLocal,
   onCreateLocal,
 }: Props) {
+  const { t } = useI18n();
   const [createOpen, setCreateOpen] = useState(false);
   const [title, setTitle] = useState("");
   const [busy, setBusy] = useState(false);
@@ -103,7 +105,7 @@ export function DocumentPanel({
     <>
       <div className="flex items-center justify-between pr-2">
         <PanelHeader
-          title="Documents"
+          title={t("documents.panel.title")}
           count={source === "local" ? localDocuments.length : documents.length}
         />
         <div className="flex items-center gap-1">
@@ -116,7 +118,7 @@ export function DocumentPanel({
                 setCreateOpen(true);
               }}
               disabled={!projectId || (source === "local" ? !localConfigured : !configured)}
-              aria-label="Tambah dokumen"
+              aria-label={t("documents.panel.add")}
               className="text-xs"
             >
               <Plus />
@@ -127,7 +129,7 @@ export function DocumentPanel({
             size="icon"
             onClick={source === "local" ? onRefreshLocal : onRefresh}
             disabled={!projectId || (source === "local" ? localLoading : loading)}
-            aria-label="Refresh documents"
+            aria-label={t("documents.panel.refresh")}
             className="text-xs"
           >
             <RefreshCw />
@@ -143,7 +145,7 @@ export function DocumentPanel({
             className="h-7"
             onClick={() => onSourceChange("local")}
           >
-            Local
+            {t("documents.panel.local")}
           </Button>
           {remoteTabs.map((tab) => (
             <Button
@@ -162,30 +164,30 @@ export function DocumentPanel({
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Tambah dokumen</DialogTitle>
+            <DialogTitle>{t("documents.panel.add")}</DialogTitle>
             <DialogDescription>
               {source === "local"
-                ? "Dokumen baru disimpan sebagai file .md di document workspace."
+                ? t("documents.panel.createHintLocal")
                 : source === "notion"
                 ? selectedId
-                  ? "Halaman Notion baru sebagai child dari halaman terpilih."
-                  : "Halaman Notion baru di bawah parentPageId integrasi (wajib)."
+                  ? t("documents.panel.createHintNotionChild")
+                  : t("documents.panel.createHintNotionRoot")
                 : source === "confluence"
                 ? selectedId
-                  ? "Halaman Confluence baru di bawah space/halaman terpilih."
-                  : "Halaman Confluence baru di spaceKey integrasi (wajib)."
+                  ? t("documents.panel.createHintConfluenceChild")
+                  : t("documents.panel.createHintConfluenceRoot")
                 : selectedId
-                ? "Dokumen baru akan dibuat sebagai sub-halaman dari dokumen terpilih."
-                : "Dokumen baru akan dibuat di space Docmost project ini."}
+                ? t("documents.panel.createHintDocmostChild")
+                : t("documents.panel.createHintDocmostRoot")}
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-1.5">
-            <Label htmlFor="new-doc-title">Judul</Label>
+            <Label htmlFor="new-doc-title">{t("documents.panel.titleLabel")}</Label>
             <Input
               id="new-doc-title"
               value={title}
               autoFocus
-              placeholder="Judul dokumen…"
+              placeholder={t("documents.panel.titlePlaceholder")}
               onChange={(e) => setTitle(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === "Enter") submit();
@@ -195,11 +197,11 @@ export function DocumentPanel({
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setCreateOpen(false)} disabled={busy}>
-              Batal
+              {t("documents.panel.cancel")}
             </Button>
             <Button onClick={submit} disabled={busy || !title.trim()} data-icon="inline-start">
               {busy ? <Spinner /> : <Plus />}
-              Buat
+              {t("documents.panel.create")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -208,29 +210,26 @@ export function DocumentPanel({
       <div className="flex-1 overflow-y-auto px-2 pb-2 text-xs">
         {source === "local" ? (
           <>
-            {!projectId && <Hint>Pilih project dulu di menu Workspace.</Hint>}
+            {!projectId && <Hint>{t("documents.panel.noProject")}</Hint>}
             {projectId && localLoading && (
               <div className="flex items-center gap-2 px-2 py-4 text-xs text-muted-foreground">
                 <Spinner />
-                Memuat dokumen lokal…
+                {t("documents.panel.loadingLocal")}
               </div>
             )}
             {projectId && !localLoading && !localConfigured && (
-              <Hint>
-                Document workspace belum diatur (Project Settings → Workspace). Set folder markdown
-                untuk menyimpan dokumen lokal.
-              </Hint>
+              <Hint>{t("documents.panel.localNotConfigured")}</Hint>
             )}
             {projectId && localConfigured && !localLoading && localError && (
               <Hint tone="error">{localError}</Hint>
             )}
             {projectId && localConfigured && !localLoading && !localError &&
               localDocuments.length === 0 && (
-              <Hint>Belum ada dokumen lokal. Klik tombol + untuk membuat.</Hint>
+              <Hint>{t("documents.panel.localEmpty")}</Hint>
             )}
             {localDocuments.length > 0 ? (
               <p className="px-2 pb-1 text-[11px] text-muted-foreground">
-                Seret dokumen ke panel chat untuk dijadikan konteks.
+                {t("documents.panel.dragHint")}
               </p>
             ) : null}
             {localDocuments.map((doc) => (
@@ -252,7 +251,7 @@ export function DocumentPanel({
                   "flex w-full cursor-grab items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs transition-colors hover:bg-accent active:cursor-grabbing",
                   selectedId === doc.path && "bg-accent",
                 )}
-                title={`${doc.path} · seret ke chat`}
+                title={t("documents.panel.dragTitle", { path: doc.path })}
               >
                 <FileText className="size-4 shrink-0 text-muted-foreground" />
                 <span className="min-w-0 flex-1 truncate text-xs">{doc.title}</span>
@@ -265,32 +264,32 @@ export function DocumentPanel({
                   className="h-5 px-1.5 text-[10px]"
                 >
                   {doc.syncStatus === "synced"
-                    ? "Synced"
+                    ? t("documents.panel.synced")
                     : doc.syncStatus === "error"
-                    ? "Error"
-                    : "Local"}
+                    ? t("documents.panel.error")
+                    : t("documents.panel.local")}
                 </Badge>
               </button>
             ))}
           </>
         ) : (
           <>
-            {!projectId && <Hint>Pilih project dulu di menu Workspace.</Hint>}
+            {!projectId && <Hint>{t("documents.panel.noProject")}</Hint>}
             {projectId && loading && (
               <div className="flex items-center gap-2 px-2 py-4 text-xs text-muted-foreground">
                 <Spinner />
-                Memuat dokumen…
+                {t("documents.panel.loading")}
               </div>
             )}
             {projectId && !loading && !configured && (
               <Hint>
-                Integrasi {sourceLabel(source)} belum diatur (Project Settings → Integrations).
+                {t("documents.panel.notConfigured", { source: sourceLabel(source) })}
               </Hint>
             )}
             {projectId && !loading && configured && error && <Hint tone="error">{error}</Hint>}
             {projectId && !loading && configured && !error && documents.length === 0 && (
               <>
-                <Hint>{emptyHint(source)}</Hint>
+                <Hint>{emptyHint(source, t)}</Hint>
                 {debug && (
                   <pre className="mx-2 mb-2 max-h-40 overflow-auto rounded-md border bg-muted/40 p-2 text-[10px] whitespace-pre-wrap text-muted-foreground">
                     {debug}
@@ -300,7 +299,7 @@ export function DocumentPanel({
             )}
             {projectId && !loading && configured && !error && documents.length > 0 ? (
               <p className="px-2 pb-1 text-[11px] text-muted-foreground">
-                Seret dokumen ke panel chat untuk dijadikan konteks.
+                {t("documents.panel.dragHint")}
               </p>
             ) : null}
             {documents.map((doc) => (
@@ -327,27 +326,30 @@ function sourceLabel(source: DocumentSource): string {
   return "Docmost";
 }
 
-function emptyHint(source: DocumentSource): ReactNode {
+function emptyHint(source: DocumentSource, t: Translator): ReactNode {
   if (source === "notion") {
     return (
       <>
-        Belum ada halaman. Pastikan integration punya akses ke page, atau isi{" "}
-        <span className="font-medium">Parent Page ID</span> di Project Settings.
+        {t("documents.panel.emptyNotionPrefix")}
+        <span className="font-medium">{t("documents.panel.emptyNotionAction")}</span>
+        {t("documents.panel.emptyNotionSuffix")}
       </>
     );
   }
   if (source === "confluence") {
     return (
       <>
-        Belum ada dokumen. Isi <span className="font-medium">Space Key</span> di Project Settings
-        atau expand space di tree.
+        {t("documents.panel.emptyConfluencePrefix")}
+        <span className="font-medium">{t("documents.panel.emptyConfluenceAction")}</span>
+        {t("documents.panel.emptyConfluenceSuffix")}
       </>
     );
   }
   return (
     <>
-      Belum ada dokumen. Isi <span className="font-medium">Space ID</span> (id space, bukan nama) di
-      Project Settings → Integrations.
+      {t("documents.panel.emptyDocmostPrefix")}
+      <span className="font-medium">{t("documents.panel.emptyDocmostAction")}</span>
+      {t("documents.panel.emptyDocmostSuffix")}
     </>
   );
 }
@@ -367,6 +369,7 @@ function DocNode({
   selectedId: string | null;
   onSelect: (id: string, title: string, source: DocumentSource) => void;
 }) {
+  const { t } = useI18n();
   const hasChildren = doc.hasChildren || !!doc.children?.length;
   const [open, setOpen] = useState(false);
   const [children, setChildren] = useState<DocSummary[] | null>(doc.children ?? null);
@@ -407,7 +410,9 @@ function DocNode({
           <button
             onClick={toggle}
             className="flex size-5 shrink-0 items-center justify-center text-muted-foreground"
-            aria-label={open ? "Collapse" : "Expand"}
+            aria-label={open
+              ? t("documents.panel.collapse")
+              : t("documents.panel.expand")}
           >
             {loadingChildren ? (
               <Spinner className="size-3.5" />
@@ -435,7 +440,9 @@ function DocNode({
             "flex min-w-0 flex-1 items-center gap-1.5 py-1 text-left",
             draggable && "cursor-grab active:cursor-grabbing",
           )}
-          title={draggable ? `${doc.title} · seret ke chat` : doc.title}
+          title={draggable
+            ? t("documents.panel.nodeDragTitle", { title: doc.title })
+            : doc.title}
         >
           {hasChildren ? (
             open ? (
@@ -462,7 +469,7 @@ function DocNode({
               className="py-1 text-xs text-muted-foreground"
               style={{ paddingLeft: depth * 12 + 32 }}
             >
-              Tidak ada sub-halaman.
+              {t("documents.panel.noChildren")}
             </p>
           )}
           {children?.map((child) => (

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Separator } from "@/components/ui/separator";
 import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
+import { useI18n } from "@/lib/i18n";
 import { api } from "@/lib/api";
 
 export function AutomationSettings() {
@@ -9,6 +10,7 @@ export function AutomationSettings() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | undefined>();
+  const { t } = useI18n();
 
   useEffect(() => {
     let cancelled = false;
@@ -47,12 +49,14 @@ export function AutomationSettings() {
     <section className="flex w-full flex-col gap-4">
       <div className="flex flex-col gap-2">
         <h2 className="text-xs font-medium tracking-wider text-muted-foreground uppercase">
-          Automation
+          {t("settings.automation.title")}
         </h2>
         <p className="text-xs text-muted-foreground">
-          Saat aktif, menggeser tiket dari <span className="font-medium">To Do</span> ke{" "}
-          <span className="font-medium">In Progress</span> membuka Chat Build baru dan meminta
-          agent mengerjakan tiket tersebut. Perubahan file tetap lewat Review tab.
+          {t("settings.automation.descriptionPrefix")}{" "}
+          <span className="font-medium">To Do</span>{" "}
+          {t("settings.automation.descriptionMid")}{" "}
+          <span className="font-medium">In Progress</span>{" "}
+          {t("settings.automation.descriptionOutro")}
         </p>
         <Separator />
       </div>
@@ -60,21 +64,21 @@ export function AutomationSettings() {
       {loading ? (
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <Spinner />
-          Memuat…
+          {t("settings.automation.loading")}
         </div>
       ) : (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border p-4">
           <div className="flex min-w-0 flex-col gap-1">
-            <span className="text-xs font-medium">Auto-build on In Progress</span>
+            <span className="text-xs font-medium">{t("settings.automation.autoBuild")}</span>
             <span className="text-xs text-muted-foreground">
-              Trigger hanya To Do → In Progress. Default nonaktif.
+              {t("settings.automation.autoBuildDescription")}
             </span>
           </div>
           <Switch
             checked={enabled}
             onCheckedChange={(next) => void save(next)}
             disabled={busy}
-            aria-label="Auto-build on In Progress"
+            aria-label={t("settings.automation.autoBuild")}
           />
         </div>
       )}

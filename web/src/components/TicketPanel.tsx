@@ -10,6 +10,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
+import { useI18n } from "@/lib/i18n";
 
 interface Props {
   count: number;
@@ -34,18 +35,20 @@ export function TicketPanel({
   onCreate,
   canCreate,
 }: Props) {
+  const { t } = useI18n();
+
   return (
     <>
       <div className="flex items-center justify-between pr-2">
-        <PanelHeader title="Tickets" count={count} />
+        <PanelHeader title={t("tickets.panel.title")} count={count} />
         <div className="flex items-center gap-0.5">
           <Button
             variant="ghost"
             size="icon"
             onClick={onCreate}
             disabled={!canCreate}
-            aria-label="Tiket baru"
-            title="Tiket baru"
+            aria-label={t("tickets.panel.newTicket")}
+            title={t("tickets.panel.newTicket")}
           >
             <Plus />
           </Button>
@@ -54,8 +57,8 @@ export function TicketPanel({
             size="icon"
             onClick={onRefresh}
             disabled={loading}
-            aria-label="Refresh tickets"
-            title="Refresh"
+            aria-label={t("tickets.panel.refreshAria")}
+            title={t("tickets.panel.refreshTitle")}
           >
             {loading ? <Spinner /> : <RefreshCw />}
           </Button>
@@ -64,15 +67,25 @@ export function TicketPanel({
 
       <div className="flex flex-col gap-3 px-3 pb-3">
         <div className="flex flex-col gap-1.5">
-          <span className="text-xs text-muted-foreground">Filter assignee</span>
+          <span className="text-xs text-muted-foreground">
+            {t("tickets.panel.filterAssignee")}
+          </span>
           <Select value={assigneeFilter} onValueChange={onFilter}>
-            <SelectTrigger size="sm" className="w-full text-xs" aria-label="Filter assignee">
-              <SelectValue placeholder="Semua user" className="text-xs"/>
+            <SelectTrigger
+              size="sm"
+              className="w-full text-xs"
+              aria-label={t("tickets.panel.filterAssignee")}
+            >
+              <SelectValue placeholder={t("tickets.panel.allUsers")} className="text-xs"/>
             </SelectTrigger>
             <SelectContent>
               <SelectGroup>
-                <SelectItem value="all" className="text-xs">Semua user</SelectItem>
-                {hasUnassigned ? <SelectItem value="none" className="text-xs">Tanpa assignee</SelectItem> : null}
+                <SelectItem value="all" className="text-xs">{t("tickets.panel.allUsers")}</SelectItem>
+                {hasUnassigned ? (
+                  <SelectItem value="none" className="text-xs">
+                    {t("tickets.panel.unassigned")}
+                  </SelectItem>
+                ) : null}
                 {assignees.map((assignee) => (
                   <SelectItem className="text-xs" key={assignee} value={assignee}>
                     {assignee}
@@ -84,9 +97,9 @@ export function TicketPanel({
         </div>
 
         <p className="text-xs leading-relaxed text-muted-foreground">
-          Tiket lokal dan Jira. Drag kartu antar kolom untuk mengubah status, atau seret grip di
-          kartu ke panel chat untuk menjadikannya konteks. Detail tiket punya tombol{" "}
-          <span className="font-medium">Kerjakan tiket</span>.
+          {t("tickets.panel.hintPrefix")}
+          <span className="font-medium">{t("tickets.panel.hintAction")}</span>
+          {t("tickets.panel.hintSuffix")}
         </p>
       </div>
     </>

@@ -43,6 +43,7 @@ import {
   type GitFile,
   type GitStatus,
 } from "@/lib/api";
+import { useI18n } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 interface Props {
@@ -87,6 +88,7 @@ export function GitTab({
   onUnstage,
   onCommit,
 }: Props) {
+  const { t } = useI18n();
   const [view, setView] = useState<View>("changes");
   const [message, setMessage] = useState("");
   const [selected, setSelected] = useState<{ path: string; staged: boolean } | null>(null);
@@ -154,7 +156,7 @@ export function GitTab({
     setDiffError(undefined);
     try {
       const result = await api.gitDiff(projectId, file.path, isStaged);
-      setDiff(result.diff || "(tidak ada diff)");
+      setDiff(result.diff || t("git.tab.noDiff"));
     } catch (e) {
       setDiffError((e as Error).message);
       setDiff("");
@@ -251,7 +253,7 @@ export function GitTab({
     try {
       const result = await fn();
       const note = result.output?.trim();
-      setActionNotice(note ? note.slice(0, 240) : `${label} selesai.`);
+      setActionNotice(note ? note.slice(0, 240) : t("git.tab.actionDone", { label }));
       await onRefresh();
     } catch (e) {
       setActionError((e as Error).message);
@@ -308,7 +310,7 @@ export function GitTab({
         />
         <span className="mx-1 h-4 w-px bg-border" />
         <ToolbarButton
-          label="Branch"
+          label={t("git.tab.branch")}
           icon={<GitBranchPlus />}
           disabled={busy}
           onClick={() => {
@@ -317,7 +319,7 @@ export function GitTab({
           }}
         />
         <ToolbarButton
-          label="Merge"
+          label={t("git.tab.merge")}
           icon={<GitMerge />}
           disabled={busy || mergeCandidates.length === 0}
           onClick={() => {
@@ -326,7 +328,7 @@ export function GitTab({
           }}
         />
         <ToolbarButton
-          label="Stash"
+          label={t("git.tab.stash")}
           icon={<Archive />}
           disabled={busy || !!status?.clean}
           onClick={() => {
@@ -361,7 +363,7 @@ export function GitTab({
             data-icon="inline-start"
           >
             <FileCode2 />
-            File Status
+            {t("git.tab.fileStatus")}
           </Button>
           <Button
             size="sm"
@@ -371,7 +373,7 @@ export function GitTab({
             data-icon="inline-start"
           >
             <History />
-            History
+            {t("git.tab.history")}
           </Button>
         </div>
         <Button
@@ -383,7 +385,7 @@ export function GitTab({
           data-icon="inline-start"
         >
           {loading ? <Spinner /> : <RefreshCw />}
-          Refresh
+          {t("git.tab.refresh")}
         </Button>
       </div>
 
@@ -398,13 +400,13 @@ export function GitTab({
       <Dialog open={branchOpen} onOpenChange={setBranchOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>New Branch</DialogTitle>
+            <DialogTitle>{t("git.tab.newBranchTitle")}</DialogTitle>
             <DialogDescription>
-              Buat branch lokal baru dari HEAD saat ini, lalu checkout.
+              {t("git.tab.newBranchDescription")}
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-1.5">
-            <Label htmlFor="git-branch-name">Nama branch</Label>
+            <Label htmlFor="git-branch-name">{t("git.tab.branchNameLabel")}</Label>
             <Input
               id="git-branch-name"
               value={branchName}
@@ -416,7 +418,9 @@ export function GitTab({
                   void runRemoteAction("Branch", async () => {
                     await api.gitCreateBranch(projectId!, { name: branchName.trim() });
                     setBranchOpen(false);
-                    return { output: `Branch ${branchName.trim()} dibuat.` };
+                    return {
+                      output: t("git.tab.branchCreated", { name: branchName.trim() }),
+                    };
                   });
                 }
               }}
@@ -424,7 +428,7 @@ export function GitTab({
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setBranchOpen(false)}>
-              Batal
+              {t("git.tab.cancel")}
             </Button>
             <Button
               disabled={!branchName.trim() || Boolean(actionBusy)}
@@ -432,11 +436,13 @@ export function GitTab({
                 void runRemoteAction("Branch", async () => {
                   await api.gitCreateBranch(projectId!, { name: branchName.trim() });
                   setBranchOpen(false);
-                  return { output: `Branch ${branchName.trim()} dibuat.` };
+                  return {
+                    output: t("git.tab.branchCreated", { name: branchName.trim() }),
+                  };
                 })
               }
             >
-              Buat & Checkout
+              {t("git.tab.createAndCheckout")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -445,16 +451,18 @@ export function GitTab({
       <Dialog open={mergeOpen} onOpenChange={setMergeOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Merge Branch</DialogTitle>
+            <DialogTitle>{t("git.tab.mergeTitle")}</DialogTitle>
             <DialogDescription>
-              Merge branch lokal ke <span className="font-mono">{status?.branch ?? "HEAD"}</span>.
+              {t("git.tab.mergePrefix")}
+              <span className="font-mono">{status?.branch ?? "HEAD"}</span>
+              {t("git.tab.mergeSuffix")}
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-1.5">
-            <Label>Branch sumber</Label>
+            <Label>{t("git.tab.sourceBranch")}</Label>
             <Select value={mergeBranch} onValueChange={setMergeBranch}>
-              <SelectTrigger aria-label="Branch untuk merge">
-                <SelectValue placeholder="Pilih branch" />
+              <SelectTrigger aria-label={t("git.tab.mergeBranchAria")}>
+                <SelectValue placeholder={t("git.tab.selectBranch")} />
               </SelectTrigger>
               <SelectContent>
                 <SelectGroup>
@@ -469,7 +477,7 @@ export function GitTab({
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setMergeOpen(false)}>
-              Batal
+              {t("git.tab.cancel")}
             </Button>
             <Button
               disabled={!mergeBranch || Boolean(actionBusy)}
@@ -481,7 +489,7 @@ export function GitTab({
                 })
               }
             >
-              Merge
+              {t("git.tab.merge")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -490,13 +498,13 @@ export function GitTab({
       <Dialog open={stashOpen} onOpenChange={setStashOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Stash Changes</DialogTitle>
+            <DialogTitle>{t("git.tab.stashTitle")}</DialogTitle>
             <DialogDescription>
-              Simpan perubahan working tree ke stash (termasuk untracked).
+              {t("git.tab.stashDescription")}
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-1.5">
-            <Label htmlFor="git-stash-message">Pesan (opsional)</Label>
+            <Label htmlFor="git-stash-message">{t("git.tab.stashMessageLabel")}</Label>
             <Input
               id="git-stash-message"
               value={stashMessage}
@@ -507,7 +515,7 @@ export function GitTab({
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setStashOpen(false)}>
-              Batal
+              {t("git.tab.cancel")}
             </Button>
             <Button
               disabled={Boolean(actionBusy)}
@@ -521,7 +529,7 @@ export function GitTab({
                 })
               }
             >
-              Stash
+              {t("git.tab.stash")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -539,36 +547,36 @@ export function GitTab({
             <>
               <div className="min-h-0 flex-1 overflow-y-auto">
                 <FileSection
-                  title="Staged Files"
+                  title={t("git.tab.stagedFiles")}
                   files={staged}
                   staged
                   selected={selected}
                   onSelect={loadDiff}
                   onAction={(paths) => stage(paths, true)}
-                  actionLabel="Unstage"
+                  actionLabel={t("git.tab.unstage")}
                   onAll={() => stage(staged.map((file) => file.path), true)}
                 />
                 <FileSection
-                  title="Unstaged Files"
+                  title={t("git.tab.unstagedFiles")}
                   files={unstaged}
                   selected={selected}
                   onSelect={loadDiff}
                   onAction={(paths) => stage(paths, false)}
-                  actionLabel="Stage"
+                  actionLabel={t("git.tab.stage")}
                   onAll={() => stage(unstaged.map((file) => file.path), false)}
                 />
                 <FileSection
-                  title="Untracked Files"
+                  title={t("git.tab.untrackedFiles")}
                   files={untracked}
                   selected={selected}
                   onSelect={loadDiff}
                   onAction={(paths) => stage(paths, false)}
-                  actionLabel="Stage"
+                  actionLabel={t("git.tab.stage")}
                   onAll={() => stage(untracked.map((file) => file.path), false)}
                 />
                 {status?.clean ? (
                   <p className="px-3 py-6 text-center text-xs text-muted-foreground">
-                    Working tree clean — tidak ada perubahan.
+                    {t("git.tab.cleanEmpty")}
                   </p>
                 ) : null}
               </div>
@@ -577,12 +585,12 @@ export function GitTab({
                   value={message}
                   onChange={(event) => setMessage(event.target.value)}
                   rows={3}
-                  placeholder="Commit message…"
+                  placeholder={t("git.tab.commitMessage")}
                   className="border-input focus-visible:border-ring focus-visible:ring-ring/50 w-full resize-none rounded-md border bg-background px-3 py-2 text-xs shadow-xs outline-none focus-visible:ring-[3px]"
                 />
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-xs text-muted-foreground">
-                    {staged.length} file staged
+                    {t("git.tab.stagedCount", { count: staged.length })}
                   </span>
                   <Button
                     size="sm"
@@ -591,7 +599,7 @@ export function GitTab({
                     data-icon="inline-start"
                   >
                     {committing ? <Spinner /> : <GitCommitHorizontal />}
-                    Commit
+                    {t("git.tab.commit")}
                   </Button>
                 </div>
               </div>
@@ -600,7 +608,7 @@ export function GitTab({
             <div className="min-h-0 flex-1 overflow-y-auto">
               {commits.length === 0 ? (
                 <p className="px-3 py-6 text-center text-xs text-muted-foreground">
-                  Belum ada commit.
+                  {t("git.tab.noCommits")}
                 </p>
               ) : (
                 commits.map((commit) => {
@@ -641,7 +649,7 @@ export function GitTab({
           onPointerDown={startResize}
           role="separator"
           aria-orientation="vertical"
-          aria-label="Resize git panes"
+          aria-label={t("git.tab.resizeAria")}
           className="group relative flex w-1.5 shrink-0 cursor-col-resize items-stretch justify-center"
         >
           <span
@@ -662,18 +670,22 @@ export function GitTab({
                       {selected.path}
                     </span>
                     <Badge variant="outline" className="h-5 text-[10px]">
-                      {selected.staged ? "staged" : "working tree"}
+                      {selected.staged
+                        ? t("git.tab.badgeStaged")
+                        : t("git.tab.badgeWorkingTree")}
                     </Badge>
                   </>
                 ) : (
-                  <span className="text-xs text-muted-foreground">Pilih file untuk melihat diff</span>
+                  <span className="text-xs text-muted-foreground">
+                    {t("git.tab.selectFileHint")}
+                  </span>
                 )}
               </div>
               <div className="min-h-0 flex-1 overflow-auto">
                 {diffLoading ? (
                   <div className="flex items-center gap-2 p-3 text-xs text-muted-foreground">
                     <Spinner />
-                    Memuat diff…
+                    {t("git.tab.loadingDiff")}
                   </div>
                 ) : diffError ? (
                   <p className="p-3 text-xs text-destructive">{diffError}</p>
@@ -681,7 +693,7 @@ export function GitTab({
                   <GitDiffView diff={diff} />
                 ) : (
                   <p className="p-6 text-center text-xs text-muted-foreground">
-                    Tidak ada file terpilih.
+                    {t("git.tab.noFileSelected")}
                   </p>
                 )}
               </div>
@@ -711,7 +723,7 @@ export function GitTab({
                   </>
                 ) : (
                   <span className="text-xs text-muted-foreground">
-                    {commitLoading ? "Memuat commit…" : "Pilih commit"}
+                    {commitLoading ? t("git.tab.loadingCommit") : t("git.tab.selectCommit")}
                   </span>
                 )}
               </div>
@@ -719,7 +731,7 @@ export function GitTab({
                 {commitLoading ? (
                   <div className="flex items-center gap-2 p-3 text-xs text-muted-foreground">
                     <Spinner />
-                    Memuat diff…
+                    {t("git.tab.loadingDiff")}
                   </div>
                 ) : commitError ? (
                   <p className="p-3 text-xs text-destructive">{commitError}</p>
@@ -727,7 +739,7 @@ export function GitTab({
                   <GitDiffView diff={commitDetail.diff} />
                 ) : (
                   <p className="p-6 text-center text-xs text-muted-foreground">
-                    Tidak ada patch untuk commit ini.
+                    {t("git.tab.noPatch")}
                   </p>
                 )}
               </div>
@@ -825,13 +837,14 @@ function FileSection({
   actionLabel: string;
   onAll: () => void;
 }) {
+  const { t } = useI18n();
   if (files.length === 0) return null;
   const isStaged = Boolean(staged);
   return (
     <div className="flex flex-col border-b">
       <div className="sticky top-0 z-[1] flex items-center justify-between gap-2 bg-[var(--sidebar)] px-2 py-1.5">
         <span className="text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">
-          {title} ({files.length})
+          {t("git.tab.sectionTitle", { title, count: files.length })}
         </span>
         <Button
           size="sm"
@@ -841,7 +854,7 @@ function FileSection({
           data-icon="inline-start"
         >
           {isStaged ? <Minus /> : <Plus />}
-          {actionLabel} All
+          {t("git.tab.actionAll", { action: actionLabel })}
         </Button>
       </div>
       {files.map((file) => {

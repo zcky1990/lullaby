@@ -23,6 +23,7 @@ import {
   ContextMenuSeparator,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
+import { useI18n } from "@/lib/i18n";
 import { requestTabMenuAction } from "@/lib/tab-menu";
 import { cn } from "@/lib/utils";
 
@@ -115,6 +116,7 @@ function TabItem({
   onSelect: (id: string) => void;
   onClose: (id: string) => void;
 }) {
+  const { t } = useI18n();
   const Icon = ICONS[tab.kind];
   const hasAfter = index < total - 1;
   const hasBefore = index > 0;
@@ -149,7 +151,7 @@ function TabItem({
           <button
             type="button"
             onClick={() => onClose(tab.id)}
-            aria-label={`Tutup ${tab.title}`}
+            aria-label={t("nav.tab.closeTab", { title: tab.title })}
             className={cn(
               "rounded p-0.5 hover:bg-accent",
               active ? "opacity-60" : "opacity-0 group-hover:opacity-60",
@@ -162,14 +164,14 @@ function TabItem({
       <ContextMenuContent className="w-56">
         <ContextMenuItem onSelect={() => onClose(tab.id)}>
           <X />
-          Tutup
+          {t("nav.tab.close")}
         </ContextMenuItem>
         <ContextMenuItem
           disabled={total <= 1}
           onSelect={() => requestTabMenuAction("close-others", tab.id)}
         >
           <CircleX />
-          Tutup tab lain
+          {t("nav.tab.closeOthers")}
         </ContextMenuItem>
         <ContextMenuSeparator />
         <ContextMenuItem
@@ -177,19 +179,19 @@ function TabItem({
           onSelect={() => requestTabMenuAction("close-after", tab.id)}
         >
           <ArrowRightToLine />
-          Tutup tab di kanan
+          {t("nav.tab.closeRight")}
         </ContextMenuItem>
         <ContextMenuItem
           disabled={!hasBefore}
           onSelect={() => requestTabMenuAction("close-before", tab.id)}
         >
           <ArrowLeftToLine />
-          Tutup tab di kiri
+          {t("nav.tab.closeLeft")}
         </ContextMenuItem>
         <ContextMenuSeparator />
         <ContextMenuItem onSelect={() => requestTabMenuAction("close-all")}>
           <ListX />
-          Tutup semua tab
+          {t("nav.tab.closeAll")}
         </ContextMenuItem>
       </ContextMenuContent>
     </ContextMenu>

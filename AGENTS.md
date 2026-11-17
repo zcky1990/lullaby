@@ -32,6 +32,15 @@ finishing a change.
 - **Markdown**: `MarkdownView` uses `react-markdown` + `remark-gfm`, renders ```mermaid blocks via
   `Mermaid` (mermaid lib, theme follows `ThemeProvider`), and styles with the Tailwind `prose`
   plugin.
+- **i18n**: preferensi bahasa global (`app_settings.ui_preferences.language`, `id` | `en`)
+  dibaca/ditulis `web/src/lib/i18n/` (`I18nProvider` + `useI18n()` → `{ t, locale, setLocale }`,
+  dipasang di `web/src/main.tsx`). Kamus datar per domain di
+  `web/src/lib/i18n/messages/{id,en}/<domain>.ts` (common, nav, language, app, chat, explorer,
+  documents, tickets, git, workflow, terminal, review, settings, settingsAdvanced); konstanta modul
+  menyimpan `labelKey`, helper non-komponen menerima `t: Translator`. Set key `id`/`en` harus
+  identik — dijaga `web/src/lib/i18n.test.ts`. UI: Global Settings → Appearance → Bahasa
+  (`LanguageSettings.tsx`). Alur & aturan lengkap: `docs/features/i18n.md`. `App.tsx` dan
+  `ChatSidebar.tsx` belum tercakup (batas baca tool, lihat `LOCAL-8A9A58`).
 - **Tabs**: the main area is tabbed (`TabsBar`); each activity-bar menu is a **singleton tab** whose
   content embeds its own side panel (Workspace/Explorer/Document/Settings/Ticket use a two-pane
   layout; Ticket keeps create/filter/refresh in its sidebar; Global = one page). State lives in

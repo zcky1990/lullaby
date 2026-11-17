@@ -7,6 +7,7 @@ import { Switch } from "@/components/ui/switch";
 import { Spinner } from "@/components/ui/spinner";
 import { api, type WorkflowSummary } from "@/lib/api";
 import { formatApiError } from "@/lib/api-error";
+import { useI18n } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 interface Props {
@@ -37,6 +38,7 @@ export function CronTab({
   onOpenWorkflow,
   onScheduleChanged,
 }: Props) {
+  const { t } = useI18n();
   const [busySlug, setBusySlug] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | undefined>();
 
@@ -66,9 +68,11 @@ export function CronTab({
       <div className="flex h-[35px] shrink-0 items-center justify-between gap-2 border-b px-3">
         <div className="flex min-w-0 items-center gap-2">
           <Clock className="size-4 shrink-0 text-muted-foreground" />
-          <span className="truncate text-xs font-medium">Cron & Event</span>
+          <span className="truncate text-xs font-medium">
+            {t("workflow.cron.title")}
+          </span>
           <span className="text-[10px] text-muted-foreground">
-            {scheduled.length} jadwal
+            {t("workflow.cron.scheduleCount", { count: scheduled.length })}
           </span>
         </div>
         <Button
@@ -79,7 +83,7 @@ export function CronTab({
           data-icon="inline-start"
         >
           {loading ? <Spinner /> : <RefreshCw />}
-          Refresh
+          {t("workflow.cron.refresh")}
         </Button>
       </div>
 
@@ -95,11 +99,13 @@ export function CronTab({
         {scheduled.length === 0 && !loading
           ? (
             <div className="mx-auto flex max-w-lg flex-col gap-2 py-10 text-center text-xs text-muted-foreground">
-              <p>Belum ada workflow berjadwal.</p>
+              <p>{t("workflow.cron.empty")}</p>
               <p>
-                Tambahkan <code className="font-mono">schedule</code> atau{" "}
-                <code className="font-mono">on</code> di YAML (menu Workflows), Save,
-                lalu refresh di sini.
+                {t("workflow.cron.emptyHintPrefix")}
+                <code className="font-mono">schedule</code>
+                {t("workflow.cron.emptyHintOr")}
+                <code className="font-mono">on</code>
+                {t("workflow.cron.emptyHintSuffix")}
               </p>
             </div>
           )
@@ -162,7 +168,7 @@ export function CronTab({
                       htmlFor={`cron-enabled-${workflow.slug}`}
                       className="text-[11px]"
                     >
-                      Schedule
+                      {t("workflow.cron.schedule")}
                     </Label>
                     <Switch
                       id={`cron-enabled-${workflow.slug}`}
@@ -177,16 +183,26 @@ export function CronTab({
                       variant="ghost"
                       className="size-7"
                       onClick={() => onOpenWorkflow(workflow.slug, workflow.name)}
-                      aria-label={`Buka workflow ${workflow.name}`}
-                      title="Buka workflow"
+                      aria-label={t("workflow.cron.openWorkflowAria", {
+                        name: workflow.name,
+                      })}
+                      title={t("workflow.cron.openWorkflow")}
                     >
                       <ExternalLink className="size-3.5" />
                     </Button>
                   </div>
                 </div>
                 <div className="flex flex-wrap gap-x-4 gap-y-1 text-[10px] text-muted-foreground">
-                  <span>next: {schedule.enabled ? formatWhen(schedule.nextRunAt) : "—"}</span>
-                  <span>last: {formatWhen(schedule.lastRunAt)}</span>
+                  <span>
+                    {t("workflow.cron.next", {
+                      value: schedule.enabled ? formatWhen(schedule.nextRunAt) : "—",
+                    })}
+                  </span>
+                  <span>
+                    {t("workflow.cron.last", {
+                      value: formatWhen(schedule.lastRunAt),
+                    })}
+                  </span>
                 </div>
               </div>
             );

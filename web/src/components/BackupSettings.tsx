@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { useI18n } from "@/lib/i18n";
 import {
   backupFileName,
   BACKUP_TABLE_LABELS,
@@ -86,6 +87,7 @@ export function BackupSettings({ scope, projectId }: Props) {
   const [importFile, setImportFile] = useState<File | null>(null);
   const [needsReload, setNeedsReload] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const { t } = useI18n();
 
   const resetFeedback = () => {
     setMessage(undefined);
@@ -103,8 +105,9 @@ export function BackupSettings({ scope, projectId }: Props) {
         : await exportProjectBackup(projectId!, includeSecrets);
       downloadBackupFile(bundle, backupFileName(scope, projectId));
       setMessage(
-        `File backup dibuat (${formatBytes(JSON.stringify(bundle).length)}). ` +
-          "Jika unduhan diblokir, pakai “Simpan ke folder backup”.",
+        t("settings.backup.downloadMessage", {
+          size: formatBytes(JSON.stringify(bundle).length),
+        }),
       );
     } catch (e) {
       setError((e as Error).message);
@@ -122,7 +125,7 @@ export function BackupSettings({ scope, projectId }: Props) {
         ? await saveGlobalBackupToDisk(includeSecrets)
         : await saveProjectBackupToDisk(projectId!, includeSecrets);
       setSavedPath(saved.path);
-      setMessage(`Backup tersimpan di disk (${formatBytes(saved.bytes)}).`);
+      setMessage(t("settings.backup.savedMessage", { size: formatBytes(saved.bytes) }));
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -149,12 +152,8 @@ export function BackupSettings({ scope, projectId }: Props) {
   const runImport = async () => {
     if (!importFile || !ready || busy) return;
     const confirmText = isGlobal
-      ? `Import mode REPLACE akan MENGHAPUS seluruh config & database aplikasi ` +
-        `(project, tiket, chat, workflow), lalu menggantinya dengan isi file backup.\n\n` +
-        `Lanjutkan?`
-      : `Import mode REPLACE akan menghapus tiket lokal, dokumen lokal, sesi chat, ` +
-        `integration, dan workflow milik project ini, lalu menggantinya dengan isi backup.\n\n` +
-        `Lanjutkan?`;
+      ? t("settings.backup.confirmReplaceGlobal")
+      : t("settings.backup.confirmReplaceProject");
     if (mode === "replace" && !confirm(confirmText)) return;
 
     resetFeedback();
@@ -182,14 +181,14 @@ export function BackupSettings({ scope, projectId }: Props) {
       <section className="flex flex-col gap-4">
         <div className="flex flex-col gap-2">
           <h2 className="text-xs font-medium tracking-wider text-muted-foreground uppercase">
-            Export {isGlobal ? "global" : "project"}
+            {isGlobal
+              ? t("settings.backup.exportTitleGlobal")
+              : t("settings.backup.exportTitleProject")}
           </h2>
           <p className="text-xs text-muted-foreground">
             {isGlobal
-              ? "Menyimpan seluruh config (settings, LLM provider, role, integrasi) dan database " +
-                "(project, tiket lokal, dokumen lokal, riwayat chat, workflow) ke satu file JSON."
-              : "Menyimpan config integration project ini beserta database-nya: tiket lokal, " +
-                "dokumen lokal, riwayat chat, dan workflow run."}
+              ? t("settings.backup.exportDescriptionGlobal")
+              : t("settings.backup.exportDescriptionProject")}
           </p>
           <Separator />
         </div>
@@ -197,24 +196,26 @@ export function BackupSettings({ scope, projectId }: Props) {
         <div className="flex items-start justify-between gap-4 rounded-md border p-3">
           <div className="flex min-w-0 flex-col gap-1">
             <span className="flex items-center gap-2 text-xs font-medium">
-              Sertakan nilai rahasia
-              {includeSecrets ? <Badge variant="destructive">plain text</Badge> : null}
+              {t("settings.backup.includeSecrets")}
+              {includeSecrets ? (
+                <Badge variant="destructive">{t("settings.backup.plainText")}</Badge>
+              ) : null}
             </span>
             <span className="text-xs text-muted-foreground">
-              API key, token integrasi, dan webhook URL disertakan apa adanya. Tanpa opsi ini,
-              nilainya diganti <span className="font-mono">{SECRET_MASK_PREVIEW}</span>.
+              {t("settings.backup.includeSecretsDescription")}{" "}
+              <span className="font-mono">{SECRET_MASK_PREVIEW}</span>.
             </span>
             {includeSecrets ? (
               <span className="flex items-center gap-1 text-xs text-destructive">
                 <ShieldAlert className="size-3" />
-                Simpan file di tempat aman.
+                {t("settings.backup.safePlaceWarning")}
               </span>
             ) : null}
           </div>
           <Switch
             checked={includeSecrets}
             onCheckedChange={setIncludeSecrets}
-            aria-label="Sertakan nilai rahasia"
+            aria-label={t("settings.backup.includeSecrets")}
           />
         </div>
 
@@ -226,7 +227,7 @@ export function BackupSettings({ scope, projectId }: Props) {
             data-icon="inline-start"
           >
             {busy === "download" ? <Loader2 className="animate-spin" /> : <Download />}
-            Unduh backup
+            {t("settings.backup.download")}
           </Button>
           <Button
             size="sm"
@@ -236,14 +237,16 @@ export function BackupSettings({ scope, projectId }: Props) {
             data-icon="inline-start"
           >
             {busy === "save" ? <Loader2 className="animate-spin" /> : <Database />}
-            Simpan ke folder backup
+            {t("settings.backup.saveToFolder")}
           </Button>
-          {busy ? <span className="text-xs text-muted-foreground">Menyiapkan…</span> : null}
+          {busy ? (
+            <span className="text-xs text-muted-foreground">{t("settings.backup.preparing")}</span>
+          ) : null}
         </div>
 
         {savedPath ? (
           <div className="rounded-md border bg-muted/30 p-3 text-xs">
-            <p className="font-medium">File backup</p>
+            <p className="font-medium">{t("settings.backup.fileBackup")}</p>
             <p className="break-all font-mono text-[11px] text-muted-foreground">{savedPath}</p>
           </div>
         ) : null}
@@ -252,20 +255,20 @@ export function BackupSettings({ scope, projectId }: Props) {
       <section className="flex flex-col gap-4">
         <div className="flex flex-col gap-2">
           <h2 className="text-xs font-medium tracking-wider text-muted-foreground uppercase">
-            Import {isGlobal ? "global" : "project"}
+            {isGlobal
+              ? t("settings.backup.importTitleGlobal")
+              : t("settings.backup.importTitleProject")}
           </h2>
           <p className="text-xs text-muted-foreground">
             {isGlobal
-              ? "Memulihkan config & database dari file backup. Gunakan mode Merge untuk " +
-                "menambal data yang ada, atau Replace untuk mengganti seluruh isi."
-              : "Memulihkan data dari file backup ke project ini. Tiket, sesi chat, dan " +
-                "workflow run diimpor sebagai salinan baru."}
+              ? t("settings.backup.importDescriptionGlobal")
+              : t("settings.backup.importDescriptionProject")}
           </p>
           <Separator />
         </div>
 
         <div className="flex flex-col gap-2">
-          <span className="text-xs text-muted-foreground">Mode import</span>
+          <span className="text-xs text-muted-foreground">{t("settings.backup.importMode")}</span>
           <ToggleGroup
             type="single"
             variant="outline"
@@ -274,17 +277,17 @@ export function BackupSettings({ scope, projectId }: Props) {
             onValueChange={(value) => value && setMode(value as BackupMode)}
             className="w-fit"
           >
-            <ToggleGroupItem value="merge" aria-label="Mode merge">
-              Merge
+            <ToggleGroupItem value="merge" aria-label={t("settings.backup.mergeAria")}>
+              {t("settings.backup.merge")}
             </ToggleGroupItem>
-            <ToggleGroupItem value="replace" aria-label="Mode replace">
-              Replace (hapus data lama)
+            <ToggleGroupItem value="replace" aria-label={t("settings.backup.replaceAria")}>
+              {t("settings.backup.replace")}
             </ToggleGroupItem>
           </ToggleGroup>
           <p className="text-xs text-muted-foreground">
             {mode === "merge"
-              ? "Data lama dipertahankan; baris dengan id sama akan ditimpa."
-              : "Data lama dihapus lebih dulu sebelum import. Tidak bisa dibatalkan."}
+              ? t("settings.backup.mergeDescription")
+              : t("settings.backup.replaceDescription")}
           </p>
         </div>
 
@@ -304,7 +307,7 @@ export function BackupSettings({ scope, projectId }: Props) {
             data-icon="inline-start"
           >
             <FileJson />
-            Pilih file backup
+            {t("settings.backup.pickFile")}
           </Button>
           <Button
             size="sm"
@@ -313,23 +316,28 @@ export function BackupSettings({ scope, projectId }: Props) {
             data-icon="inline-start"
           >
             {busy === "import" ? <Loader2 className="animate-spin" /> : <Upload />}
-            Import
+            {t("settings.backup.import")}
           </Button>
           {!ready ? (
-            <span className="text-xs text-muted-foreground">Pilih project dulu.</span>
+            <span className="text-xs text-muted-foreground">
+              {t("settings.backup.selectProjectFirst")}
+            </span>
           ) : null}
         </div>
 
         {preview ? (
           <div className="rounded-md border bg-muted/30 p-3 text-xs">
-            <p className="font-medium">Preview file</p>
+            <p className="font-medium">{t("settings.backup.previewTitle")}</p>
             <p className="text-muted-foreground">
-              {preview.name} · diekspor {preview.exportedAt}
-              {preview.includeSecrets ? " · berisi rahasia" : ""}
+              {t("settings.backup.previewMeta", {
+                name: preview.name,
+                date: preview.exportedAt,
+              })}
+              {preview.includeSecrets ? t("settings.backup.previewSecrets") : ""}
             </p>
             <div className="mt-2 flex flex-wrap gap-1">
               {preview.counts.length === 0 ? (
-                <span className="text-muted-foreground">Tidak ada data.</span>
+                <span className="text-muted-foreground">{t("settings.backup.noData")}</span>
               ) : (
                 preview.counts.slice(0, 10).map(([table, count]) => (
                   <Badge key={table} variant="secondary" className="text-[10px]">
@@ -368,7 +376,7 @@ export function BackupSettings({ scope, projectId }: Props) {
               data-icon="inline-start"
             >
               <RefreshCw />
-              Muat ulang aplikasi
+              {t("settings.backup.reloadApp")}
             </Button>
           ) : null}
         </div>

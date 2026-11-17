@@ -27,6 +27,7 @@ import {
 } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
 import { api, type TerminalShell } from "@/lib/api";
+import { useI18n, type Translator } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 // PERF-7: xterm.js diangkut TerminalSession, jadi modulnya dimuat saat panel
@@ -60,16 +61,16 @@ function readHeight(): number {
   return 280;
 }
 
-function statusLabel(status: TerminalStatus | undefined): string {
+function statusLabel(status: TerminalStatus | undefined, t: Translator): string {
   switch (status) {
     case "ready":
-      return "Ready";
+      return t("terminal.status.ready");
     case "connecting":
-      return "Connecting";
+      return t("terminal.status.connecting");
     case "error":
-      return "Error";
+      return t("terminal.status.error");
     case "closed":
-      return "Exited";
+      return t("terminal.status.closed");
     default:
       return "";
   }
@@ -83,6 +84,7 @@ function shortenPath(path: string | undefined): string {
 }
 
 export function TerminalPanel({ projectId, open, onClose }: Props) {
+  const { t } = useI18n();
   const [instances, setInstances] = useState<Instance[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [height, setHeight] = useState(readHeight);
@@ -195,7 +197,7 @@ export function TerminalPanel({ projectId, open, onClose }: Props) {
         onPointerDown={startResize}
         role="separator"
         aria-orientation="horizontal"
-        aria-label="Resize terminal"
+        aria-label={t("terminal.panel.resize")}
         className="group relative flex h-1.5 shrink-0 cursor-row-resize items-center justify-center"
       >
         <span
@@ -210,7 +212,7 @@ export function TerminalPanel({ projectId, open, onClose }: Props) {
         <div className="flex min-w-0 items-stretch gap-1">
           <div className="flex items-center gap-1.5 px-2 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
             <SquareTerminal className="size-3.5 shrink-0" />
-            <span>Terminal</span>
+            <span>{t("terminal.panel.title")}</span>
           </div>
 
           <div className="flex min-w-0 items-stretch overflow-x-auto">
@@ -247,7 +249,7 @@ export function TerminalPanel({ projectId, open, onClose }: Props) {
                   <button
                     type="button"
                     onClick={() => removeInstance(instance.id)}
-                    aria-label={`Tutup ${instance.title}`}
+                    aria-label={t("terminal.panel.closeTab", { title: instance.title })}
                     className={cn(
                       "rounded p-0.5 hover:bg-accent",
                       selected ? "opacity-60" : "opacity-0 group-hover:opacity-60",
@@ -267,8 +269,8 @@ export function TerminalPanel({ projectId, open, onClose }: Props) {
           >
             <SelectTrigger
               className="my-auto h-7 w-[4.75rem] shrink-0 border-0 bg-transparent px-1.5 text-[11px] shadow-none"
-              aria-label="Shell untuk terminal baru"
-              title="Shell untuk terminal baru"
+              aria-label={t("terminal.panel.shellLabel")}
+              title={t("terminal.panel.shellLabel")}
             >
               <SelectValue />
             </SelectTrigger>
@@ -284,8 +286,8 @@ export function TerminalPanel({ projectId, open, onClose }: Props) {
             variant="ghost"
             className="my-auto size-7 shrink-0"
             onClick={() => addInstance(shell)}
-            aria-label="Terminal baru"
-            title={`Terminal baru (${shell})`}
+            aria-label={t("terminal.panel.newSession")}
+            title={t("terminal.panel.newSessionTitle", { shell })}
             disabled={!projectId}
           >
             <Plus />
@@ -312,7 +314,7 @@ export function TerminalPanel({ projectId, open, onClose }: Props) {
                 activeStatus.status === "closed" && "bg-muted text-muted-foreground",
               )}
             >
-              {statusLabel(activeStatus.status)}
+              {statusLabel(activeStatus.status, t)}
             </span>
           ) : null}
           <Button
@@ -321,8 +323,8 @@ export function TerminalPanel({ projectId, open, onClose }: Props) {
             className="size-7"
             disabled={!activeId}
             onClick={() => activeId && handlesRef.current.get(activeId)?.clear()}
-            aria-label="Clear terminal"
-            title="Clear"
+            aria-label={t("terminal.panel.clearSession")}
+            title={t("terminal.panel.clear")}
           >
             <Eraser />
           </Button>
@@ -332,8 +334,8 @@ export function TerminalPanel({ projectId, open, onClose }: Props) {
             className="size-7"
             disabled={!activeId}
             onClick={() => activeId && removeInstance(activeId)}
-            aria-label="Kill terminal"
-            title="Kill terminal"
+            aria-label={t("terminal.panel.killSession")}
+            title={t("terminal.panel.killSession")}
           >
             <Trash2 />
           </Button>
@@ -342,8 +344,8 @@ export function TerminalPanel({ projectId, open, onClose }: Props) {
             variant="ghost"
             className="size-7"
             onClick={onClose}
-            aria-label="Sembunyikan terminal"
-            title="Sembunyikan panel"
+            aria-label={t("terminal.panel.hideSession")}
+            title={t("terminal.panel.hide")}
           >
             <ChevronDown />
           </Button>
@@ -357,8 +359,8 @@ export function TerminalPanel({ projectId, open, onClose }: Props) {
               <EmptyMedia variant="icon">
                 <SquareTerminal />
               </EmptyMedia>
-              <EmptyTitle>Belum ada project</EmptyTitle>
-              <EmptyDescription>Pilih project di Workspace untuk membuka terminal.</EmptyDescription>
+              <EmptyTitle>{t("terminal.panel.noProject")}</EmptyTitle>
+              <EmptyDescription>{t("terminal.panel.noProjectHint")}</EmptyDescription>
             </EmptyHeader>
           </Empty>
         ) : instances.length === 0 ? (
@@ -367,8 +369,8 @@ export function TerminalPanel({ projectId, open, onClose }: Props) {
               <EmptyMedia variant="icon">
                 <Plus />
               </EmptyMedia>
-              <EmptyTitle>Tidak ada terminal</EmptyTitle>
-              <EmptyDescription>Klik + untuk membuat session baru.</EmptyDescription>
+              <EmptyTitle>{t("terminal.panel.empty")}</EmptyTitle>
+              <EmptyDescription>{t("terminal.panel.emptyHint")}</EmptyDescription>
             </EmptyHeader>
           </Empty>
         ) : (
@@ -389,14 +391,14 @@ export function TerminalPanel({ projectId, open, onClose }: Props) {
                     <div className="pointer-events-none absolute inset-x-0 top-2 z-10 flex justify-center">
                       <span className="inline-flex items-center gap-1.5 rounded-md border bg-popover/95 px-2 py-1 text-[11px] text-muted-foreground shadow-sm backdrop-blur-sm">
                         <Spinner className="size-3" />
-                        Connecting…
+                        {t("terminal.panel.connecting")}
                       </span>
                     </div>
                   ) : null}
                   {status === "error" && selected ? (
                     <div className="pointer-events-none absolute inset-x-0 top-2 z-10 flex justify-center">
                       <span className="inline-flex max-w-[90%] items-center truncate rounded-md border border-destructive/30 bg-destructive/10 px-2 py-1 text-[11px] text-destructive shadow-sm">
-                        {statuses[instance.id]?.detail || "Terminal error"}
+                        {statuses[instance.id]?.detail || t("terminal.panel.error")}
                       </span>
                     </div>
                   ) : null}
