@@ -1,9 +1,7 @@
 import type { ReactNode } from "react";
-import { useState } from "react";
+import { Suspense, lazy, useState } from "react";
 import { ChevronRight, FolderOpen, GitBranchPlus, Plus } from "lucide-react";
 import { ActivityFeed, type ActivityEvent } from "@/components/ActivityFeed";
-import { BackupSettings } from "@/components/BackupSettings";
-import { IntegrationForm } from "@/components/IntegrationForm";
 import type { SettingsSection } from "@/components/SettingsPanel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -25,6 +23,14 @@ import { canPickDirectory, chooseWorkspaceDirectory } from "@/lib/bindings";
 import { SINGLETONS } from "@/lib/integrations";
 import { cn } from "@/lib/utils";
 import type { IntegrationPayload, Project, ProjectDetail, TestResult } from "@/lib/api";
+
+// PERF-7: form integrasi + backup hanya dimuat saat section-nya dibuka.
+const BackupSettings = lazy(() =>
+  import("@/components/BackupSettings").then((module) => ({ default: module.BackupSettings }))
+);
+const IntegrationForm = lazy(() =>
+  import("@/components/IntegrationForm").then((module) => ({ default: module.IntegrationForm }))
+);
 
 interface Props {
   detail: ProjectDetail;
@@ -135,121 +141,123 @@ export function SettingsView({
     setDraftKinds((current) => current.filter((item) => item !== kind));
 
   return (
-    <div className="flex w-full flex-col gap-8">
-      <div>
-        <h1 className="text-xl font-semibold">{project.name}</h1>
-        <p className="text-xs text-muted-foreground">
-          Workspace: {project.workspace_path ?? "—"}
-        </p>
-      </div>
-
-      {section === "workspace" && (
-        <>
-          <CollapsibleSection
-            key={project.id + (project.workspace_path ?? "none")}
-            title="Workspace"
-          >
-            <WorkspaceSection
-              path={project.workspace_path}
-              documentPath={project.document_path}
-              onSave={onUpdateWorkspace}
-            />
-          </CollapsibleSection>
-          <CollapsibleSection title="Clone repository" defaultOpen={!!project.workspace_path}>
-            <CloneSection
-              workspacePath={project.workspace_path}
-              onClone={onCloneRepository}
-            />
-          </CollapsibleSection>
-        </>
-      )}
-
-      {section === "integrations" && (
-        <div className="flex flex-col gap-6">
-          {INTEGRATION_SECTIONS.map((def) => {
-            const visibleKinds = def.kinds.filter(
-              (kind) =>
-                integrations.some((item) => item.kind === kind) || draftKinds.includes(kind),
-            );
-            const showForms = visibleKinds.length > 0;
-
-            return (
-              <CollapsibleSection
-                key={def.id}
-                title={def.title}
-                defaultOpen={showForms}
-                action={
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button size="icon" variant="ghost" aria-label={`Tambah ${def.title}`}>
-                        <Plus />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuLabel>Pilih tipe</DropdownMenuLabel>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuGroup>
-                        {def.options.map((option) =>
-                          option.kind ? (
-                            <DropdownMenuItem
-                              key={option.label}
-                              disabled={integrations.some((item) => item.kind === option.kind) ||
-                                draftKinds.includes(option.kind)}
-                              onSelect={() => addDraft(option.kind!)}
-                            >
-                              {option.label}
-                            </DropdownMenuItem>
-                          ) : (
-                            <DropdownMenuItem key={option.label} disabled>
-                              {option.label}
-                              <span className="text-muted-foreground ml-auto text-xs">segera</span>
-                            </DropdownMenuItem>
-                          ),
-                        )}
-                      </DropdownMenuGroup>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                }
-              >
-                {showForms ? (
-                  <div className="flex flex-col gap-6">
-                    {visibleKinds.map((kind) => {
-                      const definition = SINGLETONS.find((item) => item.kind === kind);
-                      if (!definition) return null;
-                      const value = integrations.find((item) => item.kind === kind);
-                      return (
-                        <div key={kind} className="flex flex-col gap-2">
-                          {def.kinds.length > 1 ? (
-                            <p className="text-xs font-medium">{definition.label}</p>
-                          ) : null}
-                          <IntegrationForm
-                            kind={kind}
-                            fields={definition.fields}
-                            value={value}
-                            onSave={onSaveIntegration}
-                            onTest={onTestIntegration}
-                            onCancel={value ? undefined : () => removeDraft(kind)}
-                          />
-                        </div>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <p className="text-xs text-muted-foreground">
-                    Belum ada {def.title.toLowerCase()}. Klik tombol <Plus className="inline size-3" />{" "}
-                    untuk menambahkan.
-                  </p>
-                )}
-              </CollapsibleSection>
-            );
-          })}
+    <Suspense fallback={<p className="text-xs text-muted-foreground">Memuat…</p>}>
+      <div className="flex w-full flex-col gap-8">
+        <div>
+          <h1 className="text-xl font-semibold">{project.name}</h1>
+          <p className="text-xs text-muted-foreground">
+            Workspace: {project.workspace_path ?? "—"}
+          </p>
         </div>
-      )}
 
-      {section === "activity" && <ActivityFeed events={activity} />}
+        {section === "workspace" && (
+          <>
+            <CollapsibleSection
+              key={project.id + (project.workspace_path ?? "none")}
+              title="Workspace"
+            >
+              <WorkspaceSection
+                path={project.workspace_path}
+                documentPath={project.document_path}
+                onSave={onUpdateWorkspace}
+              />
+            </CollapsibleSection>
+            <CollapsibleSection title="Clone repository" defaultOpen={!!project.workspace_path}>
+              <CloneSection
+                workspacePath={project.workspace_path}
+                onClone={onCloneRepository}
+              />
+            </CollapsibleSection>
+          </>
+        )}
 
-      {section === "backup" && <BackupSettings scope="project" projectId={project.id} />}
-    </div>
+        {section === "integrations" && (
+          <div className="flex flex-col gap-6">
+            {INTEGRATION_SECTIONS.map((def) => {
+              const visibleKinds = def.kinds.filter(
+                (kind) =>
+                  integrations.some((item) => item.kind === kind) || draftKinds.includes(kind),
+              );
+              const showForms = visibleKinds.length > 0;
+
+              return (
+                <CollapsibleSection
+                  key={def.id}
+                  title={def.title}
+                  defaultOpen={showForms}
+                  action={
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button size="icon" variant="ghost" aria-label={`Tambah ${def.title}`}>
+                          <Plus />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuLabel>Pilih tipe</DropdownMenuLabel>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuGroup>
+                          {def.options.map((option) =>
+                            option.kind ? (
+                              <DropdownMenuItem
+                                key={option.label}
+                                disabled={integrations.some((item) => item.kind === option.kind) ||
+                                  draftKinds.includes(option.kind)}
+                                onSelect={() => addDraft(option.kind!)}
+                              >
+                                {option.label}
+                              </DropdownMenuItem>
+                            ) : (
+                              <DropdownMenuItem key={option.label} disabled>
+                                {option.label}
+                                <span className="text-muted-foreground ml-auto text-xs">segera</span>
+                              </DropdownMenuItem>
+                            ),
+                          )}
+                        </DropdownMenuGroup>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  }
+                >
+                  {showForms ? (
+                    <div className="flex flex-col gap-6">
+                      {visibleKinds.map((kind) => {
+                        const definition = SINGLETONS.find((item) => item.kind === kind);
+                        if (!definition) return null;
+                        const value = integrations.find((item) => item.kind === kind);
+                        return (
+                          <div key={kind} className="flex flex-col gap-2">
+                            {def.kinds.length > 1 ? (
+                              <p className="text-xs font-medium">{definition.label}</p>
+                            ) : null}
+                            <IntegrationForm
+                              kind={kind}
+                              fields={definition.fields}
+                              value={value}
+                              onSave={onSaveIntegration}
+                              onTest={onTestIntegration}
+                              onCancel={value ? undefined : () => removeDraft(kind)}
+                            />
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">
+                      Belum ada {def.title.toLowerCase()}. Klik tombol{" "}
+                      <Plus className="inline size-3" /> untuk menambahkan.
+                    </p>
+                  )}
+                </CollapsibleSection>
+              );
+            })}
+          </div>
+        )}
+
+        {section === "activity" && <ActivityFeed events={activity} />}
+
+        {section === "backup" && <BackupSettings scope="project" projectId={project.id} />}
+      </div>
+    </Suspense>
   );
 }
 

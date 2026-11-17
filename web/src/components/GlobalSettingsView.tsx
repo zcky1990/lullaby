@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { Suspense, lazy, useEffect, useState, useSyncExternalStore } from "react";
 import { Contrast, Monitor, Moon, Sun, Wand2 } from "lucide-react";
 import type { GlobalSection } from "@/components/GlobalSettingsPanel";
 import {
@@ -24,18 +24,6 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { AutomationSettings } from "@/components/AutomationSettings";
-import { BackupSettings } from "@/components/BackupSettings";
-import { ChatToolsSettings } from "@/components/ChatToolsSettings";
-import { LayoutSettings } from "@/components/LayoutSettings";
-import { LlmProvidersSettings } from "@/components/LlmProvidersSettings";
-import { LspSettingsPanel } from "@/components/LspSettings";
-import { McpSettings } from "@/components/McpSettings";
-import { NotificationSettings } from "@/components/NotificationSettings";
-import { PromptsSettings } from "@/components/PromptsSettings";
-import { RolesSettings } from "@/components/RolesSettings";
-import { SkillsSettings } from "@/components/SkillsSettings";
-import { TerminalSettings } from "@/components/TerminalSettings";
 import {
   isMonacoTypeScriptServiceEnabled,
   setMonacoTypeScriptServiceEnabled,
@@ -48,6 +36,53 @@ import {
   type Role,
   type TestResult,
 } from "@/lib/api";
+
+// PERF-7: tiap section Global Settings (±130 KB total) dimuat saat section-nya
+// dibuka, bukan ikut di chunk utama.
+const AutomationSettings = lazy(() =>
+  import("@/components/AutomationSettings").then((module) => ({
+    default: module.AutomationSettings,
+  }))
+);
+const BackupSettings = lazy(() =>
+  import("@/components/BackupSettings").then((module) => ({ default: module.BackupSettings }))
+);
+const ChatToolsSettings = lazy(() =>
+  import("@/components/ChatToolsSettings").then((module) => ({
+    default: module.ChatToolsSettings,
+  }))
+);
+const LayoutSettings = lazy(() =>
+  import("@/components/LayoutSettings").then((module) => ({ default: module.LayoutSettings }))
+);
+const LlmProvidersSettings = lazy(() =>
+  import("@/components/LlmProvidersSettings").then((module) => ({
+    default: module.LlmProvidersSettings,
+  }))
+);
+const LspSettingsPanel = lazy(() =>
+  import("@/components/LspSettings").then((module) => ({ default: module.LspSettingsPanel }))
+);
+const McpSettings = lazy(() =>
+  import("@/components/McpSettings").then((module) => ({ default: module.McpSettings }))
+);
+const NotificationSettings = lazy(() =>
+  import("@/components/NotificationSettings").then((module) => ({
+    default: module.NotificationSettings,
+  }))
+);
+const PromptsSettings = lazy(() =>
+  import("@/components/PromptsSettings").then((module) => ({ default: module.PromptsSettings }))
+);
+const RolesSettings = lazy(() =>
+  import("@/components/RolesSettings").then((module) => ({ default: module.RolesSettings }))
+);
+const SkillsSettings = lazy(() =>
+  import("@/components/SkillsSettings").then((module) => ({ default: module.SkillsSettings }))
+);
+const TerminalSettings = lazy(() =>
+  import("@/components/TerminalSettings").then((module) => ({ default: module.TerminalSettings }))
+);
 
 const THEME_OPTIONS: { id: Theme; label: string; icon: typeof Sun }[] = [
   { id: "light", label: "Light", icon: Sun },
@@ -105,21 +140,7 @@ const EDITOR_THEME_OPTIONS: { id: EditorTheme; label: string; icon: typeof Sun }
   { id: "hc-light", label: "HC Light", icon: Contrast },
 ];
 
-export function GlobalSettingsView({
-  section,
-  projectId,
-  llmProviders,
-  addingProvider,
-  onAddProvider,
-  onTestLlm,
-  onSaveLlm,
-  onDeleteLlm,
-  roles,
-  addingRole,
-  onAddRole,
-  onSaveRole,
-  onDeleteRole,
-}: {
+interface Props {
   section: GlobalSection;
   projectId: string | null;
   llmProviders: LlmProvider[];
@@ -138,7 +159,31 @@ export function GlobalSettingsView({
     providerId?: string;
   }) => Promise<void>;
   onDeleteRole: (id: string) => Promise<void>;
-}) {
+}
+
+export function GlobalSettingsView(props: Props) {
+  return (
+    <Suspense fallback={<p className="text-xs text-muted-foreground">Memuat…</p>}>
+      <GlobalSettingsSections {...props} />
+    </Suspense>
+  );
+}
+
+function GlobalSettingsSections({
+  section,
+  projectId,
+  llmProviders,
+  addingProvider,
+  onAddProvider,
+  onTestLlm,
+  onSaveLlm,
+  onDeleteLlm,
+  roles,
+  addingRole,
+  onAddRole,
+  onSaveRole,
+  onDeleteRole,
+}: Props) {
   if (section === "appearance") {
     return (
       <div className="flex flex-col gap-8">

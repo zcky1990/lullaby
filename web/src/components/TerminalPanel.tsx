@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react";
 import {
   ChevronDown,
   Eraser,
@@ -8,11 +8,7 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import {
-  TerminalSession,
-  type TerminalHandle,
-  type TerminalStatus,
-} from "@/components/TerminalSession";
+import type { TerminalHandle, TerminalStatus } from "@/components/TerminalSession";
 import { Button } from "@/components/ui/button";
 import {
   Empty,
@@ -32,6 +28,12 @@ import {
 import { Spinner } from "@/components/ui/spinner";
 import { api, type TerminalShell } from "@/lib/api";
 import { cn } from "@/lib/utils";
+
+// PERF-7: xterm.js diangkut TerminalSession, jadi modulnya dimuat saat panel
+// terminal pertama kali dipakai dan bukan ikut di chunk utama.
+const TerminalSession = lazy(() =>
+  import("@/components/TerminalSession").then((module) => ({ default: module.TerminalSession }))
+);
 
 const HEIGHT_KEY = "rnd.terminalHeight:v1";
 const MIN_HEIGHT = 140;
@@ -398,17 +400,19 @@ export function TerminalPanel({ projectId, open, onClose }: Props) {
                       </span>
                     </div>
                   ) : null}
-                  <TerminalSession
-                    projectId={projectId}
-                    shell={instance.shell}
-                    active={open && selected}
-                    onReady={(handle) => handlesRef.current.set(instance.id, handle)}
-                    onStatus={(next, detail) =>
-                      setStatuses((current) => ({
-                        ...current,
-                        [instance.id]: { status: next, detail },
-                      }))}
-                  />
+                  <Suspense fallback={<div className="h-full w-full" />}>
+                    <TerminalSession
+                      projectId={projectId}
+                      shell={instance.shell}
+                      active={open && selected}
+                      onReady={(handle) => handlesRef.current.set(instance.id, handle)}
+                      onStatus={(next, detail) =>
+                        setStatuses((current) => ({
+                          ...current,
+                          [instance.id]: { status: next, detail },
+                        }))}
+                    />
+                  </Suspense>
                 </div>
               );
             })}
