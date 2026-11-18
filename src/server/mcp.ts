@@ -1,5 +1,5 @@
 import type { McpServerInput } from "../config/schema.ts";
-import { resolveExecutable } from "./lsp.ts";
+import { resolveExecutable, spawnEnvForCommand } from "./lsp.ts";
 
 export interface McpTool {
   name: string;
@@ -101,10 +101,12 @@ async function withStdioSession<T>(
     );
   }
 
+  // npx resolves via login shell / ~/.local/bin, tapi child tetap butuh `node`
+  // di PATH — Dock PATH sering minimal → exit 127 "node: No such file or directory".
+  const env = await spawnEnvForCommand(executable, server.env);
   const command = new Deno.Command(executable, {
     args: server.args ?? [],
-    // Sama seperti LSP: merge agar PATH/HOME tetap ada untuk npx/node.
-    env: { ...Deno.env.toObject(), ...(server.env ?? {}) },
+    env,
     stdin: "piped",
     stdout: "piped",
     stderr: "piped",

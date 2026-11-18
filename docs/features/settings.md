@@ -57,7 +57,10 @@ Catatan untuk transport `stdio`:
   `~/.local/bin`, `~/.cargo/bin`, `~/go/bin`, lalu fallback login shell (`command -v`). Bila tetap
   tidak ketemu, isi path absolut di kolom Command — app yang dibuka dari Finder/Dock mewarisi `PATH`
   minimal.
-- Env child = env proses + override dari kolom Env (PATH/HOME tetap ada untuk `npx`/`node`).
+- Env child = env proses + override dari kolom Env, dengan **PATH diperkaya**: direktori
+  binary yang di-resolve, direktori `node` (jika ketemu), plus `~/.local/bin` /
+  Homebrew / asdf shims. Tanpa ini, `npx` bisa start lalu gagal `node: No such file or
+  directory` (exit 127) saat app dibuka dari Dock.
 - Handshake `initialize` timeout **60s** (cold `npx -y` sering >15s). `tools/list` / call tetap
   15s / 60s. `stderr` ikut dibaca; proses mati sebelum handshake →
   `proses berhenti sebelum handshake MCP (exit N) — <stderr>`.

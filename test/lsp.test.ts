@@ -1,4 +1,5 @@
 import { deepEqual, throws } from "node:assert/strict";
+import { dirname } from "node:path";
 import { LspSettingsInput } from "../src/config/schema.ts";
 import {
   encodeLspFrame,
@@ -7,6 +8,7 @@ import {
   matchLspServer,
   MAX_FRAME_BYTES,
   resolveExecutable,
+  spawnEnvForCommand,
 } from "../src/server/lsp.ts";
 
 const encoder = new TextEncoder();
@@ -102,6 +104,19 @@ Deno.test("resolveExecutable accepts an absolute path", async () => {
   const deno = Deno.execPath();
   deepEqual(await resolveExecutable(deno), deno);
   deepEqual(await resolveExecutable("/definitely/not/a/real/command"), null);
+});
+
+Deno.test("spawnEnvForCommand prepends binary dir and keeps node discoverable", async () => {
+  const deno = Deno.execPath();
+  const env = await spawnEnvForCommand(deno, { FOO: "bar" });
+  deepEqual(env.FOO, "bar");
+  const sep = Deno.build.os === "windows" ? ";" : ":";
+  const dirs = (env.PATH ?? "").split(sep);
+  deepEqual(dirs[0], dirname(deno));
+  const node = await resolveExecutable("node");
+  if (node) {
+    deepEqual(dirs.includes(dirname(node)), true);
+  }
 });
 
 Deno.test("LSP frame decoder ignores headers without content-length", () => {

@@ -1,4 +1,4 @@
-import { isAbsolute, join } from "node:path";
+import { dirname, isAbsolute, join } from "node:path";
 import { type LspServerInput, LspSettingsInput } from "../config/schema.ts";
 import { log } from "../core/logger.ts";
 import { getAppSetting, setAppSetting } from "../db/db.ts";
@@ -270,6 +270,60 @@ export async function resolveExecutable(command: string): Promise<string | null>
   if (!found) found = await resolveViaLoginShell(key);
   resolveCache.set(key, { path: found, at: Date.now() });
   return found;
+}
+
+function pathSeparator(): string {
+  return Deno.build.os === "windows" ? ";" : ":";
+}
+
+/** Extra bin dirs beyond process PATH (Dock/Finder often has a minimal PATH). */
+export function extraToolPathDirs(): string[] {
+  const home = Deno.env.get("HOME") ?? Deno.env.get("USERPROFILE") ?? "";
+  const dirs = [
+    ...(Deno.build.os === "darwin"
+      ? ["/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin"]
+      : Deno.build.os === "linux"
+      ? ["/usr/local/bin", "/usr/bin", "/bin"]
+      : []),
+  ];
+  if (home) {
+    dirs.push(
+      join(home, ".local", "bin"),
+      join(home, ".asdf", "shims"),
+      join(home, ".nvm", "current", "bin"),
+      join(home, ".cargo", "bin"),
+      join(home, "go", "bin"),
+    );
+  }
+  return dirs.filter(Boolean);
+}
+
+/**
+ * Env for spawning CLI tools (`npx`, language servers, …). Prepends the resolved
+ * binary's directory (and `node` when present) so wrappers like `npx` can find
+ * `node` even when the app inherited a minimal Dock PATH.
+ */
+export async function spawnEnvForCommand(
+  executable: string,
+  extraEnv?: Record<string, string>,
+): Promise<Record<string, string>> {
+  const env: Record<string, string> = { ...Deno.env.toObject(), ...(extraEnv ?? {}) };
+  const sep = pathSeparator();
+  const dirs: string[] = [];
+  const add = (dir: string | undefined | null) => {
+    const value = dir?.trim();
+    if (!value || dirs.includes(value)) return;
+    dirs.push(value);
+  };
+
+  add(dirname(executable));
+  const node = await resolveExecutable("node");
+  if (node) add(dirname(node));
+  for (const dir of extraToolPathDirs()) add(dir);
+  for (const dir of (env.PATH ?? "").split(sep)) add(dir);
+
+  env.PATH = dirs.join(sep);
+  return env;
 }
 
 export interface LspProbeResult {
