@@ -1,4 +1,5 @@
 import type { McpServerInput } from "../config/schema.ts";
+import { resolveExecutable } from "./lsp.ts";
 
 export interface McpTool {
   name: string;
@@ -10,6 +11,7 @@ const LIST_TIMEOUT_MS = 15_000;
 const CALL_TIMEOUT_MS = 60_000;
 const MAX_TOOLS = 200;
 const MAX_RESULT_CHARS = 60_000;
+const MAX_STDERR_CHARS = 2000;
 
 const CLIENT_INFO = { name: "Lullaby", version: "0.1.0" };
 const PROTOCOL_VERSION = "2024-11-05";
@@ -75,12 +77,29 @@ export function formatMcpToolResult(result: unknown): string {
 
 type RpcFn = (method: string, params: unknown, timeoutMs?: number) => Promise<unknown>;
 
+function stderrDetail(tail: string): string {
+  const text = tail.replace(/\s+/g, " ").trim();
+  return text ? text.slice(0, 400) : "";
+}
+
 async function withStdioSession<T>(
   server: McpServerInput,
   fn: (rpc: RpcFn) => Promise<T>,
 ): Promise<T> {
   if (!server.command) throw new Error("Command MCP belum diisi.");
-  const command = new Deno.Command(server.command, {
+
+  // App yang dijalankan dari Finder/Dock mewarisi PATH minimal, sehingga CLI
+  // seperti `figcraft-cli` (homebrew, ~/.local/bin, nvm, dst.) tidak ketemu bila
+  // di-spawn apa adanya. Resolve dulu seperti LSP.
+  const executable = await resolveExecutable(server.command);
+  if (!executable) {
+    throw new Error(
+      `Command "${server.command}" tidak ditemukan di PATH. Isi path absolut ` +
+        `(mis. /opt/homebrew/bin/${server.command}) lalu simpan ulang server-nya.`,
+    );
+  }
+
+  const command = new Deno.Command(executable, {
     args: server.args ?? [],
     env: server.env ?? {},
     stdin: "piped",
@@ -123,6 +142,31 @@ async function withStdioSession<T>(
     }
   })();
 
+  // stderr harus terus dibaca: pipe penuh memblokir child (CLI yang menulis log),
+  // dan isinya dipakai untuk menjelaskan kegagalan start.
+  let stderrTail = "";
+  const stderrPump = (async () => {
+    const stderrReader = child.stderr.getReader();
+    const stderrDecoder = new TextDecoder();
+    try {
+      while (true) {
+        const { value, done } = await stderrReader.read();
+        if (done) break;
+        stderrTail = (stderrTail + stderrDecoder.decode(value, { stream: true }))
+          .slice(-MAX_STDERR_CHARS);
+      }
+    } catch {
+      // stream closed
+    }
+  })();
+
+  let exitCode: number | null = null;
+  const exitPromise = child.status.then((status) => {
+    exitCode = status.code;
+  }).catch(() => {
+    exitCode = null;
+  });
+
   let nextId = 1;
   const rpc: RpcFn = (method, params, timeoutMs = LIST_TIMEOUT_MS) => {
     const id = nextId++;
@@ -149,11 +193,30 @@ async function withStdioSession<T>(
   };
 
   try {
-    await rpc("initialize", {
+    let rejectStart: (error: Error) => void = () => {};
+    const startFailed = new Promise<never>((_resolve, reject) => {
+      rejectStart = reject;
+    });
+    // Guard: hindari unhandled rejection bila handshake sukses lebih dulu.
+    startFailed.catch(() => {});
+    void exitPromise.then(() => {
+      const detail = stderrDetail(stderrTail);
+      rejectStart(
+        new Error(
+          `${server.command}: proses berhenti sebelum handshake MCP ` +
+            `(exit ${exitCode ?? "?"})${detail ? ` — ${detail}` : ""}`,
+        ),
+      );
+    });
+
+    const initialize = rpc("initialize", {
       protocolVersion: PROTOCOL_VERSION,
       capabilities: {},
       clientInfo: CLIENT_INFO,
     });
+    initialize.catch(() => {});
+    await Promise.race([initialize, startFailed]);
+
     await writer.write(
       encoder.encode(
         JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized" }) + "\n",
@@ -169,6 +232,7 @@ async function withStdioSession<T>(
       // already exited
     }
     await pump.catch(() => {});
+    await stderrPump.catch(() => {});
   }
 }
 

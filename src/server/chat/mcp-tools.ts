@@ -68,11 +68,20 @@ async function readMcpServers(): Promise<{
     const servers: McpServerInput[] = [];
     for (const item of decrypted) {
       const result = McpServerInput.safeParse(item);
-      if (result.success) servers.push(result.data);
+      if (result.success) {
+        servers.push(result.data);
+      } else {
+        // Jangan diam: server yang tidak lolos schema berarti tools-nya hilang
+        // dari chat tanpa penjelasan apa pun.
+        log.warn("mcp server dropped by schema", {
+          server: (item as { name?: string } | null)?.name,
+          issues: result.error.issues.map((issue) => `${issue.path.join(".")}: ${issue.message}`),
+        });
+      }
     }
     return { enabled, servers, disabledTools };
   } catch (error) {
-    log.debug("corrupt mcp_servers for chat", { error: String(error) });
+    log.warn("corrupt mcp_servers for chat", { error: String(error) });
     return { enabled, servers: [], disabledTools };
   }
 }
@@ -109,8 +118,11 @@ export async function loadMcpChatTools(): Promise<McpChatTools> {
         const tools = await listMcpTools(server);
         return { server, tools, error: null as string | null };
       } catch (error) {
-        log.debug("mcp list for chat failed", {
+        // warn (bukan debug): server yang gagal start/listing adalah penyebab
+        // paling umum "tool MCP tidak muncul" dan harus terlihat di log.
+        log.warn("mcp list for chat failed", {
           server: server.name,
+          command: server.command ?? server.url,
           error: String(error),
         });
         return { server, tools: [] as McpTool[], error: (error as Error).message };
