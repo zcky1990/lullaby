@@ -200,6 +200,15 @@ Deno.test("listSkills includes builtin code-review", async () => {
   equal(review?.path.startsWith(builtinSkillsDir()), true);
 });
 
+Deno.test("listSkills includes builtin create-workflow", async () => {
+  const skills = await listSkills(null, null);
+  const skill = skills.find((s) => s.name === "create-workflow");
+  equal(Boolean(skill), true);
+  equal(skill?.source, "builtin");
+  equal(skill?.path.startsWith(builtinSkillsDir()), true);
+  equal(Boolean(skill?.description.includes("workflow")), true);
+});
+
 Deno.test("runAutoskills rejects missing workspace path", async () => {
   const missing = await runAutoskills("/tmp/rnd-workflow-no-such-workspace-dir");
   equal(missing.ok, false);
