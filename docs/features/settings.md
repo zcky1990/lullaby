@@ -57,11 +57,29 @@ Catatan untuk transport `stdio`:
   `~/.local/bin`, `~/.cargo/bin`, `~/go/bin`, lalu fallback login shell (`command -v`). Bila tetap
   tidak ketemu, isi path absolut di kolom Command — app yang dibuka dari Finder/Dock mewarisi `PATH`
   minimal.
-- `stderr` server ikut dibaca (pipe penuh tidak memblokir proses) dan dipakai di pesan error;
-  server yang mati sebelum handshake dilaporkan sebagai
+- Env child = env proses + override dari kolom Env (PATH/HOME tetap ada untuk `npx`/`node`).
+- Handshake `initialize` timeout **60s** (cold `npx -y` sering >15s). `tools/list` / call tetap
+  15s / 60s. `stderr` ikut dibaca; proses mati sebelum handshake →
   `proses berhenti sebelum handshake MCP (exit N) — <stderr>`.
 - Setelah mengubah konfigurasi, klik **Tools** pada kartu server untuk refresh — `tools/list`
   di-cache 60 detik.
+
+Contoh **Playwright MCP** (bukan config Cursor `mcp.json` — harus di Global Settings → MCP):
+
+```json
+{
+  "mcpServers": {
+    "playwright": {
+      "command": "npx",
+      "args": ["-y", "@playwright/mcp@latest"]
+    }
+  }
+}
+```
+
+Prasyarat: Node/`npx` di PATH (atau path absolut ke `npx`), jaringan untuk unduh paket pertama kali,
+dan browser Playwright terpasang (`npx playwright install`). Tanpa `-y`, `npx` bisa menunggu prompt
+dan hang. Paket yang benar adalah `@playwright/mcp`, bukan `playwright` saja.
 
 ## Preferensi UI
 

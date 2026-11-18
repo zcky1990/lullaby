@@ -8,6 +8,8 @@ export interface McpTool {
 }
 
 const LIST_TIMEOUT_MS = 15_000;
+/** Cold `npx -y @pkg` often exceeds 15s on first download. */
+const INIT_TIMEOUT_MS = 60_000;
 const CALL_TIMEOUT_MS = 60_000;
 const MAX_TOOLS = 200;
 const MAX_RESULT_CHARS = 60_000;
@@ -101,7 +103,8 @@ async function withStdioSession<T>(
 
   const command = new Deno.Command(executable, {
     args: server.args ?? [],
-    env: server.env ?? {},
+    // Sama seperti LSP: merge agar PATH/HOME tetap ada untuk npx/node.
+    env: { ...Deno.env.toObject(), ...(server.env ?? {}) },
     stdin: "piped",
     stdout: "piped",
     stderr: "piped",
@@ -213,7 +216,7 @@ async function withStdioSession<T>(
       protocolVersion: PROTOCOL_VERSION,
       capabilities: {},
       clientInfo: CLIENT_INFO,
-    });
+    }, INIT_TIMEOUT_MS);
     initialize.catch(() => {});
     await Promise.race([initialize, startFailed]);
 

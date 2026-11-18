@@ -172,7 +172,7 @@ sesi kosong menghidrasi via `Agent.messages.list` / `listRuns` + `conversation()
 ## Skills
 
 Discovery: workspace `.agents/skills` > project skills (auto) > global skills > builtin
-(`src/skills/builtin`).\
+(`src/skills/builtin` → di-embed ke `src/skills/builtin.generated.ts` saat `deno task assets`).\
 Composer: `/skill-name` menyuntikkan body ke system prompt.\
 Setelah Build sukses yang memakai tools, `skill-learn.ts` dapat menulis skill project.
 

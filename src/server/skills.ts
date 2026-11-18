@@ -2,6 +2,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { appDataDir } from "../core/paths.ts";
 import { getAppSetting, setAppSetting } from "../db/db.ts";
+import { BUILTIN_SKILLS } from "../skills/builtin.generated.ts";
 
 export type SkillSource = "global" | "workspace" | "project" | "builtin";
 
@@ -21,6 +22,7 @@ interface ParsedSkill {
 
 const MAX_SKILL_CHARS = 20_000;
 const MAX_DESCRIPTION = 240;
+export const BUILTIN_SKILL_PREFIX = "builtin://";
 
 const DEFAULT_INTEGRATION_SKILLS = [
   "docmost-api",
@@ -55,36 +57,42 @@ export function projectSkillsDir(slug: string): string {
   return join(appDataDir(), slug, "skills");
 }
 
+function embeddedSkillByFolder(folder: string) {
+  return BUILTIN_SKILLS.find((skill) => skill.folder === folder);
+}
+
+function embeddedSkillByName(name: string) {
+  const key = name.trim().toLowerCase();
+  return BUILTIN_SKILLS.find((skill) => skill.name === key);
+}
+
 export async function installDefaultSkills(): Promise<string[]> {
   if ((await getAppSetting("skills_defaults_installed")) === "true") return [];
 
-  const sourceRoot = builtinSkillsDir();
   const targetRoot = globalSkillsDir();
   const installed: string[] = [];
-  let scanned = false;
 
   try {
     await Deno.mkdir(targetRoot, { recursive: true });
-    for await (const entry of Deno.readDir(sourceRoot)) {
-      scanned = true;
-      if (!entry.isDirectory || !DEFAULT_INTEGRATION_SKILLS.includes(entry.name)) continue;
-      const text = await Deno.readTextFile(join(sourceRoot, entry.name, "SKILL.md")).catch(
-        () => null,
-      );
-      if (!text) continue;
-      const targetDir = join(targetRoot, entry.name);
+    for (const folder of DEFAULT_INTEGRATION_SKILLS) {
+      const embedded = embeddedSkillByFolder(folder);
+      if (!embedded) continue;
+      const targetDir = join(targetRoot, folder);
       const target = join(targetDir, "SKILL.md");
       const exists = await Deno.stat(target).then(() => true).catch(() => false);
       if (exists) continue;
       await Deno.mkdir(targetDir, { recursive: true });
-      await Deno.writeTextFile(target, text);
-      installed.push(entry.name);
+      await Deno.writeTextFile(target, embedded.skillMd);
+      for (const [name, text] of Object.entries(embedded.files)) {
+        if (name === "SKILL.md") continue;
+        await Deno.writeTextFile(join(targetDir, name), text);
+      }
+      installed.push(folder);
     }
   } catch {
     return [];
   }
 
-  if (!scanned) return [];
   await setAppSetting("skills_defaults_installed", "true");
   return installed;
 }
@@ -176,6 +184,21 @@ async function scanSkills(
   }
 }
 
+function appendEmbeddedBuiltins(seen: Set<string>, out: SkillInfo[]): void {
+  for (const skill of BUILTIN_SKILLS) {
+    if (!skill.name || seen.has(skill.name)) continue;
+    seen.add(skill.name);
+    const parsed = parseSkillFile(skill.skillMd, skill.folder);
+    out.push({
+      id: `builtin:${parsed.name}`,
+      name: parsed.name,
+      description: parsed.description || skill.description.slice(0, MAX_DESCRIPTION),
+      source: "builtin",
+      path: `${BUILTIN_SKILL_PREFIX}${skill.folder}/SKILL.md`,
+    });
+  }
+}
+
 export async function listSkills(
   workspace: string | null,
   projectSlugName?: string | null,
@@ -187,7 +210,7 @@ export async function listSkills(
     await scanSkills(projectSkillsDir(projectSlugName), "project", seen, out);
   }
   await scanSkills(globalSkillsDir(), "global", seen, out);
-  await scanSkills(builtinSkillsDir(), "builtin", seen, out);
+  appendEmbeddedBuiltins(seen, out);
   return out.sort((a, b) => a.name.localeCompare(b.name));
 }
 
@@ -218,6 +241,13 @@ export async function loadEnabledSkills(
 }
 
 export async function readSkillBody(skill: SkillInfo): Promise<string> {
+  if (skill.path.startsWith(BUILTIN_SKILL_PREFIX)) {
+    const folder = skill.path.slice(BUILTIN_SKILL_PREFIX.length).replace(/\/SKILL\.md$/, "");
+    const embedded = embeddedSkillByFolder(folder) ?? embeddedSkillByName(skill.name);
+    if (!embedded) throw new Error(`Builtin skill tidak ditemukan: ${skill.name}`);
+    const { body } = parseFrontmatter(embedded.skillMd);
+    return body.slice(0, MAX_SKILL_CHARS);
+  }
   const text = await Deno.readTextFile(skill.path);
   const { body } = parseFrontmatter(text);
   return body.slice(0, MAX_SKILL_CHARS);

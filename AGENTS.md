@@ -78,8 +78,10 @@ finishing a change.
   sidebar uses the grip in `TicketKanban` (`web/src/lib/chat-drag.ts`).
 - **Skills**: `src/server/skills.ts` discovers `SKILL.md` folders (frontmatter `name`/`description`)
   from `<workspace>/.agents/skills` (highest), `appDataDir()/<project-slug>/skills` (auto from Build
-  chats), `appDataDir()/skills` (global), and `src/skills/builtin` (bundled, lowest priority). On
-  first launch `installDefaultSkills()` copies `docmost-api`, `jira-api`, `confluence-api`, and
+  chats), `appDataDir()/skills` (global), and embedded builtins from `src/skills/builtin.generated.ts`
+  (built by `scripts/embed-builtin-skills.ts` from `src/skills/builtin/`, lowest priority — required
+  so packaged desktop binaries still expose `/create-workflow`, `/code-review`, etc.). On first
+  launch `installDefaultSkills()` copies `docmost-api`, `jira-api`, `confluence-api`, and
   `clickup-api` into the global skills dir (guarded by `app_settings.skills_defaults_installed`).
   Chat injects the skill list into the system prompt and exposes a read-only `use_skill` tool
   (progressive disclosure; allowed in Plan mode). Interactive chat (non-Cursor) also exposes

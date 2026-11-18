@@ -58,9 +58,9 @@ interface CursorServerJson {
 
 const ADD_TEMPLATE = `{
   "mcpServers": {
-    "server-baru": {
+    "playwright": {
       "command": "npx",
-      "args": ["-y", "nama-paket-mcp"]
+      "args": ["-y", "@playwright/mcp@latest"]
     }
   }
 }`;

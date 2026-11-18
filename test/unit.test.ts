@@ -66,7 +66,6 @@ import type { Run } from "../src/server/chat/types.ts";
 import { runAutoskills } from "../src/server/autoskills.ts";
 import { defaultCodeReviewUserMessage } from "../src/server/code-review.ts";
 import {
-  builtinSkillsDir,
   listSkills,
   parseSkillFile,
   projectSkillsDir,
@@ -197,7 +196,7 @@ Deno.test("listSkills includes builtin code-review", async () => {
   const review = skills.find((skill) => skill.name === "code-review");
   equal(Boolean(review), true);
   equal(review?.source, "builtin");
-  equal(review?.path.startsWith(builtinSkillsDir()), true);
+  equal(review?.path.startsWith("builtin://"), true);
 });
 
 Deno.test("listSkills includes builtin create-workflow", async () => {
@@ -205,7 +204,7 @@ Deno.test("listSkills includes builtin create-workflow", async () => {
   const skill = skills.find((s) => s.name === "create-workflow");
   equal(Boolean(skill), true);
   equal(skill?.source, "builtin");
-  equal(skill?.path.startsWith(builtinSkillsDir()), true);
+  equal(skill?.path.startsWith("builtin://"), true);
   equal(Boolean(skill?.description.includes("workflow")), true);
 });
 
