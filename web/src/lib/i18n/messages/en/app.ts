@@ -3,6 +3,7 @@ import type { MessageDict } from "../../types";
 export const app: MessageDict = {
   "app.tab.workspace": "Workspace",
   "app.tab.ticket": "Ticket",
+  "app.tab.ticketBoard": "Ticket Board",
   "app.tab.settings": "Project Settings",
   "app.tab.global": "Global Settings",
   "app.tab.document": "Document",
@@ -24,4 +25,31 @@ export const app: MessageDict = {
   "app.workspaceOverview.startHereAction": "Settings → Workspace",
   "app.workspaceOverview.startHereSuffix": " so the Explorer menu becomes active.",
   "app.workspaceOverview.openSettings": "Open Settings",
+
+  // Empty state
+  "app.empty.title": "Empty",
+  "app.empty.pickProject": "Pick or create a project in the left panel.",
+  "app.empty.review": "No changes waiting for review.",
+  "app.empty.openMenu": "Open a menu from the activity bar on the left.",
+
+  // Dynamic tabs
+  "app.review.changesTitle": "Review changes ({count})",
+
+  // Error messages in App.tsx
+  "app.document.pickProjectFirst": "Pick a project first.",
+  "app.git.noProject": "No project yet.",
+
+  // FileTab
+  "app.fileTab.binary": "Binary file (not shown).",
+  "app.fileTab.unsaved": "Not saved",
+  "app.fileTab.code": "Code",
+  "app.fileTab.preview": "Preview",
+  "app.fileTab.save": "Save",
+  "app.fileTab.emptyMarkdown": "_(empty)_",
+
+  // LSP status badge
+  "app.lsp.connecting": "Connecting…",
+  "app.lsp.ready": "Ready",
+  "app.lsp.error": "Error",
+  "app.lsp.off": "Off",
 };
