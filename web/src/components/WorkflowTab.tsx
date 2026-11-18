@@ -191,11 +191,13 @@ export function WorkflowTab({
     if (!selectedRun || selectedRun.status !== "running" || !projectId) return;
     const timer = setInterval(() => {
       if (!selectedRunId) return;
-      void loadRun(selectedRunId).then(async () => {
+      void (async () => {
         const refreshed = await refreshRuns();
         const latest = refreshed?.find((run) => run.id === selectedRunId);
+        // Re-load detail so `continuable` (and steps) stay accurate after finish.
+        await loadRun(selectedRunId);
         if (latest && latest.status !== "running") onSaved();
-      });
+      })();
     }, 1000);
     return () => clearInterval(timer);
   }, [

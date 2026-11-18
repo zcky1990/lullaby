@@ -290,7 +290,13 @@ export async function listWorkflowRunsHandler(
   if (!project) return json({ error: "project_not_found" }, 404);
   const safeLimit = Number.isFinite(limit) ? limit : 50;
   const runs = await listWorkflowRuns(projectId, slug ?? undefined, safeLimit);
-  return json({ runs: runs.map((row) => serializeRun(row)) });
+  const keepHours = await readWorkflowCacheKeepHours();
+  const serialized = await Promise.all(runs.map(async (row) => {
+    const continuable = (row.status === "failed" || row.status === "canceled") &&
+      await hasContinuableCache(project, row.workflow_slug, row.id, keepHours);
+    return serializeRun(row, continuable);
+  }));
+  return json({ runs: serialized });
 }
 
 export async function getWorkflowRunHandler(
