@@ -1958,7 +1958,11 @@ export async function handleRequest(req: Request): Promise<Response> {
       /^\/api\/projects\/([^/]+)\/workflow-runs\/([^/]+)\/continue$/,
     );
     if (workflowRunContinue && method === "POST") {
-      return await continueWorkflowRunHandler(workflowRunContinue[1], workflowRunContinue[2]);
+      return await continueWorkflowRunHandler(
+        workflowRunContinue[1],
+        workflowRunContinue[2],
+        req,
+      );
     }
 
     const workflowRunItem = pathname.match(

@@ -35,6 +35,8 @@ export const workflow: MessageDict = {
   "workflow.tab.run": "Jalankan",
   "workflow.tab.cancelRun": "Batalkan run",
   "workflow.tab.continueRun": "Lanjutkan dari gagal (pakai output cache)",
+  "workflow.tab.playFromStep": "Ulang dari {step}",
+  "workflow.tab.playFromStepAria": "Jalankan ulang workflow dari step {step}",
 
   // WorkflowTab — daftar run
   "workflow.runs.title": "Runs",

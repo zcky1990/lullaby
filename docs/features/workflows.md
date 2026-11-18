@@ -50,9 +50,12 @@ Jika run berstatus `failed` / `canceled`, output step yang sudah `success` disim
 `<workspace>/.workflows/cache/<slug>/<runId>.json` agar bisa dilanjutkan tanpa mengulang
 step sukses.
 
-- UI: tombol **Continue** di toolbar Workflow tab (hanya jika cache masih ada).
-- API: `POST /api/projects/:id/workflow-runs/:runId/continue` → run **baru** (`trigger:
-  continue`) yang me-seed output dari cache lalu menjalankan ulang step gagal + dependent.
+- UI: tombol **Continue** di toolbar Workflow tab (hanya jika cache masih ada), dan tombol
+  **Play** per step di sidebar untuk mengulang dari step itu (cache success di ancestor /
+  cabang lain tetap dipakai).
+- API: `POST /api/projects/:id/workflow-runs/:runId/continue` dengan body opsional
+  `{ "fromStep": "<step-id>" }` → run **baru** (`trigger: continue`) yang me-seed output dari
+  cache lalu menjalankan ulang frontier gagal (atau dari `fromStep` + descendant-nya).
 - Retensi: Global Settings → **Workflow** → `cacheKeepHours` (1–168, default 72). File kedaluwarsa
   di-prune saat bootstrap dan sebelum continue. Setting: `GET/PUT /api/settings/workflow`.
 

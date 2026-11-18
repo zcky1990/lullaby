@@ -255,7 +255,7 @@ export function WorkflowTab({
     }
   };
 
-  const continueRun = async () => {
+  const continueRun = async (fromStep?: string) => {
     if (!projectId || !selectedRunId || running || selectedRun?.status === "running") {
       return;
     }
@@ -263,7 +263,11 @@ export function WorkflowTab({
     setRunning(true);
     setError(undefined);
     try {
-      const { runId } = await api.continueWorkflowRun(projectId, selectedRunId);
+      const { runId } = await api.continueWorkflowRun(
+        projectId,
+        selectedRunId,
+        fromStep ? { fromStep } : undefined,
+      );
       await refreshRuns();
       await loadRun(runId);
       onSaved();
@@ -807,12 +811,10 @@ export function WorkflowTab({
             command: stepCommand(step),
             log: "",
           })) ?? []).map((step) => (
-            <button
+            <div
               key={step.stepId}
-              type="button"
-              onClick={() => setSelectedStep(step.stepId)}
               className={cn(
-                "flex items-center gap-2 border-b px-3 py-1.5 text-left text-[11px] hover:bg-accent",
+                "flex items-center gap-1 border-b px-2 py-1 text-[11px] hover:bg-accent",
                 step.stepId === selectedStep && "bg-accent",
                 stepBorderClass(step.status).replace(
                   "border-",
@@ -820,16 +822,36 @@ export function WorkflowTab({
                 ),
               )}
             >
-              <span className="min-w-0 flex-1 truncate font-mono">
+              <button
+                type="button"
+                onClick={() => setSelectedStep(step.stepId)}
+                className="min-w-0 flex-1 truncate px-1 py-0.5 text-left font-mono"
+              >
                 {step.stepId}
-              </span>
+              </button>
+              {selectedRun?.continuable
+                ? (
+                  <Button
+                    type="button"
+                    size="icon"
+                    variant="ghost"
+                    className="size-6 shrink-0"
+                    disabled={running || selectedRun?.status === "running" || !!summary?.error}
+                    title={t("workflow.tab.playFromStep", { step: step.stepId })}
+                    aria-label={t("workflow.tab.playFromStepAria", { step: step.stepId })}
+                    onClick={() => void continueRun(step.stepId)}
+                  >
+                    <Play className="size-3" />
+                  </Button>
+                )
+                : null}
               <Badge
                 variant={stepBadgeVariant(step.status)}
-                className="h-5 px-1.5 text-[10px]"
+                className="h-5 shrink-0 px-1.5 text-[10px]"
               >
                 {step.status}
               </Badge>
-            </button>
+            </div>
           ))}
         </aside>
       </div>

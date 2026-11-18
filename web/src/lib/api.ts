@@ -1088,10 +1088,14 @@ export const api = {
       `/api/projects/${projectId}/workflow-runs/${encodeURIComponent(runId)}/cancel`,
       { method: "POST" },
     ),
-  continueWorkflowRun: (projectId: string, runId: string) =>
-    request<{ runId: string; parentRunId: string }>(
+  continueWorkflowRun: (
+    projectId: string,
+    runId: string,
+    payload?: { fromStep?: string },
+  ) =>
+    request<{ runId: string; parentRunId: string; fromStep: string | null }>(
       `/api/projects/${projectId}/workflow-runs/${encodeURIComponent(runId)}/continue`,
-      { method: "POST" },
+      jsonInit("POST", payload ?? {}),
     ),
   deleteWorkflowRun: (projectId: string, runId: string) =>
     request<{ ok: boolean }>(

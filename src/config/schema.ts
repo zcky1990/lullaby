@@ -152,6 +152,11 @@ export const WorkflowRunInput = z.object({
 });
 export type WorkflowRunInput = z.infer<typeof WorkflowRunInput>;
 
+export const WorkflowContinueInput = z.object({
+  fromStep: z.string().trim().min(1).max(120).optional(),
+});
+export type WorkflowContinueInput = z.infer<typeof WorkflowContinueInput>;
+
 export const WorkflowSchedulePatchInput = z.object({
   enabled: z.boolean(),
 });

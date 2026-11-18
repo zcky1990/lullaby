@@ -29,7 +29,7 @@ import {
   resolveWorkflowLlmSelection,
 } from "./params.ts";
 import { resolveWorkflowDir, type WorkflowProject } from "./store.ts";
-import type { WorkflowDefinition, WorkflowStep } from "./types.ts";
+import { WorkflowError, type WorkflowDefinition, type WorkflowStep } from "./types.ts";
 
 const MAX_LOG = 200_000;
 const MAX_PARALLEL = 8;
@@ -148,6 +148,84 @@ export function continueSeedFromCache(cache: WorkflowRunCache): WorkflowContinue
       Object.entries(cache.namedByStep).map(([key, value]) => [key, { ...value }]),
     ),
     successStepIds: [...cache.successStepIds],
+  };
+}
+
+/** Step id + every step that transitively depends on it. */
+export function collectDescendantStepIds(
+  steps: WorkflowStep[],
+  rootId: string,
+): Set<string> {
+  const children = new Map<string, string[]>();
+  for (const step of steps) {
+    for (const dep of step.depends) {
+      const list = children.get(dep) ?? [];
+      list.push(step.id);
+      children.set(dep, list);
+    }
+  }
+  const out = new Set<string>([rootId]);
+  const stack = [rootId];
+  while (stack.length) {
+    const id = stack.pop()!;
+    for (const child of children.get(id) ?? []) {
+      if (out.has(child)) continue;
+      out.add(child);
+      stack.push(child);
+    }
+  }
+  return out;
+}
+
+/**
+ * Drop `fromStep` and its descendants from a continue seed so the runner
+ * re-executes from that step while keeping unrelated cached successes.
+ */
+export function trimContinueSeedForStep(
+  seed: WorkflowContinueSeed,
+  definition: WorkflowDefinition,
+  fromStep: string,
+): WorkflowContinueSeed {
+  const stepById = new Map(definition.steps.map((step) => [step.id, step]));
+  if (!stepById.has(fromStep)) {
+    throw new WorkflowError(`Step "${fromStep}" tidak ada di definisi workflow.`, [
+      `fromStep=${fromStep}`,
+    ]);
+  }
+  const exclude = collectDescendantStepIds(definition.steps, fromStep);
+  const successStepIds = seed.successStepIds.filter((id) => !exclude.has(id));
+  const keep = new Set(successStepIds);
+
+  const dropKeys = new Set<string>();
+  for (const stepId of exclude) {
+    dropKeys.add(stepId);
+    const step = stepById.get(stepId);
+    if (step?.output) dropKeys.add(step.output);
+    for (const name of step?.outputs ?? []) dropKeys.add(name);
+    const named = seed.namedByStep[stepId];
+    if (named) {
+      for (const key of Object.keys(named)) dropKeys.add(key);
+    }
+  }
+
+  const outputs: Record<string, string> = {};
+  for (const [key, value] of Object.entries(seed.outputs)) {
+    if (dropKeys.has(key)) continue;
+    outputs[key] = value;
+  }
+
+  const namedByStep: Record<string, Record<string, string>> = {};
+  for (const [stepId, named] of Object.entries(seed.namedByStep)) {
+    if (!keep.has(stepId)) continue;
+    namedByStep[stepId] = { ...named };
+  }
+
+  return {
+    parentRunId: seed.parentRunId,
+    params: { ...seed.params },
+    outputs,
+    namedByStep,
+    successStepIds,
   };
 }
 

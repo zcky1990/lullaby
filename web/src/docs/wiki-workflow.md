@@ -44,9 +44,10 @@ blok `schedule` / `on` di YAML lalu Save. Panduan lengkap: dokumentasi di panel 
 ## Continue dari run gagal
 
 Jika run `failed` / `canceled` dan masih ada cache output di `.workflows/cache/`, tombol
-**Continue** muncul di toolbar. Step yang sudah sukses di-skip (output di-seed dari cache);
-step yang gagal + turunannya dijalankan ulang sebagai **run baru**. Lama cache diatur di
-Global Settings → **Workflow** (default 72 jam).
+**Continue** muncul di toolbar (ulang dari frontier gagal). Setiap step di sidebar juga punya
+tombol **Play** untuk mengulang dari step itu — output step sukses di luar cabang itu tetap
+dipakai dari cache. Hasilnya selalu **run baru**. Lama cache: Global Settings → **Workflow**
+(default 72 jam).
 
 ## Contoh workflow sederhana
 

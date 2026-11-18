@@ -1,4 +1,5 @@
 import {
+  WorkflowContinueInput,
   WorkflowCreateInput,
   WorkflowRunInput,
   WorkflowSaveInput,
@@ -30,6 +31,7 @@ import {
   cancelWorkflowRun,
   continueSeedFromCache,
   startWorkflowRun,
+  trimContinueSeedForStep,
 } from "../workflow/runner.ts";
 import { scheduleInfoFromRow, syncWorkflowSchedule } from "../workflow/schedule-sync.ts";
 import {
@@ -321,6 +323,7 @@ export async function getWorkflowRunHandler(
 export async function continueWorkflowRunHandler(
   projectId: string,
   runId: string,
+  req: Request,
 ): Promise<Response> {
   const project = await projectFor(projectId);
   if (!project) return json({ error: "project_not_found" }, 404);
@@ -338,6 +341,12 @@ export async function continueWorkflowRunHandler(
     }, 400);
   }
 
+  const parsed = WorkflowContinueInput.safeParse(await readJson(req));
+  if (!parsed.success) {
+    return json({ error: "invalid_input", issues: parsed.error.issues }, 400);
+  }
+  const fromStep = parsed.data.fromStep;
+
   await pruneProjectWorkflowCaches(project);
   const keepHours = await readWorkflowCacheKeepHours();
   const cache = await readRunCache(project, run.workflow_slug, run.id);
@@ -351,6 +360,10 @@ export async function continueWorkflowRunHandler(
   try {
     const { yaml, path } = await readWorkflow(project, run.workflow_slug);
     const definition = parseWorkflow(yaml, run.workflow_slug);
+    let continueFrom = continueSeedFromCache(cache);
+    if (fromStep) {
+      continueFrom = trimContinueSeedForStep(continueFrom, definition, fromStep);
+    }
     const nextRunId = await startWorkflowRun({
       project,
       projectId,
@@ -358,7 +371,7 @@ export async function continueWorkflowRunHandler(
       definition,
       yaml,
       workflowPath: path,
-      continueFrom: continueSeedFromCache(cache),
+      continueFrom,
       trigger: "continue",
     });
     await record("workflow.run.continued", {
@@ -366,8 +379,9 @@ export async function continueWorkflowRunHandler(
       slug: run.workflow_slug,
       runId: nextRunId,
       parentRunId: run.id,
+      fromStep: fromStep ?? null,
     });
-    return json({ runId: nextRunId, parentRunId: run.id }, 202);
+    return json({ runId: nextRunId, parentRunId: run.id, fromStep: fromStep ?? null }, 202);
   } catch (error) {
     if (error instanceof Error && error.message.includes("sedang berjalan")) {
       return json({ error: "run_in_progress", message: error.message }, 409);

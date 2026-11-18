@@ -12,8 +12,37 @@ import {
   workflowCacheKeepHoursToMs,
   writeRunCache,
 } from "../src/server/workflow/cache.ts";
-import { continueSeedFromCache } from "../src/server/workflow/runner.ts";
+import {
+  collectDescendantStepIds,
+  continueSeedFromCache,
+  trimContinueSeedForStep,
+} from "../src/server/workflow/runner.ts";
 import type { WorkflowProject } from "../src/server/workflow/store.ts";
+import type { WorkflowDefinition, WorkflowStep } from "../src/server/workflow/types.ts";
+
+function stubStep(id: string, depends: string[] = []): WorkflowStep {
+  return {
+    id,
+    kind: "shell",
+    run: "true",
+    outputs: [],
+    depends,
+    env: {},
+    retry: { limit: 0, intervalSec: 0 },
+    next: [],
+  };
+}
+
+function stubDefinition(steps: WorkflowStep[]): WorkflowDefinition {
+  return {
+    name: "demo",
+    params: [],
+    env: {},
+    on: [],
+    steps,
+    layers: [steps.map((step) => step.id)],
+  };
+}
 
 Deno.test("normalizeWorkflowCacheKeepHours clamps 1–168", () => {
   equal(normalizeWorkflowCacheKeepHours(0), 1);
@@ -119,4 +148,53 @@ Deno.test("continueSeedFromCache copies maps for runner", () => {
   // ensure independent copy
   seed.params.A = "mutated";
   equal(cache.params.A, "1");
+});
+
+Deno.test("collectDescendantStepIds includes root and transitive dependents", () => {
+  const steps = [
+    stubStep("a"),
+    stubStep("b", ["a"]),
+    stubStep("c", ["b"]),
+    stubStep("d", ["a"]),
+  ];
+  deepEqual([...collectDescendantStepIds(steps, "b")].sort(), ["b", "c"]);
+  deepEqual([...collectDescendantStepIds(steps, "a")].sort(), ["a", "b", "c", "d"]);
+});
+
+Deno.test("trimContinueSeedForStep drops fromStep and descendants", () => {
+  const definition = stubDefinition([
+    stubStep("install"),
+    stubStep("build", ["install"]),
+    stubStep("test", ["build"]),
+    stubStep("lint", ["install"]),
+  ]);
+  const cache = buildRunCache({
+    runId: "parent",
+    slug: "wf",
+    params: { X: "1" },
+    outputs: {
+      install: "ok",
+      build: "built",
+      ARTIFACT: "pkg",
+      lint: "clean",
+    },
+    namedByStep: {
+      build: { ARTIFACT: "pkg" },
+      lint: { ok: "1" },
+    },
+    successStepIds: ["install", "build", "lint"],
+    failedStepIds: ["test"],
+  });
+  // mark build.output alias via definition
+  definition.steps[1] = { ...definition.steps[1], output: "ARTIFACT" };
+
+  const seed = trimContinueSeedForStep(continueSeedFromCache(cache), definition, "build");
+  deepEqual(seed.successStepIds.sort(), ["install", "lint"]);
+  equal(seed.outputs.install, "ok");
+  equal(seed.outputs.lint, "clean");
+  equal(seed.outputs.build, undefined);
+  equal(seed.outputs.ARTIFACT, undefined);
+  equal(seed.namedByStep.build, undefined);
+  deepEqual(seed.namedByStep.lint, { ok: "1" });
+  equal(seed.params.X, "1");
 });
