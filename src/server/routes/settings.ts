@@ -1,6 +1,7 @@
 import {
   AutomationSettingsInput,
   ChatToolsSettingsInput,
+  WorkflowSettingsInput,
   LspProbeInput,
   LspSettingsInput,
   McpServerInput,
@@ -53,6 +54,11 @@ import {
 } from "../skills.ts";
 import { readTerminalShellSetting, TERMINAL_SHELL_KEY } from "../terminal.ts";
 import { DEFAULT_PLAN_PROMPT, DEFAULT_SYSTEM_PROMPT, readPromptSettings } from "../prompts.ts";
+import {
+  normalizeWorkflowCacheKeepHours,
+  readWorkflowCacheKeepHours,
+  writeWorkflowCacheKeepHours,
+} from "../workflow/cache.ts";
 
 const MCP_SETTINGS_KEY = "mcp_servers";
 const AUTO_BUILD_KEY = "auto_build_on_in_progress";
@@ -245,6 +251,25 @@ export async function saveAutomationSettingsHandler(req: Request): Promise<Respo
     autoBuildOnInProgress: parsed.data.autoBuildOnInProgress,
   });
   return json({ autoBuildOnInProgress: parsed.data.autoBuildOnInProgress });
+}
+
+export async function getWorkflowSettingsHandler(): Promise<Response> {
+  const cacheKeepHours = await readWorkflowCacheKeepHours();
+  return json({ cacheKeepHours });
+}
+
+export async function saveWorkflowSettingsHandler(req: Request): Promise<Response> {
+  const parsed = WorkflowSettingsInput.safeParse(await readJson(req));
+  if (!parsed.success) {
+    return json({ error: "invalid_input", issues: parsed.error.issues }, 400);
+  }
+  const current = await readWorkflowCacheKeepHours();
+  const cacheKeepHours = parsed.data.cacheKeepHours === undefined
+    ? current
+    : normalizeWorkflowCacheKeepHours(parsed.data.cacheKeepHours);
+  await writeWorkflowCacheKeepHours(cacheKeepHours);
+  await record("settings.workflow_updated", { cacheKeepHours });
+  return json({ cacheKeepHours });
 }
 
 export async function getNotificationSettingsHandler(): Promise<Response> {

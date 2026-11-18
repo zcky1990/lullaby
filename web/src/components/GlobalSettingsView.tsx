@@ -46,6 +46,11 @@ const AutomationSettings = lazy(() =>
     default: module.AutomationSettings,
   }))
 );
+const WorkflowSettings = lazy(() =>
+  import("@/components/WorkflowSettings").then((module) => ({
+    default: module.WorkflowSettings,
+  }))
+);
 const BackupSettings = lazy(() =>
   import("@/components/BackupSettings").then((module) => ({ default: module.BackupSettings }))
 );
@@ -245,6 +250,7 @@ function GlobalSettingsSections({
   if (section === "tools") return <ChatToolsSettings />;
   if (section === "lsp") return <LspSettingsPanel />;
   if (section === "automation") return <AutomationSettings />;
+  if (section === "workflow") return <WorkflowSettings />;
   if (section === "notifications") return <NotificationSettings />;
   if (section === "terminal") return <TerminalSettings />;
   if (section === "backup") {

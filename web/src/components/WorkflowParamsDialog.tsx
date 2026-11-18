@@ -180,6 +180,10 @@ function AgentParamField({
           value={state.text}
           rows={5}
           disabled={running}
+          autoCapitalize="off"
+          autoCorrect="off"
+          autoComplete="off"
+          spellCheck={false}
           placeholder={t("workflow.params.agentPlaceholder")}
           onChange={(event) => onChange({ ...state, text: event.target.value })}
           onPaste={(event) => {
@@ -353,6 +357,10 @@ export function WorkflowParamsDialog({
                       value={value}
                       rows={4}
                       disabled={running}
+                      autoCapitalize="off"
+                      autoCorrect="off"
+                      autoComplete="off"
+                      spellCheck={false}
                       onChange={(event) =>
                         setValues((current) => ({
                           ...current,

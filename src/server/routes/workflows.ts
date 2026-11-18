@@ -17,9 +17,20 @@ import {
 } from "../../db/db.ts";
 import { json, readJson, record } from "../http.ts";
 import { nextCronRun } from "../workflow/cron.ts";
+import {
+  hasContinuableCache,
+  isCacheExpired,
+  pruneProjectWorkflowCaches,
+  readRunCache,
+  readWorkflowCacheKeepHours,
+} from "../workflow/cache.ts";
 import { isAllowedParamOverrideKey } from "../workflow/params.ts";
 import { parseWorkflow } from "../workflow/parse.ts";
-import { cancelWorkflowRun, startWorkflowRun } from "../workflow/runner.ts";
+import {
+  cancelWorkflowRun,
+  continueSeedFromCache,
+  startWorkflowRun,
+} from "../workflow/runner.ts";
 import { scheduleInfoFromRow, syncWorkflowSchedule } from "../workflow/schedule-sync.ts";
 import {
   createWorkflow,
@@ -34,7 +45,7 @@ import {
 } from "../workflow/store.ts";
 import { WorkflowError } from "../workflow/types.ts";
 
-function serializeRun(row: WorkflowRunRow) {
+function serializeRun(row: WorkflowRunRow, continuable = false) {
   return {
     id: row.id,
     workflowSlug: row.workflow_slug,
@@ -45,6 +56,7 @@ function serializeRun(row: WorkflowRunRow) {
     startedAt: row.started_at ?? undefined,
     finishedAt: row.finished_at ?? undefined,
     createdAt: row.created_at,
+    continuable,
   };
 }
 
@@ -278,19 +290,84 @@ export async function listWorkflowRunsHandler(
   if (!project) return json({ error: "project_not_found" }, 404);
   const safeLimit = Number.isFinite(limit) ? limit : 50;
   const runs = await listWorkflowRuns(projectId, slug ?? undefined, safeLimit);
-  return json({ runs: runs.map(serializeRun) });
+  return json({ runs: runs.map((row) => serializeRun(row)) });
 }
 
 export async function getWorkflowRunHandler(
   projectId: string,
   runId: string,
 ): Promise<Response> {
+  const project = await projectFor(projectId);
+  if (!project) return json({ error: "project_not_found" }, 404);
   const run = await getWorkflowRun(runId);
   if (!run || run.project_id !== projectId) {
     return json({ error: "run_not_found" }, 404);
   }
   const steps = await listWorkflowRunSteps(run.id);
-  return json({ run: serializeRun(run), steps: steps.map(serializeStep) });
+  const continuable = (run.status === "failed" || run.status === "canceled") &&
+    await hasContinuableCache(project, run.workflow_slug, run.id);
+  return json({
+    run: serializeRun(run, continuable),
+    steps: steps.map(serializeStep),
+  });
+}
+
+export async function continueWorkflowRunHandler(
+  projectId: string,
+  runId: string,
+): Promise<Response> {
+  const project = await projectFor(projectId);
+  if (!project) return json({ error: "project_not_found" }, 404);
+  if (!project.workspace_path) {
+    return json({ error: "workspace_required", message: "Workspace project belum diatur." }, 400);
+  }
+  const run = await getWorkflowRun(runId);
+  if (!run || run.project_id !== projectId) {
+    return json({ error: "run_not_found" }, 404);
+  }
+  if (run.status !== "failed" && run.status !== "canceled") {
+    return json({
+      error: "not_continuable",
+      message: "Hanya run failed/canceled yang bisa dilanjutkan.",
+    }, 400);
+  }
+
+  await pruneProjectWorkflowCaches(project);
+  const keepHours = await readWorkflowCacheKeepHours();
+  const cache = await readRunCache(project, run.workflow_slug, run.id);
+  if (!cache || isCacheExpired(cache, keepHours)) {
+    return json({
+      error: "cache_missing",
+      message: "Cache output tidak ada atau sudah kedaluwarsa. Jalankan ulang dari awal.",
+    }, 404);
+  }
+
+  try {
+    const { yaml, path } = await readWorkflow(project, run.workflow_slug);
+    const definition = parseWorkflow(yaml, run.workflow_slug);
+    const nextRunId = await startWorkflowRun({
+      project,
+      projectId,
+      slug: run.workflow_slug,
+      definition,
+      yaml,
+      workflowPath: path,
+      continueFrom: continueSeedFromCache(cache),
+      trigger: "continue",
+    });
+    await record("workflow.run.continued", {
+      projectId,
+      slug: run.workflow_slug,
+      runId: nextRunId,
+      parentRunId: run.id,
+    });
+    return json({ runId: nextRunId, parentRunId: run.id }, 202);
+  } catch (error) {
+    if (error instanceof Error && error.message.includes("sedang berjalan")) {
+      return json({ error: "run_in_progress", message: error.message }, 409);
+    }
+    return workflowError(error);
+  }
 }
 
 export async function cancelWorkflowRunHandler(

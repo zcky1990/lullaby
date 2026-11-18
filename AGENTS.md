@@ -148,8 +148,10 @@ finishing a change.
   - `WorkflowTab` (Monaco YAML + React Flow + logs); menu **Cron** (`CronPanel` + `CronTab`) lists
     schedules and toggles enable; wiki in-app `web/src/docs/wiki-cron.md` (`cron-docs` tab). Runs:
     manual UI, optional YAML `schedule.cron` (in-process ticker) and `on` event triggers
-    (`src/server/workflow/scheduler.ts`); AI must not auto-run workflows. Docs:
-    `docs/features/workflow-cron.md`.
+    (`src/server/workflow/scheduler.ts`);   AI must not auto-run workflows. Failed/canceled runs can **Continue** from cached
+  step outputs under `.workflows/cache/<slug>/<runId>.json` (TTL:
+  `app_settings.workflow_cache_keep_hours`, Global Settings → Workflow, default 72h).
+  Docs: `docs/features/workflows.md`, `docs/features/workflow-cron.md`.
 - **MCP**: global server config (`McpSettings`) is stored in `app_settings` (`mcp_servers` JSON;
   stdio command/args/env or http url/headers) plus `mcp_enabled` and `mcp_disabled_tools`.
   `POST /api/settings/mcp/tools` connects with `initialize` + `tools/list` (`src/server/mcp.ts`,

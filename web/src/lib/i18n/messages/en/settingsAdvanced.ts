@@ -271,6 +271,14 @@ export const settingsAdvanced: MessageDict = {
   "settings.backup.reloadApp": "Reload app",
 
   // AutomationSettings
+  "settings.workflow.title": "Workflow",
+  "settings.workflow.description":
+    "Retention for continue-from-failed caches under `.workflows/cache` in each project workspace.",
+  "settings.workflow.loading": "Loading…",
+  "settings.workflow.cacheKeepHours": "Cache retention (hours)",
+  "settings.workflow.cacheKeepHoursDescription":
+    "How long step outputs are kept so a failed run can be continued (1–168 hours). Older files are pruned automatically.",
+
   "settings.automation.title": "Automation",
   "settings.automation.descriptionPrefix": "When enabled, moving a ticket from",
   "settings.automation.descriptionMid": "to",

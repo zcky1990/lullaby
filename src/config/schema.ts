@@ -336,6 +336,12 @@ export const AutomationSettingsInput = z.object({
 });
 export type AutomationSettingsInput = z.infer<typeof AutomationSettingsInput>;
 
+export const WorkflowSettingsInput = z.object({
+  /** Hours to keep `.workflows/cache` files for continue-from-failed (1–168). */
+  cacheKeepHours: z.number().int().min(1).max(168).optional(),
+});
+export type WorkflowSettingsInput = z.infer<typeof WorkflowSettingsInput>;
+
 export const NotificationChannelType = z.enum([
   "slack",
   "google_chat",

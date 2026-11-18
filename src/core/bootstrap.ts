@@ -61,4 +61,22 @@ export function bootstrapBackground(): void {
       log.warn("cursor model sync skipped", { error: String(error) });
     }
   })();
+  void (async () => {
+    try {
+      const { listProjects } = await import("../db/db.ts");
+      const { pruneProjectWorkflowCaches } = await import("../server/workflow/cache.ts");
+      const projects = await listProjects();
+      let removed = 0;
+      for (const project of projects) {
+        removed += await pruneProjectWorkflowCaches({
+          id: project.id,
+          name: project.name,
+          workspace_path: project.workspace_path,
+        });
+      }
+      if (removed > 0) log.info("pruned workflow caches", { removed });
+    } catch (error) {
+      log.warn("workflow cache prune skipped", { error: String(error) });
+    }
+  })();
 }

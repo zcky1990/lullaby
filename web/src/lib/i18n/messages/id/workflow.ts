@@ -32,6 +32,9 @@ export const workflow: MessageDict = {
   "workflow.tab.log": "Log",
   "workflow.tab.noLog": "(belum ada log)",
   "workflow.tab.steps": "Steps",
+  "workflow.tab.run": "Jalankan",
+  "workflow.tab.cancelRun": "Batalkan run",
+  "workflow.tab.continueRun": "Lanjutkan dari gagal (pakai output cache)",
 
   // WorkflowTab — daftar run
   "workflow.runs.title": "Runs",

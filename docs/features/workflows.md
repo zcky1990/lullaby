@@ -44,6 +44,18 @@ Field yang didukung: `name`, `description`, `type`, `params`, `env`, `working_di
 `env` (map atau list map), `working_dir`, `retry_policy`, `timeout_sec`, `continue_on`. Field
 lain ditolak.
 
+## Continue dari run failed
+
+Jika run berstatus `failed` / `canceled`, output step yang sudah `success` disimpan ke
+`<workspace>/.workflows/cache/<slug>/<runId>.json` agar bisa dilanjutkan tanpa mengulang
+step sukses.
+
+- UI: tombol **Continue** di toolbar Workflow tab (hanya jika cache masih ada).
+- API: `POST /api/projects/:id/workflow-runs/:runId/continue` → run **baru** (`trigger:
+  continue`) yang me-seed output dari cache lalu menjalankan ulang step gagal + dependent.
+- Retensi: Global Settings → **Workflow** → `cacheKeepHours` (1–168, default 72). File kedaluwarsa
+  di-prune saat bootstrap dan sebelum continue. Setting: `GET/PUT /api/settings/workflow`.
+
 ## Schedule & event
 
 Panduan penuh (menu Cron, contoh, troubleshooting): [workflow-cron.md](workflow-cron.md).

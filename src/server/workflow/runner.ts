@@ -18,6 +18,12 @@ import type { ChatTurn } from "../chat/types.ts";
 import { record } from "../http.ts";
 import { sendNotificationByChannelRef } from "../notifications/send.ts";
 import {
+  buildRunCache,
+  deleteRunCache,
+  type WorkflowRunCache,
+  writeRunCache,
+} from "./cache.ts";
+import {
   collectAgentParamAttachments,
   isAllowedParamOverrideKey,
   resolveWorkflowLlmSelection,
@@ -28,6 +34,14 @@ import type { WorkflowDefinition, WorkflowStep } from "./types.ts";
 const MAX_LOG = 200_000;
 const MAX_PARALLEL = 8;
 const KILL_GRACE_MS = 2_000;
+
+export interface WorkflowContinueSeed {
+  parentRunId: string;
+  params: Record<string, string>;
+  outputs: Record<string, string>;
+  namedByStep: Record<string, Record<string, string>>;
+  successStepIds: string[];
+}
 
 interface ActiveRun {
   id: string;
@@ -53,9 +67,15 @@ export async function startWorkflowRun(input: {
   workflowPath: string;
   params?: Record<string, string>;
   trigger?: string;
+  continueFrom?: WorkflowContinueSeed;
 }): Promise<string> {
   const existing = await findActiveWorkflowRun(input.projectId, input.slug);
   if (existing) throw new Error("Workflow sedang berjalan. Tunggu atau batalkan run aktif.");
+
+  const trigger = input.continueFrom
+    ? (input.trigger ?? "continue")
+    : (input.trigger ?? "manual");
+  const params = input.continueFrom?.params ?? input.params;
 
   const run = await createWorkflowRun({
     projectId: input.projectId,
@@ -63,7 +83,7 @@ export async function startWorkflowRun(input: {
     name: input.definition.name,
     path: input.workflowPath,
     yaml: input.yaml,
-    trigger: input.trigger ?? "manual",
+    trigger,
   });
 
   const stepIds = new Map<string, string>();
@@ -94,9 +114,17 @@ export async function startWorkflowRun(input: {
     projectId: input.projectId,
     slug: input.slug,
     runId: run.id,
-    trigger: input.trigger ?? "manual",
+    trigger,
+    parentRunId: input.continueFrom?.parentRunId,
   });
-  void execute(run.id, active, input.project, input.definition, input.params).catch(
+  void execute(
+    run.id,
+    active,
+    input.project,
+    input.definition,
+    params,
+    input.continueFrom,
+  ).catch(
     async (error) => {
       activeRuns.delete(run.id);
       await updateWorkflowRun(run.id, "failed", (error as Error).message);
@@ -109,6 +137,18 @@ export async function startWorkflowRun(input: {
     },
   );
   return run.id;
+}
+
+export function continueSeedFromCache(cache: WorkflowRunCache): WorkflowContinueSeed {
+  return {
+    parentRunId: cache.runId,
+    params: { ...cache.params },
+    outputs: { ...cache.outputs },
+    namedByStep: Object.fromEntries(
+      Object.entries(cache.namedByStep).map(([key, value]) => [key, { ...value }]),
+    ),
+    successStepIds: [...cache.successStepIds],
+  };
 }
 
 export function cancelWorkflowRun(runId: string): boolean {
@@ -184,12 +224,42 @@ function buildParams(
   return params;
 }
 
+async function persistCacheSnapshot(
+  project: WorkflowProject,
+  active: ActiveRun,
+  params: Record<string, string>,
+  outputs: Map<string, string>,
+  namedByStep: Map<string, Record<string, string>>,
+  statuses: Map<string, string>,
+  parentRunId?: string,
+): Promise<void> {
+  const successStepIds = [...statuses.entries()]
+    .filter(([, status]) => status === "success")
+    .map(([id]) => id);
+  const failedStepIds = [...statuses.entries()]
+    .filter(([, status]) => status === "failed")
+    .map(([id]) => id);
+  if (successStepIds.length === 0 && failedStepIds.length === 0) return;
+  const cache = buildRunCache({
+    runId: active.id,
+    slug: active.slug,
+    params,
+    outputs,
+    namedByStep,
+    successStepIds,
+    failedStepIds,
+    parentRunId,
+  });
+  await writeRunCache(project, cache).catch(() => {});
+}
+
 async function execute(
   runId: string,
   active: ActiveRun,
   project: WorkflowProject,
   definition: WorkflowDefinition,
   paramOverrides?: Record<string, string>,
+  continueFrom?: WorkflowContinueSeed,
 ): Promise<void> {
   const statuses = new Map<string, string>();
   const logs = new Map<string, string>();
@@ -227,6 +297,23 @@ async function execute(
       payload: { runId, stepId: step.id, status, exitCode },
     });
   };
+
+  if (continueFrom) {
+    for (const [key, value] of Object.entries(continueFrom.outputs)) {
+      outputs.set(key, value);
+    }
+    for (const [stepId, named] of Object.entries(continueFrom.namedByStep)) {
+      if (!stepById.has(stepId)) continue;
+      namedByStep.set(stepId, { ...named });
+    }
+    for (const stepId of continueFrom.successStepIds) {
+      const step = stepById.get(stepId);
+      if (!step) continue;
+      const note = `[continued from cache · parent ${continueFrom.parentRunId}]\n`;
+      logs.set(stepId, note);
+      await setStatus(step, "success", 0, note);
+    }
+  }
 
   const depsSatisfied = (step: WorkflowStep): boolean =>
     step.depends.every((dependency) => {
@@ -355,6 +442,15 @@ async function execute(
     }
     if (result.code !== 0) {
       await setStatus(step, "failed", result.code, result.log);
+      await persistCacheSnapshot(
+        project,
+        active,
+        params,
+        outputs,
+        namedByStep,
+        statuses,
+        continueFrom?.parentRunId,
+      );
       return;
     }
 
@@ -374,6 +470,15 @@ async function execute(
       routeSelections.set(step.id, result.selectedRoutes);
     }
     await setStatus(step, "success", 0, result.log);
+    await persistCacheSnapshot(
+      project,
+      active,
+      params,
+      outputs,
+      namedByStep,
+      statuses,
+      continueFrom?.parentRunId,
+    );
 
     if (step.kind === "router" && step.router && result.selectedRoutes) {
       for (const targetId of result.selectedRoutes) {
@@ -452,10 +557,24 @@ async function execute(
     ? "Satu atau lebih step gagal."
     : undefined;
   await updateWorkflowRun(runId, status, error);
+  if (status === "success") {
+    await deleteRunCache(project, active.slug, runId).catch(() => {});
+  } else {
+    await persistCacheSnapshot(
+      project,
+      active,
+      params,
+      outputs,
+      namedByStep,
+      statuses,
+      continueFrom?.parentRunId,
+    );
+  }
   await record(`workflow.run.${status}`, {
     projectId: active.projectId,
     slug: active.slug,
     runId,
+    parentRunId: continueFrom?.parentRunId,
   });
 }
 

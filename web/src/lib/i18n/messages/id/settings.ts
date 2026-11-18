@@ -13,6 +13,7 @@ export const settings: MessageDict = {
   "settings.global.section.tools": "Tools",
   "settings.global.section.lsp": "Language Servers",
   "settings.global.section.automation": "Automation",
+  "settings.global.section.workflow": "Workflow",
   "settings.global.section.notifications": "Notifications",
   "settings.global.section.terminal": "Terminal",
   "settings.global.section.backup": "Backup & Restore",

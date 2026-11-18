@@ -160,6 +160,7 @@ export interface WorkflowRunSummary {
   startedAt?: string;
   finishedAt?: string;
   createdAt: string;
+  continuable?: boolean;
 }
 
 export interface WorkflowRunStep {
@@ -1087,6 +1088,11 @@ export const api = {
       `/api/projects/${projectId}/workflow-runs/${encodeURIComponent(runId)}/cancel`,
       { method: "POST" },
     ),
+  continueWorkflowRun: (projectId: string, runId: string) =>
+    request<{ runId: string; parentRunId: string }>(
+      `/api/projects/${projectId}/workflow-runs/${encodeURIComponent(runId)}/continue`,
+      { method: "POST" },
+    ),
   deleteWorkflowRun: (projectId: string, runId: string) =>
     request<{ ok: boolean }>(
       `/api/projects/${projectId}/workflow-runs/${encodeURIComponent(runId)}`,
@@ -1211,6 +1217,13 @@ export const api = {
   saveAutomationSettings: (payload: { autoBuildOnInProgress: boolean }) =>
     request<{ autoBuildOnInProgress: boolean }>(
       "/api/settings/automation",
+      jsonInit("PUT", payload),
+    ),
+  getWorkflowSettings: () =>
+    request<{ cacheKeepHours: number }>("/api/settings/workflow"),
+  saveWorkflowSettings: (payload: { cacheKeepHours: number }) =>
+    request<{ cacheKeepHours: number }>(
+      "/api/settings/workflow",
       jsonInit("PUT", payload),
     ),
   getNotificationSettings: () =>

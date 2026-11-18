@@ -272,6 +272,14 @@ export const settingsAdvanced: MessageDict = {
   "settings.backup.reloadApp": "Muat ulang aplikasi",
 
   // AutomationSettings
+  "settings.workflow.title": "Workflow",
+  "settings.workflow.description":
+    "Retensi cache continue-from-failed di `.workflows/cache` pada tiap workspace project.",
+  "settings.workflow.loading": "Memuat…",
+  "settings.workflow.cacheKeepHours": "Retensi cache (jam)",
+  "settings.workflow.cacheKeepHoursDescription":
+    "Berapa lama output step disimpan agar run yang gagal bisa dilanjutkan (1–168 jam). File lama dihapus otomatis.",
+
   "settings.automation.title": "Automation",
   "settings.automation.descriptionPrefix": "Saat aktif, menggeser tiket dari",
   "settings.automation.descriptionMid": "ke",

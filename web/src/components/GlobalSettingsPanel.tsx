@@ -12,6 +12,7 @@ import {
   Sparkles,
   SquareTerminal,
   Users,
+  Workflow,
   Zap,
 } from "lucide-react";
 import { PanelHeader } from "@/components/PanelHeader";
@@ -28,6 +29,7 @@ export type GlobalSection =
   | "tools"
   | "lsp"
   | "automation"
+  | "workflow"
   | "notifications"
   | "terminal"
   | "backup"
@@ -43,6 +45,7 @@ const SECTIONS: { id: GlobalSection; labelKey: string; icon: LucideIcon }[] = [
   { id: "tools", labelKey: "settings.global.section.tools", icon: ShieldCheck },
   { id: "lsp", labelKey: "settings.global.section.lsp", icon: ServerCog },
   { id: "automation", labelKey: "settings.global.section.automation", icon: Zap },
+  { id: "workflow", labelKey: "settings.global.section.workflow", icon: Workflow },
   { id: "notifications", labelKey: "settings.global.section.notifications", icon: Bell },
   { id: "terminal", labelKey: "settings.global.section.terminal", icon: SquareTerminal },
   { id: "backup", labelKey: "settings.global.section.backup", icon: Database },

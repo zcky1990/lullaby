@@ -21,6 +21,7 @@ import {
   GitBranch,
   Network,
   Play,
+  Redo2,
   RefreshCw,
   Save,
   Square,
@@ -249,6 +250,25 @@ export function WorkflowTab({
       await loadRun(selectedRunId);
     } catch (e) {
       setError(formatApiError(e));
+    }
+  };
+
+  const continueRun = async () => {
+    if (!projectId || !selectedRunId || running || selectedRun?.status === "running") {
+      return;
+    }
+    if (!selectedRun?.continuable) return;
+    setRunning(true);
+    setError(undefined);
+    try {
+      const { runId } = await api.continueWorkflowRun(projectId, selectedRunId);
+      await refreshRuns();
+      await loadRun(runId);
+      onSaved();
+    } catch (e) {
+      setError(formatApiError(e));
+    } finally {
+      setRunning(false);
     }
   };
 
@@ -488,8 +508,26 @@ export function WorkflowTab({
                 variant="outline"
                 onClick={cancelRun}
                 data-icon="inline-start"
+                title={t("workflow.tab.cancelRun")}
+                aria-label={t("workflow.tab.cancelRun")}
               >
                 <Square color="red"/>
+              </Button>
+            )
+            : null}
+          {selectedRun?.continuable
+            ? (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => void continueRun()}
+                disabled={running || selectedRun?.status === "running" ||
+                  !!summary?.error}
+                data-icon="inline-start"
+                title={t("workflow.tab.continueRun")}
+                aria-label={t("workflow.tab.continueRun")}
+              >
+                {running ? <Spinner /> : <Redo2 />}
               </Button>
             )
             : null}
@@ -500,6 +538,8 @@ export function WorkflowTab({
             disabled={running || selectedRun?.status === "running" ||
               !!summary?.error}
             data-icon="inline-start"
+            title={t("workflow.tab.run")}
+            aria-label={t("workflow.tab.run")}
           >
             {running ? <Spinner /> : <Play />}
           </Button>

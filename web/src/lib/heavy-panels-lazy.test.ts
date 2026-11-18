@@ -61,6 +61,7 @@ describe("PERF-7: panel berat dimuat lazy", () => {
   it("section Global Settings tidak diimpor statis", () => {
     const sections = [
       "AutomationSettings",
+      "WorkflowSettings",
       "BackupSettings",
       "ChatToolsSettings",
       "LayoutSettings",

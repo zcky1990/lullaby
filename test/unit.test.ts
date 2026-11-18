@@ -19,6 +19,7 @@ import {
   TicketTransitionInput,
   TransferWorkspacePathInput,
   UpdateFileInput,
+  WorkflowSettingsInput,
 } from "../src/config/schema.ts";
 import {
   buildAutoBuildPrompt,
@@ -805,6 +806,13 @@ Deno.test("listSkills prefers workspace over project over global", async () => {
 Deno.test("AutomationSettingsInput defaults autoBuildOnInProgress to false", () => {
   equal(AutomationSettingsInput.parse({}).autoBuildOnInProgress, false);
   equal(AutomationSettingsInput.parse({ autoBuildOnInProgress: true }).autoBuildOnInProgress, true);
+});
+
+Deno.test("WorkflowSettingsInput accepts cacheKeepHours bounds", () => {
+  equal(WorkflowSettingsInput.parse({}).cacheKeepHours, undefined);
+  equal(WorkflowSettingsInput.parse({ cacheKeepHours: 72 }).cacheKeepHours, 72);
+  throws(() => WorkflowSettingsInput.parse({ cacheKeepHours: 0 }));
+  throws(() => WorkflowSettingsInput.parse({ cacheKeepHours: 200 }));
 });
 
 Deno.test("max-steps helpers match OpenCode unlimited/final semantics", async () => {

@@ -181,6 +181,7 @@ import {
 } from "./routes/roles.ts";
 import {
   cancelWorkflowRunHandler,
+  continueWorkflowRunHandler,
   createWorkflowHandler,
   deleteWorkflowHandler,
   deleteWorkflowRunHandler,
@@ -201,6 +202,7 @@ import {
   getPromptsHandler,
   getTerminalSettingsHandler,
   getUiPreferencesHandler,
+  getWorkflowSettingsHandler,
   listMcpToolsHandler,
   probeLspHandler,
   saveAutomationSettingsHandler,
@@ -212,6 +214,7 @@ import {
   saveSkillsSettingsHandler,
   saveTerminalSettingsHandler,
   saveUiPreferencesHandler,
+  saveWorkflowSettingsHandler,
   skillsHandler,
   testNotificationSettingsHandler,
 } from "./routes/settings.ts";
@@ -1840,6 +1843,10 @@ export async function handleRequest(req: Request): Promise<Response> {
       if (method === "GET") return await getAutomationSettingsHandler();
       if (method === "PUT" || method === "POST") return await saveAutomationSettingsHandler(req);
     }
+    if (pathname === "/api/settings/workflow") {
+      if (method === "GET") return await getWorkflowSettingsHandler();
+      if (method === "PUT" || method === "POST") return await saveWorkflowSettingsHandler(req);
+    }
     if (pathname === "/api/settings/notifications/test" && method === "POST") {
       return await testNotificationSettingsHandler(req);
     }
@@ -1945,6 +1952,13 @@ export async function handleRequest(req: Request): Promise<Response> {
     );
     if (workflowRunCancel && method === "POST") {
       return await cancelWorkflowRunHandler(workflowRunCancel[1], workflowRunCancel[2]);
+    }
+
+    const workflowRunContinue = pathname.match(
+      /^\/api\/projects\/([^/]+)\/workflow-runs\/([^/]+)\/continue$/,
+    );
+    if (workflowRunContinue && method === "POST") {
+      return await continueWorkflowRunHandler(workflowRunContinue[1], workflowRunContinue[2]);
     }
 
     const workflowRunItem = pathname.match(
