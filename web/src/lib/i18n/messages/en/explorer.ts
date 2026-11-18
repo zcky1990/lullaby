@@ -18,6 +18,8 @@ export const explorer: MessageDict = {
   "explorer.tree.unsavedMark": "(unsaved)",
   "explorer.tree.newFile": "New file",
   "explorer.tree.newFolder": "New folder",
+  "explorer.tree.rename": "Rename",
+  "explorer.tree.renameName": "Rename",
   "explorer.tree.cut": "Cut",
   "explorer.tree.copy": "Copy",
   "explorer.tree.paste": "Paste",

@@ -9,6 +9,7 @@ import {
   Folder,
   FolderOpen,
   FolderPlus,
+  Pencil,
   RefreshCw,
   Scissors,
   Trash2,
@@ -83,7 +84,13 @@ export function FileTreePanel({
   const [createError, setCreateError] = useState<string | undefined>();
   const [clipboard, setClipboard] = useState<ClipboardEntry | null>(null);
   const [actionBusy, setActionBusy] = useState(false);
+  const [renaming, setRenaming] = useState<FileEntry | null>(null);
+  const [renameName, setRenameName] = useState("");
+  const [renameBusy, setRenameBusy] = useState(false);
+  const [renameError, setRenameError] = useState<string | undefined>();
   const createInputRef = useRef<HTMLInputElement>(null);
+  const renameInputRef = useRef<HTMLInputElement>(null);
+  const skipRenameBlurRef = useRef(false);
 
   const storedDirtyPaths = useDirtyPaths();
   const activeDirtyPaths = dirtyPaths ?? storedDirtyPaths;
@@ -133,6 +140,9 @@ export function FileTreePanel({
     setCreating(null);
     setCreateName("");
     setCreateError(undefined);
+    setRenaming(null);
+    setRenameName("");
+    setRenameError(undefined);
     try {
       setRootEntries(await fetchDir(""));
     } catch (e) {
@@ -152,6 +162,20 @@ export function FileTreePanel({
     const timer = requestAnimationFrame(() => createInputRef.current?.focus());
     return () => cancelAnimationFrame(timer);
   }, [creating]);
+
+  useEffect(() => {
+    if (!renaming) return;
+    const timer = requestAnimationFrame(() => {
+      const input = renameInputRef.current;
+      if (!input) return;
+      input.focus();
+      const value = input.value;
+      const dot = renaming.type === "file" ? value.lastIndexOf(".") : -1;
+      if (dot > 0) input.setSelectionRange(0, dot);
+      else input.select();
+    });
+    return () => cancelAnimationFrame(timer);
+  }, [renaming]);
 
   const ensureExpanded = async (path: string) => {
     if (!path || expanded.has(path)) {
@@ -173,7 +197,12 @@ export function FileTreePanel({
   };
 
   const startCreate = async (kind: CreateKind, parent = createParent) => {
-    if (!projectId || !configured || createBusy || actionBusy) return;
+    if (!projectId || !configured || createBusy || actionBusy || renameBusy) return;
+    if (renaming) {
+      setRenaming(null);
+      setRenameName("");
+      setRenameError(undefined);
+    }
     if (parent) await ensureExpanded(parent);
     setCreating({ kind, parent });
     setCreateName(kind === "file" ? "untitled.txt" : "new-folder");
@@ -256,7 +285,7 @@ export function FileTreePanel({
   };
 
   const pasteInto = async (parent: string) => {
-    if (!projectId || !clipboard || actionBusy) return;
+    if (!projectId || !clipboard || actionBusy || renameBusy) return;
     setActionBusy(true);
     setError(undefined);
     try {
@@ -278,7 +307,7 @@ export function FileTreePanel({
   };
 
   const deleteEntry = async (entry: FileEntry) => {
-    if (!projectId || actionBusy) return;
+    if (!projectId || actionBusy || renameBusy) return;
     const label = entry.type === "dir"
       ? t("explorer.tree.folderLabel", { name: entry.name })
       : entry.name;
@@ -292,12 +321,102 @@ export function FileTreePanel({
         setFocusPath(null);
         setFocusType(null);
       }
+      if (renaming?.path === entry.path) {
+        setRenaming(null);
+        setRenameName("");
+        setRenameError(undefined);
+      }
       await refreshDir(parentOf(entry.path));
       notifyChange();
     } catch (e) {
       setError((e as Error).message);
     } finally {
       setActionBusy(false);
+    }
+  };
+
+  const remapPathPrefix = (from: string, to: string) => {
+    const rewrite = (path: string) => {
+      if (path === from) return to;
+      if (path.startsWith(`${from}/`)) return `${to}${path.slice(from.length)}`;
+      return path;
+    };
+    const newName = basenameOf(to);
+    setExpanded((prev) => {
+      const next = new Set<string>();
+      for (const path of prev) next.add(rewrite(path));
+      return next;
+    });
+    setChildren((prev) => {
+      const next: Record<string, FileEntry[]> = {};
+      for (const [path, entries] of Object.entries(prev)) {
+        next[rewrite(path)] = entries.map((entry) => ({
+          ...entry,
+          path: rewrite(entry.path),
+          name: entry.path === from ? newName : entry.name,
+        }));
+      }
+      return next;
+    });
+    setClipboard((prev) => (prev ? { ...prev, path: rewrite(prev.path) } : prev));
+  };
+
+  const startRename = (entry: FileEntry) => {
+    if (!projectId || !configured || createBusy || actionBusy || renameBusy) return;
+    setCreating(null);
+    setCreateName("");
+    setCreateError(undefined);
+    setRenaming(entry);
+    setRenameName(entry.name);
+    setRenameError(undefined);
+    setFocusPath(entry.path);
+    setFocusType(entry.type);
+  };
+
+  const cancelRename = () => {
+    if (renameBusy) return;
+    skipRenameBlurRef.current = true;
+    setRenaming(null);
+    setRenameName("");
+    setRenameError(undefined);
+  };
+
+  const submitRename = async () => {
+    if (skipRenameBlurRef.current) {
+      skipRenameBlurRef.current = false;
+      return;
+    }
+    if (!projectId || !renaming || renameBusy) return;
+    const name = renameName.trim();
+    if (!name) {
+      setRenameError(t("explorer.tree.nameRequired"));
+      return;
+    }
+    if (name === renaming.name) {
+      skipRenameBlurRef.current = true;
+      setRenaming(null);
+      setRenameName("");
+      setRenameError(undefined);
+      return;
+    }
+    setRenameBusy(true);
+    setRenameError(undefined);
+    setError(undefined);
+    try {
+      const from = renaming.path;
+      const result = await api.movePath(projectId, { from, name });
+      remapPathPrefix(from, result.path);
+      await refreshAfterTransfer(from, result.path);
+      setFocusPath(result.path);
+      setFocusType(renaming.type);
+      skipRenameBlurRef.current = true;
+      setRenaming(null);
+      setRenameName("");
+      notifyChange();
+    } catch (e) {
+      setRenameError((e as Error).message);
+    } finally {
+      setRenameBusy(false);
     }
   };
 
@@ -341,6 +460,62 @@ export function FileTreePanel({
           />
         </div>
         {createError ? <p className="pl-9 text-xs text-destructive">{createError}</p> : null}
+      </div>
+    );
+  };
+
+  const renderRenameRow = (entry: FileEntry, depth: number): ReactNode => {
+    const isDir = entry.type === "dir";
+    const isOpen = expanded.has(entry.path);
+    return (
+      <div
+        key={`rename:${entry.path}`}
+        style={{ paddingLeft: depth * 12 + 8 }}
+        className="flex flex-col gap-1 py-1 pr-2"
+      >
+        <div className="flex items-center gap-1.5">
+          {isDir ? (
+            <ChevronRight
+              className={cn(
+                "size-3.5 shrink-0 text-muted-foreground transition-transform",
+                isOpen && "rotate-90",
+              )}
+            />
+          ) : (
+            <span className="size-3.5 shrink-0" />
+          )}
+          {isDir ? (
+            isOpen ? (
+              <FolderOpen className="size-4 shrink-0 text-info" />
+            ) : (
+              <Folder className="size-4 shrink-0 text-info" />
+            )
+          ) : (
+            <File className="size-4 shrink-0 text-muted-foreground" />
+          )}
+          <Input
+            ref={renameInputRef}
+            value={renameName}
+            disabled={renameBusy}
+            className="h-7 text-xs"
+            aria-label={t("explorer.tree.renameName")}
+            onChange={(event) => setRenameName(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                void submitRename();
+              }
+              if (event.key === "Escape") {
+                event.preventDefault();
+                cancelRename();
+              }
+            }}
+            onBlur={() => {
+              if (!renameBusy) void submitRename();
+            }}
+          />
+        </div>
+        {renameError ? <p className="pl-9 text-xs text-destructive">{renameError}</p> : null}
       </div>
     );
   };
@@ -473,14 +648,16 @@ export function FileTreePanel({
   };
 
   const renderEntryMenu = (entry: FileEntry, depth: number): ReactNode => {
+    if (renaming?.path === entry.path) return renderRenameRow(entry, depth);
     const isDir = entry.type === "dir";
     const pasteParent = isDir ? entry.path : parentOf(entry.path);
+    const menuBusy = actionBusy || createBusy || renameBusy;
     return (
       <ContextMenu key={entry.path}>
         <ContextMenuTrigger asChild>{renderEntryButton(entry, depth)}</ContextMenuTrigger>
         <ContextMenuContent className="w-48">
           <ContextMenuItem
-            disabled={actionBusy || createBusy}
+            disabled={menuBusy}
             onSelect={() => {
               setFocusPath(entry.path);
               setFocusType(entry.type);
@@ -491,7 +668,7 @@ export function FileTreePanel({
             {t("explorer.tree.newFile")}
           </ContextMenuItem>
           <ContextMenuItem
-            disabled={actionBusy || createBusy}
+            disabled={menuBusy}
             onSelect={() => {
               setFocusPath(entry.path);
               setFocusType(entry.type);
@@ -503,7 +680,14 @@ export function FileTreePanel({
           </ContextMenuItem>
           <ContextMenuSeparator />
           <ContextMenuItem
-            disabled={actionBusy}
+            disabled={menuBusy}
+            onSelect={() => startRename(entry)}
+          >
+            <Pencil />
+            {t("explorer.tree.rename")}
+          </ContextMenuItem>
+          <ContextMenuItem
+            disabled={menuBusy}
             onSelect={() => {
               setClipboard({ mode: "cut", path: entry.path, type: entry.type });
               setFocusPath(entry.path);
@@ -514,7 +698,7 @@ export function FileTreePanel({
             {t("explorer.tree.cut")}
           </ContextMenuItem>
           <ContextMenuItem
-            disabled={actionBusy}
+            disabled={menuBusy}
             onSelect={() => {
               setClipboard({ mode: "copy", path: entry.path, type: entry.type });
               setFocusPath(entry.path);
@@ -525,7 +709,7 @@ export function FileTreePanel({
             {t("explorer.tree.copy")}
           </ContextMenuItem>
           <ContextMenuItem
-            disabled={!clipboard || actionBusy}
+            disabled={!clipboard || menuBusy}
             onSelect={() => void pasteInto(pasteParent)}
           >
             <ClipboardPaste />
@@ -536,7 +720,7 @@ export function FileTreePanel({
           <ContextMenuSeparator />
           <ContextMenuItem
             variant="destructive"
-            disabled={actionBusy}
+            disabled={menuBusy}
             onSelect={() => void deleteEntry(entry)}
           >
             <Trash2 />
@@ -576,7 +760,7 @@ export function FileTreePanel({
             variant="ghost"
             size="icon"
             onClick={() => void startCreate("file")}
-            disabled={!projectId || !configured || loading || createBusy || actionBusy}
+            disabled={!projectId || !configured || loading || createBusy || actionBusy || renameBusy}
             aria-label={t("explorer.tree.createFile")}
             title={t("explorer.tree.createFile")}
           >
@@ -586,7 +770,7 @@ export function FileTreePanel({
             variant="ghost"
             size="icon"
             onClick={() => void startCreate("dir")}
-            disabled={!projectId || !configured || loading || createBusy || actionBusy}
+            disabled={!projectId || !configured || loading || createBusy || actionBusy || renameBusy}
             aria-label={t("explorer.tree.createFolder")}
             title={t("explorer.tree.createFolder")}
           >
@@ -627,21 +811,21 @@ export function FileTreePanel({
           </ContextMenuTrigger>
           <ContextMenuContent className="w-48">
             <ContextMenuItem
-              disabled={!configured || actionBusy || createBusy}
+              disabled={!configured || actionBusy || createBusy || renameBusy}
               onSelect={() => void startCreate("file", "")}
             >
               <FilePlus />
               {t("explorer.tree.newFile")}
             </ContextMenuItem>
             <ContextMenuItem
-              disabled={!configured || actionBusy || createBusy}
+              disabled={!configured || actionBusy || createBusy || renameBusy}
               onSelect={() => void startCreate("dir", "")}
             >
               <FolderPlus />
               {t("explorer.tree.newFolder")}
             </ContextMenuItem>
             <ContextMenuItem
-              disabled={!clipboard || !configured || actionBusy}
+              disabled={!clipboard || !configured || actionBusy || renameBusy}
               onSelect={() => void pasteInto("")}
             >
               <ClipboardPaste />

@@ -18,6 +18,8 @@ export const explorer: MessageDict = {
   "explorer.tree.unsavedMark": "(belum disimpan)",
   "explorer.tree.newFile": "File baru",
   "explorer.tree.newFolder": "Folder baru",
+  "explorer.tree.rename": "Ganti nama",
+  "explorer.tree.renameName": "Ganti nama",
   "explorer.tree.cut": "Cut",
   "explorer.tree.copy": "Copy",
   "explorer.tree.paste": "Paste",
