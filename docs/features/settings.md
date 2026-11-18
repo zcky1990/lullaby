@@ -80,9 +80,27 @@ Contoh **Playwright MCP** (bukan config Cursor `mcp.json` — harus di Global Se
 }
 ```
 
-Prasyarat: Node/`npx` di PATH (atau path absolut ke `npx`), jaringan untuk unduh paket pertama kali,
-dan browser Playwright terpasang (`npx playwright install`). Tanpa `-y`, `npx` bisa menunggu prompt
-dan hang. Paket yang benar adalah `@playwright/mcp`, bukan `playwright` saja.
+Lebih cepat / stabil (hindari cold `npx`): pakai **Node sistem langsung** + `cli.js` paket:
+
+```json
+{
+  "mcpServers": {
+    "playwright": {
+      "command": "/Users/YOU/.local/bin/node",
+      "args": ["/Users/YOU/node_modules/@playwright/mcp/cli.js"]
+    }
+  }
+}
+```
+
+(`which node` dan path `cli.js` dari `npm ls -g @playwright/mcp` / `~/.npm/_npx/...` / `~/node_modules`.)
+
+App Deno **bisa** memanggil Node sistem: `command` di-resolve ke path absolut, PATH child
+diperkaya, dan bila config masih `npx -y @playwright/mcp…` tetapi paket sudah terpasang, spawn
+otomatis ditulis ulang menjadi `node <cli.js>`. Tombol Tools di UI menunggu sampai 120s.
+
+Prasyarat: Node di PATH (atau path absolut), browser Playwright (`npx playwright install`). Paket
+yang benar adalah `@playwright/mcp`, bukan `playwright` saja. Tanpa `-y`, `npx` bisa hang di prompt.
 
 ## Preferensi UI
 

@@ -1188,7 +1188,11 @@ export const api = {
     disabledTools: string[];
   }) => request<McpSettingsResponse>("/api/settings/mcp", jsonInit("PUT", payload)),
   listMcpTools: (server: McpServer) =>
-    request<{ tools: McpTool[] }>("/api/settings/mcp/tools", jsonInit("POST", { server })),
+    request<{ tools: McpTool[] }>(
+      "/api/settings/mcp/tools",
+      // Cold npx / first Playwright start can exceed the default 60s client abort.
+      jsonInit("POST", { server }, { timeoutMs: 120_000 }),
+    ),
   getChatToolsSettings: () => request<ChatToolsSettingsResponse>("/api/settings/chat-tools"),
   saveChatToolsSettings: (payload: {
     autoApproveWrites: boolean;

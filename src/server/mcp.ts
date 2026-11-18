@@ -1,3 +1,4 @@
+import { basename } from "node:path";
 import type { McpServerInput } from "../config/schema.ts";
 import { resolveExecutable, spawnEnvForCommand } from "./lsp.ts";
 
@@ -7,7 +8,7 @@ export interface McpTool {
   inputSchema?: unknown;
 }
 
-const LIST_TIMEOUT_MS = 15_000;
+const LIST_TIMEOUT_MS = 60_000;
 /** Cold `npx -y @pkg` often exceeds 15s on first download. */
 const INIT_TIMEOUT_MS = 60_000;
 const CALL_TIMEOUT_MS = 60_000;
@@ -84,6 +85,113 @@ function stderrDetail(tail: string): string {
   return text ? text.slice(0, 400) : "";
 }
 
+/** `@scope/name@version` / `name@version` → bare package name for require.resolve. */
+export function stripNpmPackageSpec(spec: string): string {
+  const trimmed = spec.trim();
+  if (!trimmed) return trimmed;
+  if (trimmed.startsWith("@")) {
+    const parts = trimmed.slice(1).split("@");
+    return `@${parts[0]}`;
+  }
+  const at = trimmed.lastIndexOf("@");
+  return at > 0 ? trimmed.slice(0, at) : trimmed;
+}
+
+function firstNpxPackageArg(args: string[]): { packageSpec: string; rest: string[] } | null {
+  const rest: string[] = [];
+  let packageSpec: string | null = null;
+  for (const arg of args) {
+    if (packageSpec) {
+      rest.push(arg);
+      continue;
+    }
+    if (arg === "-y" || arg === "--yes" || arg === "--") continue;
+    if (arg.startsWith("-")) continue;
+    packageSpec = arg;
+  }
+  return packageSpec ? { packageSpec, rest } : null;
+}
+
+/**
+ * Prefer `node /path/to/cli.js` over `npx -y @pkg` when the package is already
+ * installed (home node_modules, global, or npm/_npx cache). Avoids cold npx
+ * download + wrapper PATH issues; Deno resolves system `node` via PATH enrichment.
+ */
+export async function preferNodeOverNpx(
+  executable: string,
+  args: string[],
+  env: Record<string, string>,
+): Promise<{ executable: string; args: string[] } | null> {
+  const base = basename(executable).toLowerCase().replace(/\.cmd$/i, "");
+  if (base !== "npx") return null;
+  const parsed = firstNpxPackageArg(args);
+  if (!parsed) return null;
+
+  const node = await resolveExecutable("node");
+  if (!node) return null;
+
+  const packageName = stripNpmPackageSpec(parsed.packageSpec);
+  const script = `
+const fs = require("fs");
+const path = require("path");
+const { createRequire } = require("module");
+const name = ${JSON.stringify(packageName)};
+const home = process.env.HOME || process.env.USERPROFILE || "";
+const roots = [
+  process.cwd(),
+  home,
+  path.join(home, ".local", "lib"),
+  "/opt/homebrew/lib",
+  "/usr/local/lib",
+].filter(Boolean);
+function tryPkg(fromDir) {
+  try {
+    return createRequire(path.join(fromDir, "package.json")).resolve(name + "/package.json");
+  } catch {
+    return null;
+  }
+}
+let pkgJson = null;
+for (const root of roots) {
+  pkgJson = tryPkg(root);
+  if (pkgJson) break;
+  const npxRoot = path.join(root === home ? path.join(home, ".npm") : root, "_npx");
+  try {
+    for (const ent of fs.readdirSync(npxRoot, { withFileTypes: true })) {
+      if (!ent.isDirectory()) continue;
+      pkgJson = tryPkg(path.join(npxRoot, ent.name));
+      if (pkgJson) break;
+    }
+  } catch { /* missing cache */ }
+  if (pkgJson) break;
+}
+if (!pkgJson) process.exit(2);
+const pkg = JSON.parse(fs.readFileSync(pkgJson, "utf8"));
+const dir = path.dirname(pkgJson);
+let bin = pkg.bin;
+if (!bin) process.exit(3);
+if (typeof bin === "object") bin = bin[Object.keys(bin)[0]];
+process.stdout.write(path.resolve(dir, bin));
+`;
+
+  try {
+    const out = await new Deno.Command(node, {
+      args: ["-e", script],
+      env: { ...env, ...(await spawnEnvForCommand(node, env)) },
+      stdout: "piped",
+      stderr: "null",
+      signal: AbortSignal.timeout(8_000),
+    }).output();
+    if (!out.success) return null;
+    const binPath = new TextDecoder().decode(out.stdout).trim();
+    if (!binPath) return null;
+    await Deno.stat(binPath);
+    return { executable: node, args: [binPath, ...parsed.rest] };
+  } catch {
+    return null;
+  }
+}
+
 async function withStdioSession<T>(
   server: McpServerInput,
   fn: (rpc: RpcFn) => Promise<T>,
@@ -93,7 +201,7 @@ async function withStdioSession<T>(
   // App yang dijalankan dari Finder/Dock mewarisi PATH minimal, sehingga CLI
   // seperti `figcraft-cli` (homebrew, ~/.local/bin, nvm, dst.) tidak ketemu bila
   // di-spawn apa adanya. Resolve dulu seperti LSP.
-  const executable = await resolveExecutable(server.command);
+  let executable = await resolveExecutable(server.command);
   if (!executable) {
     throw new Error(
       `Command "${server.command}" tidak ditemukan di PATH. Isi path absolut ` +
@@ -101,11 +209,19 @@ async function withStdioSession<T>(
     );
   }
 
+  let args = server.args ?? [];
   // npx resolves via login shell / ~/.local/bin, tapi child tetap butuh `node`
   // di PATH — Dock PATH sering minimal → exit 127 "node: No such file or directory".
-  const env = await spawnEnvForCommand(executable, server.env);
+  let env = await spawnEnvForCommand(executable, server.env);
+  const rewritten = await preferNodeOverNpx(executable, args, env);
+  if (rewritten) {
+    executable = rewritten.executable;
+    args = rewritten.args;
+    env = await spawnEnvForCommand(executable, server.env);
+  }
+
   const command = new Deno.Command(executable, {
-    args: server.args ?? [],
+    args,
     env,
     stdin: "piped",
     stdout: "piped",

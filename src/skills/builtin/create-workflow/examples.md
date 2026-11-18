@@ -1,37 +1,36 @@
 # Workflow field reference
 
-Condensed from `web/src/docs/workflow-docs.md`. Prefer that file if this conflicts.
+Aligned with `src/server/workflow/parse.ts` (Zod `.strict()`). Unknown keys fail.
 
 ## Top-level
 
 | Field | Required | Notes |
 | --- | --- | --- |
-| `name` | no | Display name; default = file slug |
+| `name` | no | `a-zA-Z0-9_.-`; default = file slug |
 | `description` | no | Short summary |
-| `tags` | no | string[] |
+| `type` | no | Optional label |
 | `params` | no | Run dialog inputs |
 | `env` | no | map → step env |
 | `working_dir` | no | Relative to workspace |
 | `timeout_sec` | no | Whole-run timeout |
-| `max_active_runs` | no | Soft; engine still 1 active |
-| `preconditions` | no | `{ run: "..." }` gates |
-| `mail_on` | no | reserved |
-| `hist_retention_days` | no | reserved |
+| `defaults` | no | Shared step defaults |
 | `llm` | no | Default provider/model/role for AI steps |
 | `steps` | **yes** | ≥1 |
 | `schedule` | no | In-process cron |
 | `on` | no | Event triggers |
 
+Not allowed: `tags`, `preconditions`, `max_active_runs`, `mail_on`, `hist_retention_days`.
+
 ## Params
+
+Only `name`, `type`, `default`, `description`. **No** `required`, **no** `options`.
 
 ```yaml
 params:
   - name: BRANCH
-    type: string          # string | number | boolean | agent
+    type: string          # string | integer | number | boolean | agent
     description: Target branch
     default: main
-    required: false
-    options: [main, develop]   # optional select
 ```
 
 `type: agent` → multiline prompt in Run dialog. Access: `${params.BRANCH}` or `${BRANCH}`.
@@ -40,25 +39,23 @@ params:
 
 ```yaml
 - id: lint
-  name: Lint
-  description: Optional
   depends: [install]       # string or list
   run: npm run lint
-  shell: bash              # optional
   working_dir: apps/web    # optional, under workspace
   env:
     NODE_ENV: test
   output: LOG              # → ${LOG} / ${steps.lint.output}
-  outputs:                 # optional named captures
-    - name: status
-  continue_on_error: false
-  retry:
-    max: 2
-    delay_ms: 1000
+  outputs: [status]        # or [{ name: status }]
+  retry_policy:
+    limit: 2
+    interval_sec: 1
   timeout_sec: 120
 ```
 
-Stdout/stderr capped (~200KB). Exit ≠0 fails the step unless `continue_on_error`.
+Not allowed on steps: `shell`, `name`, `description`, `continue_on_error`, `retry`.
+Use `continue_on` (step id) or `retry_policy: { limit, interval_sec }`.
+
+Stdout/stderr capped (~200KB). Exit ≠0 fails the step unless routed via `continue_on`.
 
 ## AI — `chat.completion`
 
@@ -203,19 +200,16 @@ steps:
       message: "Selesai.\n${DONE}"
 ```
 
-## Example: shell + retry + precondition
+## Example: shell + retry
 
 ```yaml
 name: flaky-e2e
-preconditions:
-  - run: test -f package.json
 timeout_sec: 1800
 steps:
   - id: e2e
     run: npm run test:e2e
-    retry:
-      max: 3
-      delay_ms: 5000
+    retry_policy:
+      limit: 3
+      interval_sec: 5
     timeout_sec: 600
-    continue_on_error: false
 ```

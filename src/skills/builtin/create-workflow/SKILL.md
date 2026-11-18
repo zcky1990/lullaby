@@ -19,7 +19,8 @@ workspace is this app repo, also see `web/src/docs/wiki-workflow.md` and
 
 1. Clarify goal: shell CI, AI review/implement, notify, scheduled/event, or mix.
 2. Slug: lowercase `a-z0-9_.-`, no leading dot → `.workflows/<slug>.yaml`.
-3. Draft YAML from templates below; apply hard rules.
+3. Draft YAML from templates below; apply hard rules. Schema is **strict** —
+   unknown keys fail parse (`Workflow tidak valid`).
 4. `write_file` into the project workspace. If workspace unset, tell the user
    to set Project Settings → Workspace first.
 5. Summarize path, step graph, how to run, and Global Settings prerequisites
@@ -27,7 +28,7 @@ workspace is this app repo, also see `web/src/docs/wiki-workflow.md` and
 
 ## Hard rules
 
-- `steps` required, ≥1. Unknown fields are rejected.
+- `steps` required, ≥1. Unknown fields are rejected (Zod `.strict()`).
 - `working_dir` must stay inside the workspace.
 - No secrets in YAML.
 - One active run per workflow.
@@ -39,18 +40,31 @@ workspace is this app repo, also see `web/src/docs/wiki-workflow.md` and
   `${NAME}`, `${params.NAME}`, `${steps.<id>.output}`,
   `${steps.<id>.outputs.<name>}`, `${env.KEY}`.
 
+### Do not invent these keys
+
+Parser rejects them (common mistakes):
+
+| Invalid | Use instead / notes |
+| --- | --- |
+| `params[].required` | omit — all params optional; set `default` if needed |
+| `params[].options` | omit — no select UI |
+| `tags`, `preconditions`, `max_active_runs` | omit — not in schema |
+| step `shell`, `name`, `description` | omit |
+| `continue_on_error` | `continue_on` (step id(s) to continue to) |
+| `retry` / `max` / `delay_ms` | `retry_policy: { limit, interval_sec }` |
+
 ## Top-level fields
 
 | Field | Required | Notes |
 | --- | --- | --- |
-| `name` | no | Display; default = file slug |
+| `name` | no | `a-zA-Z0-9_.-` only; default = file slug |
 | `description` | no | Short summary |
-| `tags` | no | string[] |
+| `type` | no | Optional string label |
 | `params` | no | Run dialog inputs |
 | `env` | no | map → step env |
 | `working_dir` | no | Relative to workspace |
 | `timeout_sec` | no | Whole-run timeout |
-| `preconditions` | no | `{ run: "..." }` gates |
+| `defaults` | no | `{ env, working_dir, retry_policy, timeout_sec }` |
 | `llm` | no | Default provider/model/role for AI steps |
 | `steps` | **yes** | ≥1 |
 | `schedule` | no | In-process cron |
@@ -58,17 +72,18 @@ workspace is this app repo, also see `web/src/docs/wiki-workflow.md` and
 
 ### Params
 
+Allowed keys only: `name`, `type`, `default`, `description`.
+
 ```yaml
 params:
   - name: BRANCH
-    type: string          # string | number | boolean | agent
+    type: string          # string | integer | number | boolean | agent
     description: Target branch
     default: main
-    required: false
-    options: [main, develop]
 ```
 
 `type: agent` → multiline prompt. Access `${params.BRANCH}` or `${BRANCH}`.
+`name` must match `^[A-Za-z_][A-Za-z0-9_]*$`.
 
 ### LLM defaults
 
@@ -89,13 +104,13 @@ Step `with.*` overrides.
 - id: lint
   depends: [install]       # string or list
   run: npm run lint
-  shell: bash              # optional
   working_dir: apps/web    # optional
   env: { NODE_ENV: test }
   output: LOG              # → ${LOG} / ${steps.lint.output}
-  outputs: [{ name: status }]
-  continue_on_error: false
-  retry: { max: 2, delay_ms: 1000 }
+  outputs: [status]        # or [{ name: status }]
+  retry_policy:
+    limit: 2
+    interval_sec: 1
   timeout_sec: 120
 ```
 
@@ -277,6 +292,8 @@ steps:
 ## Checklist
 
 - [ ] Path `.workflows/<slug>.yaml`; slug valid
+- [ ] Params only `name` / `type` / `default` / `description` (no `required`/`options`)
+- [ ] Steps: no `shell` / `retry` / `continue_on_error`; use `retry_policy` if needed
 - [ ] Step ids unique; `depends` exist; no cycles
 - [ ] Shell has `run`; AI/notification/router have `action` + `with`
 - [ ] Providers/roles/channels exist (or note user must create them)

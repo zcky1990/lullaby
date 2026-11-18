@@ -1,7 +1,14 @@
 import { equal, rejects } from "node:assert/strict";
-import { callMcpTool, formatMcpToolResult, listMcpTools } from "../src/server/mcp.ts";
+import {
+  callMcpTool,
+  formatMcpToolResult,
+  listMcpTools,
+  preferNodeOverNpx,
+  stripNpmPackageSpec,
+} from "../src/server/mcp.ts";
 import { isMcpChatTool, mcpChatToolName } from "../src/server/chat/mcp-tools.ts";
 import type { McpServerInput } from "../src/config/schema.ts";
+import { resolveExecutable, spawnEnvForCommand } from "../src/server/lsp.ts";
 
 function server(patch: Partial<McpServerInput>): McpServerInput {
   return {
@@ -41,6 +48,23 @@ Deno.test("formatMcpToolResult flattens text content blocks", () => {
   });
   equal(err.startsWith("[MCP error]"), true);
   equal(err.includes("boom"), true);
+});
+
+Deno.test("stripNpmPackageSpec drops version tags", () => {
+  equal(stripNpmPackageSpec("@playwright/mcp@latest"), "@playwright/mcp");
+  equal(stripNpmPackageSpec("left-pad@1.2.3"), "left-pad");
+  equal(stripNpmPackageSpec("@playwright/mcp"), "@playwright/mcp");
+});
+
+Deno.test("preferNodeOverNpx rewrites cached playwright mcp to node + cli", async () => {
+  const npx = await resolveExecutable("npx");
+  const node = await resolveExecutable("node");
+  if (!npx || !node) return;
+  const env = await spawnEnvForCommand(npx);
+  const rewritten = await preferNodeOverNpx(npx, ["-y", "@playwright/mcp@latest"], env);
+  if (!rewritten) return;
+  equal(rewritten.executable, node);
+  equal(rewritten.args[0].endsWith("cli.js"), true);
 });
 
 Deno.test("stdio MCP tanpa command yang bisa di-resolve memberi error jelas", async () => {
