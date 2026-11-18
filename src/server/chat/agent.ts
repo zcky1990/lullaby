@@ -518,7 +518,36 @@ export async function advance(run: Run): Promise<ChatResponse> {
     const disabledTools = new Set(settings.disabledTools);
     const mcp = await loadMcpChatTools();
     run.mcpTools = mcp.byName;
+    // Kegagalan server MCP dulu hanya masuk log, jadi chat tampak "tidak punya
+    // tool MCP" tanpa penjelasan. Sekarang terlihat langsung di stream.
+    if (mcp.warnings.length) {
+      emitChatStep(run, {
+        id: "mcp-warning",
+        kind: "thinking",
+        status: "error",
+        title: `MCP: ${mcp.warnings.length} server tidak bisa dimuat`,
+        detail: mcp.warnings
+          .map((warning) => `${warning.server}: ${warning.error}`)
+          .join(" · ")
+          .slice(0, 400),
+      });
+    }
     const allowSpawnAgent = !isCursorProvider(run.provider) && !run.parentRunId;
+    if (isCursorProvider(run.provider) && mcp.defs.length) {
+      // Provider Cursor menjalankan tool internalnya sendiri (`localAgentOptions`
+      // di cursor.ts memakai daftar tool tetap), jadi tool MCP kita tidak pernah
+      // dikirim ke SDK-nya.
+      const servers = [...new Set([...mcp.byName.values()].map((item) => item.server.name))]
+        .join(", ");
+      emitChatStep(run, {
+        id: "mcp-cursor-warning",
+        kind: "thinking",
+        status: "error",
+        title: "Tool MCP tidak dikirim ke provider Cursor",
+        detail: `${mcp.defs.length} tool MCP (${servers}) tidak tersedia untuk agent Cursor; ` +
+          "pakai provider LLM API (OpenAI/Anthropic/kompatibel) untuk memakai MCP.",
+      });
+    }
     const tools = [
       ...toolsFor(run.workspace, run.mode, run.skills.size > 0, disabledTools, {
         allowSpawnAgent,

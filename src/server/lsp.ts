@@ -181,7 +181,14 @@ export function matchLspServer(
   ) ?? null;
 }
 
-const resolveCache = new Map<string, string | null>();
+/**
+ * Positive results are cached for the process lifetime (binary paths rarely
+ * move). Negative results expire: meng-cache `null` selamanya berarti CLI yang
+ * baru dipasang / PATH yang baru diperbaiki tetap "tidak ditemukan" sampai app
+ * di-restart — persis keluhan "sudah saya tambahkan tapi tidak terbaca".
+ */
+const NEGATIVE_CACHE_MS = 30_000;
+const resolveCache = new Map<string, { path: string | null; at: number }>();
 
 function isExecutable(path: string): boolean {
   try {
@@ -248,7 +255,10 @@ async function resolveViaLoginShell(command: string): Promise<string | null> {
 export async function resolveExecutable(command: string): Promise<string | null> {
   const key = command.trim();
   if (!key) return null;
-  if (resolveCache.has(key)) return resolveCache.get(key) ?? null;
+  const cached = resolveCache.get(key);
+  if (cached && (cached.path !== null || Date.now() - cached.at < NEGATIVE_CACHE_MS)) {
+    return cached.path;
+  }
 
   let found: string | null = null;
   for (const candidate of candidatePaths(key)) {
@@ -258,7 +268,7 @@ export async function resolveExecutable(command: string): Promise<string | null>
     }
   }
   if (!found) found = await resolveViaLoginShell(key);
-  resolveCache.set(key, found);
+  resolveCache.set(key, { path: found, at: Date.now() });
   return found;
 }
 

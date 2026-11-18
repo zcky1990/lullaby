@@ -11,9 +11,16 @@ const MCP_SETTINGS_KEY = "mcp_servers";
 const MAX_CHAT_MCP_TOOLS = 80;
 const MAX_TOOL_NAME = 64;
 
+/** Server MCP yang gagal dipakai di chat; ditampilkan ke user supaya tidak senyap. */
+export interface McpWarning {
+  server: string;
+  error: string;
+}
+
 export interface McpChatTools {
   defs: ToolDef[];
   byName: Map<string, McpToolBinding>;
+  warnings: McpWarning[];
 }
 
 function parseStringArray(raw: string | null): string[] {
@@ -56,14 +63,22 @@ async function readMcpServers(): Promise<{
   enabled: boolean;
   servers: McpServerInput[];
   disabledTools: Set<string>;
+  warnings: McpWarning[];
 }> {
   const enabled = (await getAppSetting("mcp_enabled")) !== "false";
   const disabledTools = new Set(parseStringArray(await getAppSetting("mcp_disabled_tools")));
+  const warnings: McpWarning[] = [];
   const raw = await getAppSetting(MCP_SETTINGS_KEY);
-  if (!raw) return { enabled, servers: [], disabledTools };
+  if (!raw) return { enabled, servers: [], disabledTools, warnings };
   try {
     const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return { enabled, servers: [], disabledTools };
+    if (!Array.isArray(parsed)) {
+      warnings.push({
+        server: MCP_SETTINGS_KEY,
+        error: "Pengaturan MCP tersimpan bukan array server; simpan ulang di Global Settings.",
+      });
+      return { enabled, servers: [], disabledTools, warnings };
+    }
     const decrypted = await decryptMcpServers(parsed);
     const servers: McpServerInput[] = [];
     for (const item of decrypted) {
@@ -73,16 +88,17 @@ async function readMcpServers(): Promise<{
       } else {
         // Jangan diam: server yang tidak lolos schema berarti tools-nya hilang
         // dari chat tanpa penjelasan apa pun.
-        log.warn("mcp server dropped by schema", {
-          server: (item as { name?: string } | null)?.name,
-          issues: result.error.issues.map((issue) => `${issue.path.join(".")}: ${issue.message}`),
-        });
+        const name = (item as { name?: string } | null)?.name ?? "(tanpa nama)";
+        const issues = result.error.issues.map((issue) => `${issue.path.join(".")}: ${issue.message}`);
+        log.warn("mcp server dropped by schema", { server: name, issues });
+        warnings.push({ server: name, error: issues.join("; ") });
       }
     }
-    return { enabled, servers, disabledTools };
+    return { enabled, servers, disabledTools, warnings };
   } catch (error) {
     log.warn("corrupt mcp_servers for chat", { error: String(error) });
-    return { enabled, servers: [], disabledTools };
+    warnings.push({ server: MCP_SETTINGS_KEY, error: `JSON MCP tidak terbaca: ${String(error)}` });
+    return { enabled, servers: [], disabledTools, warnings };
   }
 }
 
@@ -104,8 +120,8 @@ function toDef(
 }
 
 export async function loadMcpChatTools(): Promise<McpChatTools> {
-  const { enabled, servers, disabledTools } = await readMcpServers();
-  if (!enabled) return { defs: [], byName: new Map() };
+  const { enabled, servers, disabledTools, warnings } = await readMcpServers();
+  if (!enabled) return { defs: [], byName: new Map(), warnings };
 
   const active = servers.filter((server) => server.enabled !== false);
   const defs: ToolDef[] = [];
@@ -119,7 +135,7 @@ export async function loadMcpChatTools(): Promise<McpChatTools> {
         return { server, tools, error: null as string | null };
       } catch (error) {
         // warn (bukan debug): server yang gagal start/listing adalah penyebab
-        // paling umum "tool MCP tidak muncul" dan harus terlihat di log.
+        // paling umum "tool MCP tidak muncul" dan harus terlihat di log + chat.
         log.warn("mcp list for chat failed", {
           server: server.name,
           command: server.command ?? server.url,
@@ -130,7 +146,8 @@ export async function loadMcpChatTools(): Promise<McpChatTools> {
     }),
   );
 
-  for (const { server, tools } of listed) {
+  for (const { server, tools, error } of listed) {
+    if (error) warnings.push({ server: server.name || server.id || "mcp", error });
     const serverId = server.id ?? server.name;
     for (const tool of tools) {
       const disableKey = `${serverId}:${tool.name}`;
@@ -149,12 +166,12 @@ export async function loadMcpChatTools(): Promise<McpChatTools> {
       byName.set(chatName, { server, toolName: tool.name, disableKey });
       defs.push(toDef(server, tool, chatName));
       if (defs.length >= MAX_CHAT_MCP_TOOLS) {
-        return { defs, byName };
+        return { defs, byName, warnings };
       }
     }
   }
 
-  return { defs, byName };
+  return { defs, byName, warnings };
 }
 
 export async function executeMcpChatTool(
