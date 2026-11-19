@@ -6,6 +6,8 @@ const dataDir = await Deno.makeTempDir();
 Deno.env.set("RND_APP_DATA_DIR", dataDir);
 
 Deno.test("loadMcpChatTools melaporkan server yang gagal start sebagai warning", async () => {
+  await setAppSetting("mcp_enabled", "true");
+  await setAppSetting("mcp_inject_chat", "true");
   await setAppSetting(
     "mcp_servers",
     JSON.stringify([
@@ -28,6 +30,8 @@ Deno.test("loadMcpChatTools melaporkan server yang gagal start sebagai warning",
 });
 
 Deno.test("loadMcpChatTools menandai server yang tidak lolos schema", async () => {
+  await setAppSetting("mcp_enabled", "true");
+  await setAppSetting("mcp_inject_chat", "true");
   await setAppSetting(
     "mcp_servers",
     JSON.stringify([
@@ -52,6 +56,7 @@ Deno.test("loadMcpChatTools menghormati toggle global dan tool yang dimatikan", 
     JSON.stringify([{ id: "srv-off", name: "off", transport: "stdio", command: "x", enabled: false }]),
   );
   await setAppSetting("mcp_enabled", "false");
+  await setAppSetting("mcp_inject_chat", "true");
   const disabled = await loadMcpChatTools();
   equal(disabled.defs.length, 0);
 
@@ -59,6 +64,31 @@ Deno.test("loadMcpChatTools menghormati toggle global dan tool yang dimatikan", 
   const stillOff = await loadMcpChatTools();
   equal(stillOff.defs.length, 0);
   equal(stillOff.warnings.length, 0);
+});
+
+Deno.test("loadMcpChatTools progressive bila mcp_inject_chat off (default)", async () => {
+  await setAppSetting(
+    "mcp_servers",
+    JSON.stringify([
+      {
+        id: "srv-figcraft",
+        name: "figcraft",
+        transport: "stdio",
+        command: "definitely-not-a-real-mcp-cli-xyz",
+        args: ["mcp"],
+        enabled: true,
+      },
+    ]),
+  );
+  await setAppSetting("mcp_enabled", "true");
+  await setAppSetting("mcp_inject_chat", "false");
+  const mcp = await loadMcpChatTools();
+  equal(mcp.mode, "progressive");
+  equal(mcp.defs.map((tool) => tool.name).sort().join(","), "call_mcp_tool,list_mcp_tools");
+  equal(mcp.byName.size, 0);
+  equal(mcp.serverSummaries.length, 1);
+  equal(mcp.serverSummaries[0].name, "figcraft");
+  equal(mcp.warnings.length, 0);
 });
 
 Deno.test({

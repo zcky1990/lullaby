@@ -4,13 +4,17 @@ import type { MessageDict } from "../../types";
 export const settingsAdvanced: MessageDict = {
   // McpSettings
   "settings.mcp.descriptionPrefix":
-    "Server MCP global (Model Context Protocol). Tool yang aktif di-inject ke chat Plan/Build dan workflow agent sebagai",
+    "Server MCP global (Model Context Protocol). Default: agent hanya melihat nama server dan boleh memanggil list_mcp_tools / call_mcp_tool jika perlu. Inject penuh mengekspos setiap tool sebagai",
   "settings.mcp.descriptionSuffix":
     "(kecuali provider Cursor SDK). Nonaktifkan per-tool di bawah setelah Refresh tools.",
   "settings.mcp.serverCount": "{count} server",
   "settings.mcp.globalOn": "MCP aktif",
   "settings.mcp.globalOff": "MCP nonaktif",
   "settings.mcp.toggleGlobalAria": "Aktifkan MCP",
+  "settings.mcp.injectChat": "Inject semua tool ke chat",
+  "settings.mcp.injectChatHint":
+    "Mati (default): progressive — list_mcp_tools / call_mcp_tool hanya saat dibutuhkan (tanpa spawn Playwright tiap chat). Nyala: inject semua tool enabled sebagai mcp_* saat chat mulai.",
+  "settings.mcp.injectChatAria": "Inject semua tool MCP ke chat",
   "settings.mcp.editJson": "Edit JSON",
   "settings.mcp.addServer": "Tambah server",
   "settings.mcp.loading": "Memuat konfigurasi MCP…",

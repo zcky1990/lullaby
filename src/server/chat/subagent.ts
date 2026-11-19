@@ -291,6 +291,7 @@ export async function runSpawnAgent(
 
   const childDisabled = new Set([...options.disabledTools, SPAWN_AGENT_TOOL_NAME]);
   const { systemPrompt } = await import("./agent.ts");
+  const mcp = await loadMcpChatTools();
   const system = systemPrompt(
     parent.workspace,
     mode,
@@ -298,6 +299,8 @@ export async function runSpawnAgent(
     persona,
     activeSkill,
     prompts,
+    mcp.serverSummaries,
+    mcp.mode,
   );
   const turns: ChatTurn[] = [
     { role: "system", content: system },
@@ -339,7 +342,6 @@ export async function runSpawnAgent(
       });
     }
 
-    const mcp = await loadMcpChatTools();
     child.mcpTools = mcp.byName;
     const tools = [
       ...toolsFor(child.workspace, child.mode, child.skills.size > 0, childDisabled, {

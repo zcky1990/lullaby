@@ -30,7 +30,12 @@ import { addAutoApprovedTool, readChatToolsSettings } from "./settings.ts";
 import { scheduleSkillLearn } from "./skill-learn.ts";
 import { describeToolCall, emitChatStep, summarizeToolResult } from "./steps.ts";
 import { deleteRun, pruneRuns, setRun } from "./state.ts";
-import { loadMcpChatTools } from "./mcp-tools.ts";
+import {
+  loadMcpChatTools,
+  mcpPrompt,
+  type McpChatMode,
+  type McpServerSummary,
+} from "./mcp-tools.ts";
 import { persistChatRun } from "./persist.ts";
 import { runSpawnAgent } from "./subagent.ts";
 import {
@@ -107,8 +112,11 @@ export function systemPrompt(
   persona?: string,
   activeSkill?: { name: string; body: string } | null,
   prompts: PromptSettings = DEFAULT_PROMPTS,
+  mcpServers: McpServerSummary[] = [],
+  mcpMode: McpChatMode = "off",
 ): string {
   const skillList = skillPrompt(skills);
+  const mcpList = mcpPrompt(mcpServers, mcpMode);
   let prompt: string;
   if (mode === "plan") {
     prompt = workspace
@@ -125,8 +133,8 @@ export function systemPrompt(
   }
   const withPersona = persona?.trim() ? `${persona.trim()}\n\n${prompt}` : prompt;
   const withActive = activeSkill
-    ? `${withPersona}${skillList}${activeSkillPrompt(activeSkill.name, activeSkill.body)}`
-    : `${withPersona}${skillList}`;
+    ? `${withPersona}${skillList}${mcpList}${activeSkillPrompt(activeSkill.name, activeSkill.body)}`
+    : `${withPersona}${skillList}${mcpList}`;
   return withActive;
 }
 
@@ -537,15 +545,15 @@ export async function advance(run: Run): Promise<ChatResponse> {
       // Provider Cursor menjalankan tool internalnya sendiri (`localAgentOptions`
       // di cursor.ts memakai daftar tool tetap), jadi tool MCP kita tidak pernah
       // dikirim ke SDK-nya.
-      const servers = [...new Set([...mcp.byName.values()].map((item) => item.server.name))]
-        .join(", ");
+      const servers = mcp.serverSummaries.map((item) => item.name).join(", ") ||
+        [...new Set([...mcp.byName.values()].map((item) => item.server.name))].join(", ");
       emitChatStep(run, {
         id: "mcp-cursor-warning",
         kind: "thinking",
         status: "error",
         title: "Tool MCP tidak dikirim ke provider Cursor",
-        detail: `${mcp.defs.length} tool MCP (${servers}) tidak tersedia untuk agent Cursor; ` +
-          "pakai provider LLM API (OpenAI/Anthropic/kompatibel) untuk memakai MCP.",
+        detail: `${mcp.defs.length} tool MCP (${servers || mcp.mode}) tidak tersedia untuk ` +
+          "agent Cursor; pakai provider LLM API (OpenAI/Anthropic/kompatibel) untuk memakai MCP.",
       });
     }
     const tools = [
@@ -888,6 +896,7 @@ export async function startChat(
   const skills = await loadEnabledSkills(workspace, slug);
   const skillMap = new Map(skills.map((skill) => [skill.name, skill]));
   const prompts = await readPromptSettings();
+  const mcpCatalog = await loadMcpChatTools();
 
   let activeSkill: { name: string; body: string } | null = null;
   const wantedSkill = skillName?.trim().toLowerCase() || "";
@@ -937,6 +946,8 @@ export async function startChat(
           rolePersona,
           activeSkill,
           prompts,
+          mcpCatalog.serverSummaries,
+          mcpCatalog.mode,
         ) + (isCursorProvider(provider) ? "" : SPAWN_AGENT_HINT),
       },
       ...resolved.map((message) => ({

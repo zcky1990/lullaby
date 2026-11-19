@@ -91,8 +91,9 @@ async function readStoredMcpServers(): Promise<McpServerSecrets[]> {
 export async function getMcpSettingsHandler(): Promise<Response> {
   const servers = maskMcpServers(await readStoredMcpServers());
   const enabled = (await getAppSetting("mcp_enabled")) !== "false";
+  const injectIntoChat = (await getAppSetting("mcp_inject_chat")) === "true";
   const disabledTools = parseStringArray(await getAppSetting("mcp_disabled_tools"));
-  return json({ servers, enabled, disabledTools });
+  return json({ servers, enabled, injectIntoChat, disabledTools });
 }
 
 export async function saveMcpSettingsHandler(req: Request): Promise<Response> {
@@ -114,15 +115,18 @@ export async function saveMcpSettingsHandler(req: Request): Promise<Response> {
   const encrypted = await encryptMcpServers(servers);
   await setAppSetting(MCP_SETTINGS_KEY, JSON.stringify(encrypted));
   await setAppSetting("mcp_enabled", parsed.data.enabled ? "true" : "false");
+  await setAppSetting("mcp_inject_chat", parsed.data.injectIntoChat ? "true" : "false");
   await setAppSetting("mcp_disabled_tools", JSON.stringify(parsed.data.disabledTools));
   clearMcpToolsCache();
   await record("settings.mcp_updated", {
     count: servers.length,
     enabled: parsed.data.enabled,
+    injectIntoChat: parsed.data.injectIntoChat,
   });
   return json({
     servers: maskMcpServers(servers),
     enabled: parsed.data.enabled,
+    injectIntoChat: parsed.data.injectIntoChat,
     disabledTools: parsed.data.disabledTools,
   });
 }

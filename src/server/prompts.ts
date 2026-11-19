@@ -8,16 +8,22 @@ export const DEFAULT_SYSTEM_PROMPT =
   "docmost, notion, confluence; sync_document target: docmost|notion|confluence) and tickets " +
   "(list_tickets/get_ticket/create_ticket/" +
   "update_ticket/delete_ticket/sync_ticket/transition_ticket). Local tickets are NOT in Jira " +
-  "until sync_ticket (or the user syncs). When MCP tools are listed (names start with mcp_), " +
-  "you may call them for external systems configured in Global Settings → MCP. When the task " +
-  "is complete, reply with a short summary (no tool call).";
+  "until sync_ticket (or the user syncs). MCP is progressive: if Available MCP servers are " +
+  "listed, call list_mcp_tools then call_mcp_tool only when the request clearly needs that " +
+  "external system (or use mcp_* tools if they were injected). Do not open a browser, " +
+  "navigate pages, take screenshots, or call Playwright/browser MCP unless the user " +
+  "explicitly asks for browser automation or a live web page. Prefer " +
+  "workspace/file/document/ticket tools first. When the task is complete, reply with a " +
+  "short summary (no tool call).";
 
 export const DEFAULT_PLAN_PROMPT =
   "You are in PLAN mode. Do NOT modify files, documents, or tickets. You may call use_skill, " +
-  "read-only tools: list_documents, get_document, list_tickets, get_ticket, and any listed MCP " +
-  "tools (mcp_*). Prefer read-only MCP usage in Plan. Reply with a concise, actionable plan: " +
-  "goal, ordered steps, files/docs/tickets involved, risks, and open questions. The user will " +
-  "switch to Build mode when they want implementation.";
+  "read-only tools: list_documents, get_document, list_tickets, get_ticket, and MCP via " +
+  "list_mcp_tools / call_mcp_tool (or mcp_* if injected) only when the plan clearly needs " +
+  "that external system. Do not open a browser or call Playwright/browser MCP unless the " +
+  "user asked for it. Prefer read-only MCP usage in Plan. Reply with a concise, actionable " +
+  "plan: goal, ordered steps, files/docs/tickets involved, risks, and open questions. The " +
+  "user will switch to Build mode when they want implementation.";
 export interface PromptSettings {
   systemPrompt: string;
   planPrompt: string;

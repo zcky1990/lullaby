@@ -29,12 +29,13 @@ Mode disimpan di localStorage (`rnd.chatMode:v1`).
   mendapat `spawn_agent` lagi. `write_file` child auto-apply dan digabung ke
   `pendingChanges`/Review parent. Workflow `action: agent` / headless **tidak** expose tool ini.
   Provider Cursor memakai tool `task` bawaan SDK.
-- **MCP**: jika Global Settings → MCP master switch on, tool dari setiap server enabled
-  di-inject ke LLM sebagai `mcp_<server>_<tool>` (`src/server/chat/mcp-tools.ts`). Disable
-  per-tool memakai key `serverId:toolName` (`mcp_disabled_tools`). Eksekusi:
-  `tools/call` lewat stdio/HTTP (`src/server/mcp.ts`). Cache `tools/list` ~60s. Tidak memakai
-  deny-list Chat Tools; kurangi lewat MCP settings. Provider **Cursor SDK** mengabaikan tool
-  OpenAI-style ini (tool Cursor sendiri).
+- **MCP** (`src/server/chat/mcp-tools.ts`): jika master switch on, mode default **progressive**
+  — system prompt hanya daftar nama server; agent memakai `list_mcp_tools` lalu
+  `call_mcp_tool` saat dibutuhkan (spawn server hanya saat tool itu dipanggil). Toggle
+  **Inject all tools into chat** (`mcp_inject_chat`) mengekspos semua tool sebagai
+  `mcp_<server>_<tool>` di awal chat. Disable per-tool: `serverId:toolName`
+  (`mcp_disabled_tools`). Eksekusi: `tools/call` (`src/server/mcp.ts`). Cache `tools/list`
+  ~60s. Provider **Cursor SDK** mengabaikan tool OpenAI-style ini.
 - Loop tool default **unlimited** (seperti OpenCode). Opsional batas di Global Settings →
   Tools (`chat_max_steps`); langkah terakhir = text-only + ringkasan. Workflow
   `action: agent` memakai `max_steps` opsional (default juga unlimited)

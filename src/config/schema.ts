@@ -298,6 +298,8 @@ export type McpServerInput = z.infer<typeof McpServerInput>;
 export const McpSettingsInput = z.object({
   servers: z.array(McpServerInput).max(20),
   enabled: z.boolean().default(true),
+  /** When false (default), MCP tools are not injected into chat/workflow agents. */
+  injectIntoChat: z.boolean().default(false),
   disabledTools: z.array(z.string().trim().min(1).max(200)).max(1000).default([]),
 });
 

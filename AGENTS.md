@@ -152,12 +152,12 @@ finishing a change.
   step outputs under `.workflows/cache/<slug>/<runId>.json` (TTL:
   `app_settings.workflow_cache_keep_hours`, Global Settings → Workflow, default 72h).
   Docs: `docs/features/workflows.md`, `docs/features/workflow-cron.md`.
-- **MCP**: global server config (`McpSettings`) is stored in `app_settings` (`mcp_servers` JSON;
-  stdio command/args/env or http url/headers) plus `mcp_enabled` and `mcp_disabled_tools`.
-  `POST /api/settings/mcp/tools` connects with `initialize` + `tools/list` (`src/server/mcp.ts`,
-  stdio or http) so each server's tools can be discovered and enabled/disabled. Enabled tools are
-  injected into chat/workflow agent as `mcp_<server>_<tool>` (`src/server/chat/mcp-tools.ts`) and
-  executed via `tools/call` (Cursor SDK provider uses its own tools instead).
+- **MCP**: global server config (`McpSettings`) in `app_settings` (`mcp_servers` JSON;
+  stdio/http) plus `mcp_enabled`, `mcp_inject_chat` (default off = progressive), and
+  `mcp_disabled_tools`. Progressive chat exposes `list_mcp_tools` + `call_mcp_tool` and lists
+  server names in the system prompt; inject-on exposes every tool as `mcp_<server>_<tool>`
+  (`src/server/chat/mcp-tools.ts`). `POST /api/settings/mcp/tools` runs `initialize` +
+  `tools/list` (`src/server/mcp.ts`). Cursor SDK uses its own tools instead.
 - **Automation**: global `auto_build_on_in_progress` in `app_settings` (GET/PUT
   `/api/settings/automation`). UI: Global Settings → Automation. When on, Kanban To Do → In Progress
   opens Chat Build with a ticket prompt (`docs/automation.md`).

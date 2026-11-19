@@ -131,6 +131,7 @@ export async function runHeadlessAgent(input: HeadlessAgentInput): Promise<Headl
   const temperature = input.temperature ??
     (input.variant ? VARIANT_TEMPERATURE[input.variant] : undefined);
 
+  const mcp = await loadMcpChatTools();
   let system = systemPrompt(
     input.workspace,
     mode,
@@ -138,6 +139,8 @@ export async function runHeadlessAgent(input: HeadlessAgentInput): Promise<Headl
     input.persona,
     activeSkill,
     prompts,
+    mcp.serverSummaries,
+    mcp.mode,
   );
   if (input.system?.trim()) {
     system = `${input.system.trim()}\n\n${system}`;
@@ -160,7 +163,6 @@ export async function runHeadlessAgent(input: HeadlessAgentInput): Promise<Headl
   );
   const toolLog: HeadlessToolLog[] = [];
   const filesTouched: string[] = [];
-  const mcp = await loadMcpChatTools();
   run.mcpTools = mcp.byName;
   const tools = [...toolsFor(run.workspace, run.mode, run.skills.size > 0), ...mcp.defs];
 

@@ -57,6 +57,21 @@ export function describeToolCall(call: ToolCall): string {
       return "Mengubah status tiket";
     case "use_skill":
       return typeof args.name === "string" ? `Memuat skill ${args.name}` : "Memuat skill";
+    case "list_mcp_tools":
+      return typeof args.server === "string" && args.server.trim()
+        ? `Melihat tool MCP (${args.server})`
+        : "Melihat daftar tool MCP";
+    case "call_mcp_tool": {
+      const server = typeof args.server === "string" ? args.server : "";
+      const tool = typeof args.tool === "string"
+        ? args.tool
+        : typeof args.name === "string"
+        ? args.name
+        : "";
+      if (server && tool) return `MCP ${server}/${tool}`;
+      if (tool) return `Menjalankan MCP ${tool}`;
+      return "Menjalankan tool MCP";
+    }
     case "spawn_agent": {
       const prompt = typeof args.prompt === "string" ? args.prompt.replace(/\s+/g, " ") : "";
       if (!prompt) return "Menjalankan subagent";

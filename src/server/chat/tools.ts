@@ -15,7 +15,15 @@ import {
   updateDocumentTool,
 } from "./document-tools.ts";
 import { safeParse } from "./llm.ts";
-import { executeMcpChatTool, isMcpChatTool } from "./mcp-tools.ts";
+import {
+  CALL_MCP_TOOL_NAME,
+  callMcpToolForChat,
+  executeMcpChatTool,
+  isMcpChatTool,
+  isMcpMetaTool,
+  LIST_MCP_TOOLS_NAME,
+  listMcpToolsForChat,
+} from "./mcp-tools.ts";
 import {
   deleteTicketTool,
   getTicketTool,
@@ -116,6 +124,17 @@ export const CHAT_TOOL_CATALOG: ChatToolCatalogEntry[] = [
   {
     name: "use_skill",
     description: "Load the full instructions of an available skill by name (read-only).",
+    requiresApproval: false,
+  },
+  {
+    name: "list_mcp_tools",
+    description:
+      "List MCP tools from configured servers (progressive; spawn only when called).",
+    requiresApproval: false,
+  },
+  {
+    name: "call_mcp_tool",
+    description: "Call one MCP tool by server name and tool name with an arguments object.",
     requiresApproval: false,
   },
   {
@@ -456,7 +475,13 @@ export async function executeTool(run: Run, call: ToolCall): Promise<string> {
   if (call.name === SPAWN_AGENT_TOOL_NAME) {
     return "spawn_agent harus dijalankan lewat agent loop (bukan executeTool langsung).";
   }
-  if (isMcpChatTool(call.name)) {
+  if (call.name === LIST_MCP_TOOLS_NAME) {
+    return await listMcpToolsForChat(args);
+  }
+  if (call.name === CALL_MCP_TOOL_NAME) {
+    return await callMcpToolForChat(args);
+  }
+  if (isMcpChatTool(call.name) && !isMcpMetaTool(call.name)) {
     const binding = run.mcpTools.get(call.name);
     if (!binding) return `Unknown MCP tool: ${call.name}`;
     return await executeMcpChatTool(binding, args);

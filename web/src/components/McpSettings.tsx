@@ -132,6 +132,7 @@ function serversToJson(servers: McpServer[]): string {
 export function McpSettings() {
   const [servers, setServers] = useState<McpServer[]>([]);
   const [enabled, setEnabled] = useState(true);
+  const [injectIntoChat, setInjectIntoChat] = useState(false);
   const [disabledTools, setDisabledTools] = useState<string[]>([]);
   const [toolsByServer, setToolsByServer] = useState<Record<string, McpTool[]>>({});
   const [toolState, setToolState] = useState<
@@ -156,6 +157,7 @@ export function McpSettings() {
       .then((res) => {
         setServers(res.servers);
         setEnabled(res.enabled);
+        setInjectIntoChat(res.injectIntoChat);
         setDisabledTools(res.disabledTools);
       })
       .catch((e) => setError((e as Error).message))
@@ -166,6 +168,7 @@ export function McpSettings() {
     next: McpServer[],
     nextEnabled = enabled,
     nextDisabledTools = disabledTools,
+    nextInjectIntoChat = injectIntoChat,
   ) => {
     setBusy(true);
     setError(undefined);
@@ -173,10 +176,12 @@ export function McpSettings() {
       const res = await api.saveMcpSettings({
         servers: next,
         enabled: nextEnabled,
+        injectIntoChat: nextInjectIntoChat,
         disabledTools: nextDisabledTools,
       });
       setServers(res.servers);
       setEnabled(res.enabled);
+      setInjectIntoChat(res.injectIntoChat);
       setDisabledTools(res.disabledTools);
     } catch (e) {
       setError((e as Error).message);
@@ -229,7 +234,7 @@ export function McpSettings() {
       ? disabledTools.filter((item) => item !== key)
       : [...disabledTools, key];
     try {
-      await persist(servers, enabled, next);
+      await persist(servers, enabled, next, injectIntoChat);
     } catch {
       // error shown above
     }
@@ -237,7 +242,15 @@ export function McpSettings() {
 
   const toggleGlobal = async () => {
     try {
-      await persist(servers, !enabled, disabledTools);
+      await persist(servers, !enabled, disabledTools, injectIntoChat);
+    } catch {
+      // error shown above
+    }
+  };
+
+  const toggleInjectIntoChat = async () => {
+    try {
+      await persist(servers, enabled, disabledTools, !injectIntoChat);
     } catch {
       // error shown above
     }
@@ -303,35 +316,49 @@ export function McpSettings() {
         <Separator />
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-xs text-muted-foreground">
-            {t("settings.mcp.serverCount", { count: servers.length })}
-          </span>
-          <span className="text-xs text-muted-foreground">
-            {enabled ? t("settings.mcp.globalOn") : t("settings.mcp.globalOff")}
-          </span>
-          <Switch
-            checked={enabled}
-            onCheckedChange={() => toggleGlobal()}
-            disabled={busy}
-            aria-label={t("settings.mcp.toggleGlobalAria")}
-          />
+      <div className="flex flex-col gap-2">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs text-muted-foreground">
+              {t("settings.mcp.serverCount", { count: servers.length })}
+            </span>
+            <span className="text-xs text-muted-foreground">
+              {enabled ? t("settings.mcp.globalOn") : t("settings.mcp.globalOff")}
+            </span>
+            <Switch
+              checked={enabled}
+              onCheckedChange={() => toggleGlobal()}
+              disabled={busy}
+              aria-label={t("settings.mcp.toggleGlobalAria")}
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              data-icon="inline-start"
+              onClick={() => openJson("edit")}
+            >
+              <Braces />
+              {t("settings.mcp.editJson")}
+            </Button>
+            <Button size="sm" data-icon="inline-start" onClick={() => openJson("add")}>
+              <Plus />
+              {t("settings.mcp.addServer")}
+            </Button>
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          <Button
-            size="sm"
-            variant="outline"
-            data-icon="inline-start"
-            onClick={() => openJson("edit")}
-          >
-            <Braces />
-            {t("settings.mcp.editJson")}
-          </Button>
-          <Button size="sm" data-icon="inline-start" onClick={() => openJson("add")}>
-            <Plus />
-            {t("settings.mcp.addServer")}
-          </Button>
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border px-3 py-2">
+          <div className="min-w-0 flex-1">
+            <p className="text-xs font-medium">{t("settings.mcp.injectChat")}</p>
+            <p className="text-[11px] text-muted-foreground">{t("settings.mcp.injectChatHint")}</p>
+          </div>
+          <Switch
+            checked={injectIntoChat}
+            onCheckedChange={() => void toggleInjectIntoChat()}
+            disabled={busy || !enabled}
+            aria-label={t("settings.mcp.injectChatAria")}
+          />
         </div>
       </div>
 

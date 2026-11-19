@@ -19,7 +19,7 @@ Section nav di aside (`GlobalSettingsPanel`):
 | Appearance & Editor | Tema, font aplikasi/chat, ukuran font chat, icon, Monaco theme                   |
 | LLM Providers       | CRUD provider global                                                             |
 | Roles               | Persona + optional provider                                                      |
-| MCP                 | Server stdio/http, enable/disable tools; tools aktif masuk chat sebagai `mcp_*`  |
+| MCP                 | Server stdio/http; default progressive (`list_mcp_tools`/`call_mcp_tool`); inject penuh opsional |
 | Skills              | Enable global + toggle per skill                                                 |
 | Tools               | Auto-approve writes + enable/disable chat tools — [chat-agent.md](chat-agent.md) |
 | Automation          | Auto-build To Do → In Progress — [automation.md](../automation.md)               |
@@ -39,6 +39,11 @@ seperti
 
 yang ditulis ke `mcp.json`, `~/Library/Application Support/Lullaby/config.json`, atau
 `~/.cursor/mcp.json` **tidak akan terbaca**.
+
+Dengan master switch on, chat memakai **progressive disclosure**: agent melihat nama server
+MCP, lalu memanggil `list_mcp_tools` / `call_mcp_tool` hanya jika perlu (tanpa spawn di
+setiap chat). Toggle **Inject all tools into chat** (`mcp_inject_chat`) mengekspos semua
+tool sebagai `mcp_*` di awal run.
 
 Cara mendaftarkannya: **Global Settings → MCP → Edit JSON** (wajib dibungkus `mcpServers`) atau
 tombol **Tambah server**:

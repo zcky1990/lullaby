@@ -4,13 +4,17 @@ import type { MessageDict } from "../../types";
 export const settingsAdvanced: MessageDict = {
   // McpSettings
   "settings.mcp.descriptionPrefix":
-    "Global MCP servers (Model Context Protocol). Enabled tools are injected into Plan/Build chat and agent workflows as",
+    "Global MCP servers (Model Context Protocol). By default the agent only sees server names and may call list_mcp_tools / call_mcp_tool when needed. Eager inject exposes every tool as",
   "settings.mcp.descriptionSuffix":
     "(except the Cursor SDK provider). Disable tools individually below after refreshing tools.",
   "settings.mcp.serverCount": "{count} server",
   "settings.mcp.globalOn": "MCP enabled",
   "settings.mcp.globalOff": "MCP disabled",
   "settings.mcp.toggleGlobalAria": "Enable MCP",
+  "settings.mcp.injectChat": "Inject all tools into chat",
+  "settings.mcp.injectChatHint":
+    "Off (default): progressive — list_mcp_tools / call_mcp_tool only when needed (no Playwright spawn on every chat). On: inject every enabled tool as mcp_* at chat start.",
+  "settings.mcp.injectChatAria": "Inject all MCP tools into chat",
   "settings.mcp.editJson": "Edit JSON",
   "settings.mcp.addServer": "Add server",
   "settings.mcp.loading": "Loading MCP configuration…",

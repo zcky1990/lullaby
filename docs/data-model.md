@@ -103,6 +103,7 @@ Key-value global.
 | --- | --- |
 | `mcp_servers` | JSON array server MCP |
 | `mcp_enabled` | `"true"` / `"false"` |
+| `mcp_inject_chat` | `"true"` = inject semua `mcp_*`; default off = progressive `list_mcp_tools`/`call_mcp_tool` |
 | `mcp_disabled_tools` | JSON string[] |
 | `skills_enabled` | `"true"` / `"false"` |
 | `skills_disabled` | JSON skill id[] |

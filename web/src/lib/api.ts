@@ -321,6 +321,7 @@ export interface McpTool {
 export interface McpSettingsResponse {
   servers: McpServer[];
   enabled: boolean;
+  injectIntoChat: boolean;
   disabledTools: string[];
 }
 
@@ -1195,6 +1196,7 @@ export const api = {
   saveMcpSettings: (payload: {
     servers: McpServer[];
     enabled: boolean;
+    injectIntoChat: boolean;
     disabledTools: string[];
   }) => request<McpSettingsResponse>("/api/settings/mcp", jsonInit("PUT", payload)),
   listMcpTools: (server: McpServer) =>
