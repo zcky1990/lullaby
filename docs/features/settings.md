@@ -19,6 +19,7 @@ Section nav di aside (`GlobalSettingsPanel`):
 | Appearance & Editor | Tema, font aplikasi/chat, ukuran font chat, icon, Monaco theme                   |
 | LLM Providers       | CRUD provider global                                                             |
 | Roles               | Persona + optional provider                                                      |
+| Prompts             | Override system prompt Build, Plan, dan generate-ticket                          |
 | MCP                 | Server stdio/http; default progressive (`list_mcp_tools`/`call_mcp_tool`); inject penuh opsional |
 | Skills              | Enable global + toggle per skill                                                 |
 | Tools               | Auto-approve writes + enable/disable chat tools — [chat-agent.md](chat-agent.md) |
@@ -26,6 +27,25 @@ Section nav di aside (`GlobalSettingsPanel`):
 | Notifications       | Daftar channel webhook; dipakai step `action: notification` — [notifications.md](notifications.md) |
 | Terminal            | Default shell (`zsh` / `bash`) untuk session baru                                |
 | About               | Info aplikasi                                                                    |
+
+## Prompts (override)
+
+`GET`/`PUT /api/settings/prompts` menyimpan tiga prompt di `app_settings`:
+
+| Field (payload) | Key `app_settings` | Dipakai untuk                                              |
+| --------------- | ------------------ | ---------------------------------------------------------- |
+| `systemPrompt`  | `system_prompt`    | System prompt chat mode **Build**                           |
+| `planPrompt`    | `plan_prompt`      | System prompt chat mode **Plan**                             |
+| `ticketPrompt`  | `ticket_prompt`    | System prompt **Generate ticket** dari dokumen (tab Document) |
+
+- Nilai kosong / tidak tersimpan → fallback ke default di `src/server/prompts.ts`
+  (`DEFAULT_SYSTEM_PROMPT`, `DEFAULT_PLAN_PROMPT`, `DEFAULT_TICKET_PROMPT`).
+- `GET` mengembalikan nilai efektif + `default*Prompt` + flag `customized.*`.
+- `PUT` tanpa field `ticketPrompt` (payload lama) **tidak** menimpa `ticket_prompt` yang tersimpan;
+  field itu divalidasi lewat `PromptsSettingsPatchInput`
+  (`src/config/schema_prompts_patch.ts`) karena `PromptsSettingsInput` di `schema.ts` sengaja
+  dibiarkan backward-compatible.
+- Persona role (jika aktif) tetap di-prepend ke prompt chat; prompt generate-ticket tidak memakai role.
 
 ## MCP: dari mana konfigurasi dibaca
 

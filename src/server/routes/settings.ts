@@ -8,11 +8,11 @@ import {
   McpSettingsInput,
   NotificationSettingsInput,
   NotificationTestInput,
-  PromptsSettingsInput,
   SkillsSettingsInput,
   TerminalSettingsInput,
   UiPreferencesInput,
 } from "../../config/schema.ts";
+import { PromptsSettingsPatchInput } from "../../config/schema_prompts_patch.ts";
 import { log } from "../../core/logger.ts";
 import { getAppSetting, getProject, setAppSetting } from "../../db/db.ts";
 import {
@@ -53,7 +53,13 @@ import {
   workspaceSkillsDir,
 } from "../skills.ts";
 import { readTerminalShellSetting, TERMINAL_SHELL_KEY } from "../terminal.ts";
-import { DEFAULT_PLAN_PROMPT, DEFAULT_SYSTEM_PROMPT, readPromptSettings } from "../prompts.ts";
+import {
+  DEFAULT_PLAN_PROMPT,
+  DEFAULT_SYSTEM_PROMPT,
+  DEFAULT_TICKET_PROMPT,
+  readPromptSettings,
+  readTicketPrompt,
+} from "../prompts.ts";
 import {
   normalizeWorkflowCacheKeepHours,
   readWorkflowCacheKeepHours,
@@ -415,25 +421,33 @@ export async function getPromptsHandler(): Promise<Response> {
   const settings = await readPromptSettings();
   const storedSystem = await getAppSetting("system_prompt");
   const storedPlan = await getAppSetting("plan_prompt");
+  const storedTicket = await getAppSetting("ticket_prompt");
   return json({
     systemPrompt: settings.systemPrompt,
     planPrompt: settings.planPrompt,
+    ticketPrompt: await readTicketPrompt(),
     defaultSystemPrompt: DEFAULT_SYSTEM_PROMPT,
     defaultPlanPrompt: DEFAULT_PLAN_PROMPT,
+    defaultTicketPrompt: DEFAULT_TICKET_PROMPT,
     customized: {
       systemPrompt: Boolean(storedSystem?.trim()),
       planPrompt: Boolean(storedPlan?.trim()),
+      ticketPrompt: Boolean(storedTicket?.trim()),
     },
   });
 }
 
 export async function savePromptsHandler(req: Request): Promise<Response> {
-  const parsed = PromptsSettingsInput.safeParse(await readJson(req));
+  const parsed = PromptsSettingsPatchInput.safeParse(await readJson(req));
   if (!parsed.success) {
     return json({ error: "invalid_input", issues: parsed.error.issues }, 400);
   }
   await setAppSetting("system_prompt", parsed.data.systemPrompt);
   await setAppSetting("plan_prompt", parsed.data.planPrompt);
+  // Field baru: payload lama (tanpa ticketPrompt) tidak menimpa nilai tersimpan.
+  if (parsed.data.ticketPrompt !== undefined) {
+    await setAppSetting("ticket_prompt", parsed.data.ticketPrompt);
+  }
   await record("settings.prompts_updated", {});
   return json({ ok: true });
 }

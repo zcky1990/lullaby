@@ -155,10 +155,13 @@ export const settings: MessageDict = {
   // PromptsSettings
   "settings.prompts.title": "Prompts",
   "settings.prompts.description":
-    "Override system prompt global untuk mode Build dan Plan. Persona role (jika aktif) tetap ditambahkan di atas prompt ini.",
+    "Override system prompt global untuk mode Build dan Plan, plus prompt yang dipakai tombol Generate ticket di tab Document. Persona role (jika aktif) tetap ditambahkan di atas prompt chat.",
   "settings.prompts.loading": "Memuat prompts…",
   "settings.prompts.systemLabel": "SYSTEM PROMPT (Build)",
   "settings.prompts.planLabel": "PLAN PROMPT",
+  "settings.prompts.ticketLabel": "PROMPT GENERATE TIKET (dokumen → tiket)",
+  "settings.prompts.ticketHint":
+    "Dipakai tombol Generate ticket di tab Document. Judul dan isi dokumen dikirim sebagai pesan user; teks ini adalah system prompt-nya.",
   "settings.prompts.resetDefault": "Reset ke default",
   "settings.prompts.custom": "Menggunakan prompt kustom.",
   "settings.prompts.default": "Menggunakan default.",

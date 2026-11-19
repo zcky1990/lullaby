@@ -5,11 +5,23 @@ import { Spinner } from "@/components/ui/spinner";
 import { useI18n } from "@/lib/i18n";
 import { api, type PromptsSettings as PromptsData } from "@/lib/api";
 
+/**
+ * `GET /api/settings/prompts` juga mengembalikan prompt generate-ticket
+ * (tab Document → Generate ticket). Tipe bersama di `lib/api` sengaja tidak
+ * diperluas agar perubahan tetap kecil; field ekstra dibaca lewat cast ini.
+ */
+type PromptSettingsResponse = PromptsData & {
+  ticketPrompt?: string;
+  defaultTicketPrompt?: string;
+  customized: PromptsData["customized"] & { ticketPrompt?: boolean };
+};
+
 export function PromptsSettings() {
   const { t } = useI18n();
-  const [data, setData] = useState<PromptsData | null>(null);
+  const [data, setData] = useState<PromptSettingsResponse | null>(null);
   const [systemPrompt, setSystemPrompt] = useState("");
   const [planPrompt, setPlanPrompt] = useState("");
+  const [ticketPrompt, setTicketPrompt] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -19,9 +31,11 @@ export function PromptsSettings() {
     api
       .getPrompts()
       .then((result) => {
-        setData(result);
-        setSystemPrompt(result.systemPrompt);
-        setPlanPrompt(result.planPrompt);
+        const prompts = result as PromptSettingsResponse;
+        setData(prompts);
+        setSystemPrompt(prompts.systemPrompt);
+        setPlanPrompt(prompts.planPrompt);
+        setTicketPrompt(prompts.ticketPrompt ?? "");
       })
       .catch((e) => setError((e as Error).message))
       .finally(() => setLoading(false));
@@ -32,7 +46,10 @@ export function PromptsSettings() {
     setSaved(false);
     setError(undefined);
     try {
-      await api.savePrompts({ systemPrompt, planPrompt });
+      // Objek disimpan di variabel agar field tambahan ikut terkirim tanpa
+      // mengubah tipe `api.savePrompts`.
+      const payload = { systemPrompt, planPrompt, ticketPrompt };
+      await api.savePrompts(payload);
       setSaved(true);
     } catch (e) {
       setError((e as Error).message);
@@ -124,6 +141,47 @@ export function PromptsSettings() {
               className="border-input focus-visible:border-ring focus-visible:ring-ring/50 w-full resize-y rounded-md border bg-transparent px-3 py-2 font-mono text-xs shadow-xs outline-none focus-visible:ring-[3px]"
             />
             {data?.customized.planPrompt ? (
+              <span className="text-[11px] text-muted-foreground">
+                {t("settings.prompts.custom")}
+              </span>
+            ) : (
+              <span className="text-[11px] text-muted-foreground">
+                {t("settings.prompts.default")}
+              </span>
+            )}
+          </div>
+
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-medium text-muted-foreground">
+                {t("settings.prompts.ticketLabel")}
+              </span>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-7 px-2 text-[11px]"
+                onClick={() => {
+                  setTicketPrompt(data?.defaultTicketPrompt ?? "");
+                  setSaved(false);
+                }}
+                disabled={!data}
+              >
+                {t("settings.prompts.resetDefault")}
+              </Button>
+            </div>
+            <textarea
+              value={ticketPrompt}
+              onChange={(event) => {
+                setTicketPrompt(event.target.value);
+                setSaved(false);
+              }}
+              rows={7}
+              className="border-input focus-visible:border-ring focus-visible:ring-ring/50 w-full resize-y rounded-md border bg-transparent px-3 py-2 font-mono text-xs shadow-xs outline-none focus-visible:ring-[3px]"
+            />
+            <span className="text-[11px] text-muted-foreground">
+              {t("settings.prompts.ticketHint")}
+            </span>
+            {data?.customized.ticketPrompt ? (
               <span className="text-[11px] text-muted-foreground">
                 {t("settings.prompts.custom")}
               </span>

@@ -11,6 +11,12 @@ Panel **Document** mendukung empat sumber. State sumber di UI; remote memakai qu
   `docmost` \| `notion` \| `confluence`) menyimpan `page_id` + `sync_target` di `local_documents`
 - **Generate ticket** dari isi dokumen → `POST .../generate-tickets` (LLM + tool `create_ticket` saja)
 
+  System prompt-nya bisa di-override di **Global Settings → Prompts → Ticket generation prompt**
+  (`app_settings.ticket_prompt`, default `DEFAULT_TICKET_PROMPT` di `src/server/prompts.ts`).
+  Judul + isi dokumen (maks 30.000 karakter) tetap dikirim sebagai pesan user, jadi prompt kustom
+  cukup menjelaskan gaya tiket yang diinginkan (jumlah, bahasa, field wajib, dll).
+  Reset ke default lewat tombol **Reset to default** di section yang sama.
+
 ## Docmost
 
 - Config project: base URL + API token + opsional Space ID

@@ -24,6 +24,19 @@ export const DEFAULT_PLAN_PROMPT =
   "user asked for it. Prefer read-only MCP usage in Plan. Reply with a concise, actionable " +
   "plan: goal, ordered steps, files/docs/tickets involved, risks, and open questions. The " +
   "user will switch to Build mode when they want implementation.";
+
+/**
+ * System prompt untuk "generate ticket dari dokumen" (tab Document → Generate ticket).
+ * Bisa di-override dari Global Settings → Prompts (`app_settings.ticket_prompt`).
+ */
+export const DEFAULT_TICKET_PROMPT =
+  "You generate actionable implementation tickets from a document. Read the document and call " +
+  "create_ticket for each ticket (1-5 tickets). Each ticket needs a short imperative title, a " +
+  "description containing context and acceptance criteria, a sensible priority (Low/Medium/High/Urgent), " +
+  "and a type (Task/Bug/Story). Status should usually be 'To Do'. Tickets are stored locally and " +
+  "synced to Jira later by the user. Only use create_ticket; do not describe tickets without " +
+  "creating them. When finished, reply with a short summary.";
+
 export interface PromptSettings {
   systemPrompt: string;
   planPrompt: string;
@@ -36,4 +49,10 @@ export async function readPromptSettings(): Promise<PromptSettings> {
     systemPrompt: system || DEFAULT_SYSTEM_PROMPT,
     planPrompt: plan || DEFAULT_PLAN_PROMPT,
   };
+}
+
+/** Prompt efektif untuk generate ticket dari dokumen (default bila belum di-override). */
+export async function readTicketPrompt(): Promise<string> {
+  const stored = (await getAppSetting("ticket_prompt"))?.trim();
+  return stored || DEFAULT_TICKET_PROMPT;
 }

@@ -154,10 +154,13 @@ export const settings: MessageDict = {
   // PromptsSettings
   "settings.prompts.title": "Prompts",
   "settings.prompts.description":
-    "Override the global system prompt for Build and Plan modes. The role persona (if active) is still prepended to this prompt.",
+    "Override the global system prompt for Build and Plan modes, plus the prompt used by Generate ticket on the Document tab. The role persona (if active) is still prepended to the chat prompts.",
   "settings.prompts.loading": "Loading prompts…",
   "settings.prompts.systemLabel": "SYSTEM PROMPT (Build)",
   "settings.prompts.planLabel": "PLAN PROMPT",
+  "settings.prompts.ticketLabel": "TICKET GENERATION PROMPT (document → ticket)",
+  "settings.prompts.ticketHint":
+    "Used by the Generate ticket button on the Document tab. The document title and content are sent as the user message; this text is the system prompt.",
   "settings.prompts.resetDefault": "Reset to default",
   "settings.prompts.custom": "Using a custom prompt.",
   "settings.prompts.default": "Using the default.",

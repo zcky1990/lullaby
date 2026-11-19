@@ -1,15 +1,8 @@
 import type { LlmProviderRow } from "../../db/db.ts";
+import { readTicketPrompt } from "../prompts.ts";
 import { complete, VARIANT_TEMPERATURE } from "./llm.ts";
 import { executeTool, TICKET_TOOL } from "./tools.ts";
 import type { CreatedTicket, Run } from "./types.ts";
-
-const TICKET_GENERATION_PROMPT =
-  "You generate actionable implementation tickets from a document. Read the document and call " +
-  "create_ticket for each ticket (1-5 tickets). Each ticket needs a short imperative title, a " +
-  "description containing context and acceptance criteria, a sensible priority (Low/Medium/High/Urgent), " +
-  "and a type (Task/Bug/Story). Status should usually be 'To Do'. Tickets are stored locally and " +
-  "synced to Jira later by the user. Only use create_ticket; do not describe tickets without " +
-  "creating them. When finished, reply with a short summary.";
 
 export async function generateTicketsFromDocument(
   projectId: string,
@@ -18,6 +11,8 @@ export async function generateTicketsFromDocument(
   content: string,
   variant = "medium",
 ): Promise<{ tickets: CreatedTicket[]; message: string }> {
+  // System prompt bisa di-override dari Global Settings → Prompts (`ticket_prompt`).
+  const systemPrompt = await readTicketPrompt();
   const run: Run = {
     id: crypto.randomUUID(),
     provider,
@@ -25,7 +20,7 @@ export async function generateTicketsFromDocument(
     sessionId: "",
     temperature: VARIANT_TEMPERATURE[variant],
     turns: [
-      { role: "system", content: TICKET_GENERATION_PROMPT },
+      { role: "system", content: systemPrompt },
       {
         role: "user",
         content: `Document: ${title}\n\n${content.slice(0, 30_000)}`,
