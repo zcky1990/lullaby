@@ -20,6 +20,7 @@ import {
   ContextMenuContent,
   ContextMenuItem,
   ContextMenuSeparator,
+  ContextMenuShortcut,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import { Input } from "@/components/ui/input";
@@ -61,6 +62,16 @@ function basenameOf(path: string): string {
   return index < 0 ? normalized : normalized.slice(index + 1);
 }
 
+function isEditableTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  return Boolean(target.closest("input, textarea, select, [contenteditable=true]"));
+}
+
+function isApplePlatform(): boolean {
+  if (typeof navigator === "undefined") return false;
+  return /Mac|iPhone|iPad|iPod/i.test(navigator.platform || navigator.userAgent);
+}
+
 export function FileTreePanel({
   projectId,
   selectedPath,
@@ -91,6 +102,8 @@ export function FileTreePanel({
   const createInputRef = useRef<HTMLInputElement>(null);
   const renameInputRef = useRef<HTMLInputElement>(null);
   const skipRenameBlurRef = useRef(false);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const deleteShortcutLabel = isApplePlatform() ? "⌘⌫" : "Ctrl+Backspace";
 
   const storedDirtyPaths = useDirtyPaths();
   const activeDirtyPaths = dirtyPaths ?? storedDirtyPaths;
@@ -306,7 +319,24 @@ export function FileTreePanel({
     }
   };
 
-  const deleteEntry = async (entry: FileEntry) => {
+  const findEntry = useCallback((path: string): FileEntry | null => {
+    const walk = (entries: FileEntry[]): FileEntry | null => {
+      for (const entry of entries) {
+        if (entry.path === path) return entry;
+        if (entry.type === "dir") {
+          const nested = children[entry.path];
+          if (nested) {
+            const found = walk(nested);
+            if (found) return found;
+          }
+        }
+      }
+      return null;
+    };
+    return walk(rootEntries);
+  }, [children, rootEntries]);
+
+  const deleteEntry = useCallback(async (entry: FileEntry) => {
     if (!projectId || actionBusy || renameBusy) return;
     const label = entry.type === "dir"
       ? t("explorer.tree.folderLabel", { name: entry.name })
@@ -333,7 +363,52 @@ export function FileTreePanel({
     } finally {
       setActionBusy(false);
     }
-  };
+  }, [
+    actionBusy,
+    clipboard?.path,
+    focusPath,
+    notifyChange,
+    projectId,
+    refreshDir,
+    renameBusy,
+    renaming?.path,
+    t,
+  ]);
+
+  const deleteFocusedEntry = useCallback(() => {
+    if (actionBusy || createBusy || renameBusy || creating || renaming) return;
+    const path = focusPath ?? selectedPath;
+    if (!path) return;
+    const entry = findEntry(path);
+    if (entry) void deleteEntry(entry);
+  }, [
+    actionBusy,
+    createBusy,
+    creating,
+    deleteEntry,
+    findEntry,
+    focusPath,
+    renameBusy,
+    renaming,
+    selectedPath,
+  ]);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!(event.metaKey || event.ctrlKey) || event.altKey || event.shiftKey) return;
+      if (event.key !== "Backspace" && event.key !== "Delete" && event.key !== "Enter") return;
+      if (isEditableTarget(event.target)) return;
+      const panel = panelRef.current;
+      if (!panel) return;
+      const active = document.activeElement;
+      if (active !== panel && !panel.contains(active)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      deleteFocusedEntry();
+    };
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
+  }, [deleteFocusedEntry]);
 
   const remapPathPrefix = (from: string, to: string) => {
     const rewrite = (path: string) => {
@@ -725,6 +800,7 @@ export function FileTreePanel({
           >
             <Trash2 />
             {t("explorer.tree.delete")}
+            <ContextMenuShortcut>{deleteShortcutLabel}</ContextMenuShortcut>
           </ContextMenuItem>
         </ContextMenuContent>
       </ContextMenu>
@@ -752,7 +828,12 @@ export function FileTreePanel({
   );
 
   return (
-    <>
+    <div
+      ref={panelRef}
+      className="flex min-h-0 flex-1 flex-col outline-none"
+      tabIndex={0}
+      aria-label={t("explorer.tree.title")}
+    >
       <div className="flex items-center justify-between pr-2">
         <PanelHeader title={t("explorer.tree.title")} count={rootEntries.length} />
         <div className="flex items-center gap-0.5">
@@ -842,6 +923,6 @@ export function FileTreePanel({
           </p>
         ) : null}
       </div>
-    </>
+    </div>
   );
 }
