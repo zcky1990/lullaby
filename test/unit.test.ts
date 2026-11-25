@@ -351,6 +351,20 @@ Deno.test("ChatInput supports plan and build modes", () => {
   throws(() => ChatInput.parse({ ...base, mode: "design" }));
 });
 
+Deno.test("ChatInput accepts a long single user turn", () => {
+  const long = "x".repeat(20_000);
+  const parsed = ChatInput.parse({
+    sessionId: "sess-1",
+    messages: [{ role: "user", content: long }],
+  });
+  equal(parsed.messages[0].content.length, 20_000);
+  throws(() =>
+    ChatInput.parse({
+      messages: [{ role: "user", content: "x".repeat(200_001) }],
+    })
+  );
+});
+
 Deno.test("local documents create, list, rename, and guard paths", async () => {
   const dir = await Deno.makeTempDir();
   try {

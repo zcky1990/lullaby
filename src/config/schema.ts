@@ -120,11 +120,12 @@ export const ChatInput = z.object({
     ),
   variant: ChatVariant.default("medium"),
   mode: ChatMode.default("build"),
+  // Session-centric: send only the new user turn(s). Server loads prior turns from DB.
   messages: z
     .array(
       z.object({
         role: z.enum(["system", "user", "assistant"]),
-        content: z.string().min(1).max(8000),
+        content: z.string().min(1).max(200_000),
         attachments: z.array(ChatAttachmentInput).max(6).optional(),
       }),
     )

@@ -590,6 +590,7 @@ export interface ChatRequestPayload {
   skillName?: string;
   variant?: string;
   mode?: ChatMode;
+  /** New turn(s) only; server loads prior transcript from sessionId. */
   messages: { role: string; content: string; attachments?: ChatAttachment[] }[];
 }
 

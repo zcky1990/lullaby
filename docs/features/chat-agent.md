@@ -3,6 +3,14 @@
 Chat sidebar kanan (`ChatSidebar`) memanggil `POST /api/projects/:id/chat`. Engine:
 `src/server/chat/agent.ts`.
 
+## Session-centric turns
+
+Body `messages` berisi **turn baru saja** (biasanya satu pesan `user`, plus lampiran).
+Riwayat sebelumnya diambil dari `chat_messages` lewat `sessionId`
+(`mergeSessionTranscript` di `src/server/chat/session-transcript.ts`). Follow-up tidak
+mengirim ulang seluruh transcript. Jika klien lama masih mengirim history penuh, server
+hanya memakai pesan user terakhir sebagai delta.
+
 ## Mode
 
 | Mode      | Tools                                                                       | Tujuan                                |

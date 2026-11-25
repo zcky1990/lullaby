@@ -37,6 +37,7 @@ import {
   type McpServerSummary,
 } from "./mcp-tools.ts";
 import { persistChatRun } from "./persist.ts";
+import { mergeSessionTranscript } from "./session-transcript.ts";
 import { runSpawnAgent } from "./subagent.ts";
 import {
   applyWriteFile,
@@ -880,15 +881,9 @@ export async function startChat(
   }
 
   const stored = await listChatMessages(session.id);
-  const lastMessage = messages[messages.length - 1];
-  const lastStored = stored[stored.length - 1];
-  if (
-    lastMessage &&
-    (!lastStored ||
-      lastStored.role !== lastMessage.role ||
-      lastStored.content !== lastMessage.content)
-  ) {
-    await appendChatMessage(session.id, lastMessage.role, lastMessage.content);
+  const merged = mergeSessionTranscript(stored, messages);
+  for (const message of merged.append) {
+    await appendChatMessage(session.id, message.role, message.content);
   }
 
   const project = await getProject(projectId);
@@ -908,17 +903,17 @@ export async function startChat(
     activeSkill = { name: skill.name, body: await readSkillBody(skill) };
   }
 
-  let resolvedMessages = messages;
+  let resolvedMessages = merged.transcript;
   let effectiveMode = mode;
   if (wantedSkill === CODE_REVIEW_SKILL) {
     effectiveMode = "plan";
-    const last = messages[messages.length - 1];
+    const last = resolvedMessages[resolvedMessages.length - 1];
     if (last?.role === "user") {
       const gitContext = workspace
         ? await collectCodeReviewContext(workspace)
         : "No workspace configured; review from the user request only.";
       const enriched = defaultCodeReviewUserMessage(last.content, gitContext);
-      resolvedMessages = [...messages.slice(0, -1), { ...last, content: enriched }];
+      resolvedMessages = [...resolvedMessages.slice(0, -1), { ...last, content: enriched }];
     }
   }
 

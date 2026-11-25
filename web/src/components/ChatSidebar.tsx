@@ -51,6 +51,7 @@ import {
   type Role,
   type SkillInfo,
 } from "@/lib/api";
+import { formatApiError } from "@/lib/api-error";
 import {
   ADD_TO_CHAT_EVENT,
   type AddToChatDetail,
@@ -810,7 +811,7 @@ export function ChatSidebar({
           }, { onStep: mergeStep, signal: controller.signal });
           responseRef.current(response);
         } catch (e) {
-          if (!controller.signal.aborted) setError((e as Error).message);
+          if (!controller.signal.aborted) setError(formatApiError(e));
         } finally {
           if (streamAbortRef.current === controller) streamAbortRef.current = null;
           setSending(false);
@@ -1015,15 +1016,15 @@ export function ChatSidebar({
         skillName,
         variant,
         mode: effectiveMode,
-        messages: next.map((entry, index) => ({
-          role: entry.role,
-          content: entry.content,
-          ...(index === next.length - 1 && outgoing.length ? { attachments: outgoing } : {}),
-        })),
+        messages: [{
+          role: "user",
+          content,
+          ...(outgoing.length ? { attachments: outgoing } : {}),
+        }],
       }, { onStep: mergeStep, signal: controller.signal });
       handleResponse(response);
     } catch (e) {
-      if (!controller.signal.aborted) setError((e as Error).message);
+      if (!controller.signal.aborted) setError(formatApiError(e));
     } finally {
       if (streamAbortRef.current === controller) streamAbortRef.current = null;
       setSending(false);
