@@ -12,9 +12,9 @@
  * - `setPaused(true)` (dipakai saat `document.hidden`) membuang event tanpa
  *   memutus koneksi, jadi jumlah request di Network tetap satu.
  *
- * `installSharedEventSourceBridge()` menyediakan masa transisi untuk konsumen
- * yang masih memanggil `new EventSource(EVENTS_URL)` langsung: panggilan itu
- * tidak membuka socket baru, tapi menempel ke hub yang sama.
+ * Konsumen (`App`, `ChatSidebar`) berlangganan lewat `useEventSubscription`
+ * di `events-provider.tsx`, jadi tidak ada modul UI yang membuat `EventSource`
+ * sendiri.
  */
 import {
   backoffDelay,
@@ -36,7 +36,7 @@ export interface EventStreamStatus {
   attempt: number;
   /** Perkiraan jeda (ms) ke percobaan berikutnya saat `state === "retrying"`. */
   retryInMs?: number;
-  /** Berapa konsumen yang sedang memakai hub (provider + klien legacy). */
+  /** Berapa konsumen yang sedang memakai hub (provider). */
   consumers: number;
   paused: boolean;
 }
@@ -60,12 +60,6 @@ export interface EventStreamHubOptions {
   idleGraceMs?: number;
 }
 
-/** Pesan mentah yang dikirim ke klien legacy (masih mem-parse sendiri). */
-export type LegacyStreamMessage =
-  | { type: "open" }
-  | { type: "message"; data: string }
-  | { type: "error" };
-
 export class EventStreamHub {
   readonly url: string;
   readonly registry: EventRegistry;
@@ -75,7 +69,6 @@ export class EventStreamHub {
   private readonly random: (() => number) | undefined;
   private readonly idleGraceMs: number;
   private readonly statusListeners = new Set<(status: EventStreamStatus) => void>();
-  private readonly legacyClients = new Set<(message: LegacyStreamMessage) => void>();
   private source: EventSourceLike | null = null;
   private retryTimer: TimerHandle | null = null;
   private idleTimer: TimerHandle | null = null;
@@ -145,22 +138,6 @@ export class EventStreamHub {
     this.emitStatus();
   }
 
-  /**
-   * Tempelkan klien yang masih memakai API `EventSource` langsung ke hub ini.
-   * Mengembalikan fungsi detach (idempoten).
-   */
-  attachLegacyClient(client: (message: LegacyStreamMessage) => void): () => void {
-    this.legacyClients.add(client);
-    this.acquire();
-    let attached = true;
-    return () => {
-      if (!attached) return;
-      attached = false;
-      this.legacyClients.delete(client);
-      this.release();
-    };
-  }
-
   private connect(): void {
     if (this.source !== null) return;
     this.status = { ...this.status, state: "connecting", retryInMs: undefined };
@@ -170,7 +147,6 @@ export class EventStreamHub {
     source.onopen = () => {
       this.status = { ...this.status, state: "open", attempt: 0, retryInMs: undefined };
       this.emitStatus();
-      this.emitLegacy({ type: "open" });
     };
     source.onmessage = (event) => this.handleMessage(event?.data);
     source.onerror = () => this.handleError();
@@ -181,14 +157,12 @@ export class EventStreamHub {
     if (raw.length === 0) return;
     // Tab tidak terlihat / subscriber di-pause: event dibuang, koneksi tetap.
     if (this.status.paused) return;
-    this.emitLegacy({ type: "message", data: raw });
     const event = parseStreamEvent(raw);
     if (event) this.registry.dispatch(event);
   }
 
   private handleError(): void {
     this.closeSource();
-    this.emitLegacy({ type: "error" });
     if (this.retryTimer !== null) return;
     if (this.status.consumers === 0) {
       this.status = { ...this.status, state: "idle", attempt: 0, retryInMs: undefined };
@@ -225,16 +199,6 @@ export class EventStreamHub {
     this.retryTimer = null;
   }
 
-  private emitLegacy(message: LegacyStreamMessage): void {
-    for (const client of [...this.legacyClients]) {
-      try {
-        client(message);
-      } catch (error) {
-        console.error("[events] klien legacy gagal", error);
-      }
-    }
-  }
-
   private emitStatus(): void {
     for (const listener of [...this.statusListeners]) {
       try {
@@ -252,134 +216,4 @@ let sharedHub: EventStreamHub | null = null;
 export function getEventStreamHub(): EventStreamHub {
   if (!sharedHub) sharedHub = new EventStreamHub();
   return sharedHub;
-}
-
-function createMessageEvent(data: string): MessageEvent {
-  if (typeof MessageEvent === "function") return new MessageEvent("message", { data });
-  return { type: "message", data } as unknown as MessageEvent;
-}
-
-interface BridgeScope {
-  EventSource?: typeof EventSource;
-}
-
-type LegacyHandler = (event: unknown) => void;
-
-/**
- * Bridge kompatibilitas: mengganti `EventSource` pada `scope` dengan versi yang
- * menempel ke hub untuk URL `EVENTS_URL` (URL lain tetap memakai implementasi
- * native).
- *
- * Ini menjaga `new EventSource(EVENTS_URL)` di `App.tsx` (belum dimigrasikan ke
- * `useEventSubscription`, lihat LOCAL-E4113D) tidak membuka socket kedua.
- * Setelah konsumen itu pindah ke `useEventSubscription`, bridge ini bisa
- * dihapus.
- */
-export function installSharedEventSourceBridge(
-  hub: EventStreamHub = getEventStreamHub(),
-  scope: BridgeScope = globalThis as unknown as BridgeScope,
-): () => void {
-  const Native = scope.EventSource;
-  if (!Native) return () => {};
-  if ((Native as unknown as { __lullabySharedHub?: boolean }).__lullabySharedHub) return () => {};
-
-  class SharedEventSource {
-    static readonly CONNECTING = 0;
-    static readonly OPEN = 1;
-    static readonly CLOSED = 2;
-    static readonly __lullabySharedHub = true;
-
-    readonly CONNECTING = 0;
-    readonly OPEN = 1;
-    readonly CLOSED = 2;
-    readonly url: string;
-    readonly withCredentials: boolean;
-    onopen: LegacyHandler | null = null;
-    onmessage: LegacyHandler | null = null;
-    onerror: LegacyHandler | null = null;
-    readyState = 1;
-
-    private native: EventSource | null = null;
-    private detach: (() => void) | null = null;
-    private readonly listeners = new Map<string, Set<LegacyHandler>>();
-
-    constructor(url: string, init?: EventSourceInit) {
-      this.url = url;
-      this.withCredentials = init?.withCredentials ?? false;
-      if (url === hub.url) {
-        this.detach = hub.attachLegacyClient((message) => {
-          if (message.type === "message") {
-            this.dispatch("message", createMessageEvent(message.data));
-          } else {
-            this.dispatch(message.type, { type: message.type });
-          }
-        });
-        return;
-      }
-      const native = new Native(url, init);
-      this.native = native;
-      native.onopen = (event) => this.dispatch("open", event);
-      native.onmessage = (event) => this.dispatch("message", event);
-      native.onerror = (event) => this.dispatch("error", event);
-    }
-
-    addEventListener(type: string, listener: LegacyHandler): void {
-      if (this.native) {
-        this.native.addEventListener(type, listener as EventListener);
-        return;
-      }
-      let bucket = this.listeners.get(type);
-      if (!bucket) {
-        bucket = new Set<LegacyHandler>();
-        this.listeners.set(type, bucket);
-      }
-      bucket.add(listener);
-    }
-
-    removeEventListener(type: string, listener: LegacyHandler): void {
-      if (this.native) {
-        this.native.removeEventListener(type, listener as EventListener);
-        return;
-      }
-      this.listeners.get(type)?.delete(listener);
-    }
-
-    close(): void {
-      if (this.readyState === SharedEventSource.CLOSED) return;
-      this.readyState = SharedEventSource.CLOSED;
-      this.detach?.();
-      this.detach = null;
-      this.listeners.clear();
-      this.native?.close();
-      this.native = null;
-    }
-
-    private dispatch(type: string, event: unknown): void {
-      const direct = type === "message"
-        ? this.onmessage
-        : type === "open"
-        ? this.onopen
-        : type === "error"
-        ? this.onerror
-        : null;
-      try {
-        direct?.(event);
-      } catch (error) {
-        console.error("[events] handler SSE gagal", error);
-      }
-      for (const listener of [...(this.listeners.get(type) ?? [])]) {
-        try {
-          listener(event);
-        } catch (error) {
-          console.error("[events] listener SSE gagal", error);
-        }
-      }
-    }
-  }
-
-  const bridged = SharedEventSource as unknown as typeof EventSource;
-  scope.EventSource = bridged;
-  return () => {
-    if (scope.EventSource === bridged) scope.EventSource = Native;
-  };
 }
