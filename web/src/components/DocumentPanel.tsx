@@ -18,6 +18,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { api, type DocSummary, type DocumentSource, type LocalDocSummary } from "@/lib/api";
 import { requestChatOpen, setChatDragData } from "@/lib/chat-drag";
 import { useI18n, type Translator } from "@/lib/i18n";
+import { useLocalDocsAutoRefresh } from "@/hooks/useLocalDocsAutoRefresh";
 import { cn } from "@/lib/utils";
 
 export type PanelDocSource = "local" | DocumentSource;
@@ -78,6 +79,14 @@ export function DocumentPanel({
   const [title, setTitle] = useState("");
   const [busy, setBusy] = useState(false);
   const [createError, setCreateError] = useState<string | undefined>();
+
+  // Dokumen lokal bisa ditambah dari luar UI (agent chat, editor, `git pull`).
+  // Panel ini hanya ter-mount saat menu Documents aktif, jadi auto-refresh aman.
+  useLocalDocsAutoRefresh({
+    enabled: source === "local" && !!projectId && localConfigured,
+    loading: localLoading,
+    onRefresh: onRefreshLocal,
+  });
 
   const canCreate = true;
   const { loading, configured, error, debug, documents } = remote;
@@ -211,7 +220,8 @@ export function DocumentPanel({
         {source === "local" ? (
           <>
             {!projectId && <Hint>{t("documents.panel.noProject")}</Hint>}
-            {projectId && localLoading && (
+            {/* Refresh otomatis di background tidak boleh menutupi daftar yang sudah ada. */}
+            {projectId && localLoading && localDocuments.length === 0 && (
               <div className="flex items-center gap-2 px-2 py-4 text-xs text-muted-foreground">
                 <Spinner />
                 {t("documents.panel.loadingLocal")}

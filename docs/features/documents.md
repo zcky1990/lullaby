@@ -4,7 +4,7 @@ Panel **Document** mendukung empat sumber. State sumber di UI; remote memakai qu
 
 ## Local
 
-- Root: `projects.document_path`
+- Root: `projects.document_path` (diatur di **Project Settings → Workspace → Document workspace**)
 - File `.md` di disk; buat/rename/simpan dari UI
 - Badge sync: Local / Synced / Error
 - **Sync** manual (`POST .../local-documents/sync` dengan `target`:
@@ -16,6 +16,31 @@ Panel **Document** mendukung empat sumber. State sumber di UI; remote memakai qu
   Judul + isi dokumen (maks 30.000 karakter) tetap dikirim sebagai pesan user, jadi prompt kustom
   cukup menjelaskan gaya tiket yang diinginkan (jumlah, bahasa, field wajib, dll).
   Reset ke default lewat tombol **Reset to default** di section yang sama.
+
+### Menambah file dari luar UI
+
+Daftar dokumen dibaca langsung dari disk (`listLocalDocuments`), jadi file `.md` baru langsung
+terbaca — tetapi server **tidak** mem-push perubahan itu ke UI. Karena itu panel melakukan
+auto-refresh selama tab Local aktif:
+
+| Pemicu | Kapan |
+| --- | --- |
+| Polling | tiap `DOCS_POLL_INTERVAL_MS` (10 dtk), hanya saat tab terlihat & tidak sedang refresh |
+| `focus` window | kembali ke app setelah mengedit file di editor lain |
+| `visibilitychange` | window kembali terlihat |
+| Tombol refresh | manual, kapan saja |
+
+Implementasi: `web/src/hooks/useLocalDocsAutoRefresh.ts` + `web/src/lib/docs-poll.ts`
+(gate `shouldPollLocalDocs`). Refresh berjalan diam-diam: indikator "Memuat dokumen lokal…"
+hanya tampil saat daftar masih kosong.
+
+Catatan performa: judul dokumen dibaca dari potongan awal file (`readDocumentHead`, 4 KB) di
+`src/fs/documents.ts`, bukan seluruh isi file. Dengan ratusan dokumen, polling tetap murah.
+Masih ada batas `MAX_DOCUMENTS = 500` per document workspace.
+
+Tips kalau dokumen baru tidak muncul: pastikan file `.md` ada di bawah folder
+**Document workspace** project (bukan workspace kode), lalu tekan refresh / tunggu satu siklus
+polling. Tombol + pada panel selalu menulis ke folder tersebut.
 
 ## Docmost
 

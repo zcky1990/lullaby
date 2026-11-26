@@ -33,6 +33,7 @@ pengguna maupun developer.
 | [features/settings.md](features/settings.md)         | Project Settings vs Global Settings                       |
 | [automation.md](automation.md)                       | Auto-build saat To Do → In Progress                       |
 | [improvements.md](improvements.md)                   | Backlog peningkatan: performa, arsitektur, CI, docs drift |
+| [perf-best-practices-checklist.md](perf-best-practices-checklist.md) | Checklist eksekusi performa & best practices (baseline, bukti, DoD) |
 
 ## Desain historis
 

@@ -4,6 +4,8 @@ import { resolveWithin } from "./workspace.ts";
 const IGNORED = new Set([".git", "node_modules", ".DS_Store"]);
 const MAX_DOCUMENTS = 500;
 const MAX_CONTENT_BYTES = 500_000;
+/** Cukup untuk heading `# Judul` di awal file tanpa membaca seluruh dokumen. */
+const TITLE_HEAD_BYTES = 4_000;
 
 export interface LocalDocEntry {
   path: string;
@@ -26,9 +28,28 @@ export function slugifyDocumentTitle(title: string): string {
 }
 
 function titleFromContent(rel: string, content: string): string {
-  const match = /^#\s+(.+)$/m.exec(content.slice(0, 4000));
+  const match = /^#\s+(.+)$/m.exec(content.slice(0, TITLE_HEAD_BYTES));
   if (match) return match[1].trim();
   return basename(rel).replace(/\.md$/i, "");
+}
+
+/**
+ * Baca potongan awal file saja. Listing dokumen lokal membaca ratusan file untuk
+ * mengambil judul; membaca semuanya penuh mahal dan memblokir polling daftar.
+ */
+async function readDocumentHead(abs: string, limit = TITLE_HEAD_BYTES): Promise<string> {
+  const file = await Deno.open(abs, { read: true });
+  try {
+    const buffer = new Uint8Array(limit);
+    const read = await file.read(buffer);
+    return read ? new TextDecoder().decode(buffer.subarray(0, read)) : "";
+  } finally {
+    try {
+      file.close();
+    } catch {
+      // ignore
+    }
+  }
 }
 
 async function pathExists(root: string, rel: string): Promise<boolean> {
@@ -53,8 +74,7 @@ export async function listLocalDocuments(root: string): Promise<LocalDocEntry[]>
       if (!entry.isFile || !entry.name.toLowerCase().endsWith(".md")) continue;
       let title = entry.name.replace(/\.md$/i, "");
       try {
-        const text = await Deno.readTextFile(join(dir, entry.name));
-        title = titleFromContent(childRel, text);
+        title = titleFromContent(childRel, await readDocumentHead(join(dir, entry.name)));
       } catch {
         // keep filename as title
       }
