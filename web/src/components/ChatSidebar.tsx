@@ -1,6 +1,5 @@
 import {
-  lazy,
-  Suspense,
+  startTransition,
   useCallback,
   useEffect,
   useMemo,
@@ -9,8 +8,6 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import {
-  Check,
-  CircleAlert,
   FileCode2,
   FileText,
   Paperclip,
@@ -21,7 +18,11 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { ChatChangesList } from "@/components/ChatChangesList";
+import {
+  ChatMessageList,
+  type ChatEntry,
+  type DisplayAttachment,
+} from "@/components/chat/ChatMessageList";
 import { SkillMentionMenu, type SkillOption } from "@/components/SkillMentionMenu";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -34,7 +35,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import {
   api,
@@ -45,7 +45,6 @@ import {
   type ChatSession,
   type ChatStep,
   type CursorModel,
-  type FileChange,
   type LlmProvider,
   type PendingFileChange,
   type Role,
@@ -73,6 +72,7 @@ import {
 } from "@/lib/chat-drag";
 import { describeDeferredReview, readDeferredReview } from "@/lib/chat-review";
 import { fetchProjectChatReview } from "@/lib/chat-review-api";
+import { useEventSubscription } from "@/lib/events-provider";
 import { CHAT_RESPONSE_EVENT, dispatchChangesApplied, dispatchReview } from "@/lib/review-events";
 import {
   AUTOSKILL_COMMAND,
@@ -85,24 +85,6 @@ import {
 import { buildAutoBuildPrompt } from "@/lib/ticket-columns";
 import { APP_FONT_STACKS, useTheme } from "@/components/ThemeProvider";
 import { cn } from "@/lib/utils";
-
-const MarkdownView = lazy(() => import("@/components/MarkdownView"));
-
-interface Entry {
-  id: string;
-  role: "user" | "assistant";
-  content: string;
-  skillName?: string;
-  changes?: FileChange[];
-  attachments?: DisplayAttachment[];
-}
-
-interface DisplayAttachment {
-  name: string;
-  type: "image" | "text" | "workspace";
-  preview?: string;
-  path?: string;
-}
 
 interface AttachmentDraft {
   id: string;
@@ -240,7 +222,7 @@ export function ChatSidebar({
   });
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [sessions, setSessions] = useState<ChatSession[]>([]);
-  const [entries, setEntries] = useState<Entry[]>([]);
+  const [entries, setEntries] = useState<ChatEntry[]>([]);
   const [attachments, setAttachments] = useState<AttachmentDraft[]>([]);
   const [dragging, setDragging] = useState(false);
   const [contextLoading, setContextLoading] = useState(false);
@@ -260,7 +242,6 @@ export function ChatSidebar({
   const [skillActiveIndex, setSkillActiveIndex] = useState(0);
   const { chatFont, chatFontSize } = useTheme();
   const chatFontFamily = APP_FONT_STACKS[chatFont];
-  const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const streamAbortRef = useRef<AbortController | null>(null);
@@ -436,10 +417,6 @@ export function ChatSidebar({
       // ignore storage errors
     }
   }, [mode]);
-
-  useEffect(() => {
-    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
-  }, [entries, sending, pending, steps]);
 
   /**
    * Buka file hasil perubahan chat di tab editor.
@@ -639,14 +616,63 @@ export function ChatSidebar({
     }
   };
 
-  const mergeStep = useCallback((step: ChatStep) => {
-    setSteps((current) => {
-      const index = current.findIndex((item) => item.id === step.id);
-      if (index < 0) return [...current, step];
-      const next = current.slice();
-      next[index] = { ...next[index], ...step };
-      return next;
+  /**
+   * Buffer `chat.step` per frame (PERF-2).
+   *
+   * Dulu setiap event `chat.step` langsung memanggil `setSteps` dengan array
+   * baru, jadi stream token panjang memicu puluhan commit React per detik dan
+   * ikut me-render ulang transkrip. Sekarang event hanya ditulis ke ref, lalu
+   * di-flush sekali per `requestAnimationFrame` di dalam `startTransition`.
+   */
+  const stepBufferRef = useRef<Map<string, ChatStep>>(new Map());
+  const stepFrameRef = useRef<number | null>(null);
+
+  const flushSteps = useCallback(() => {
+    stepFrameRef.current = null;
+    const buffer = stepBufferRef.current;
+    if (buffer.size === 0) return;
+    const queued = Array.from(buffer.values());
+    buffer.clear();
+    startTransition(() => {
+      setSteps((current) => {
+        let next = current;
+        for (const step of queued) {
+          const index = next.findIndex((item) => item.id === step.id);
+          if (index < 0) {
+            next = [...next, step];
+          } else {
+            const copy = next.slice();
+            copy[index] = { ...copy[index], ...step };
+            next = copy;
+          }
+        }
+        return next;
+      });
     });
+  }, []);
+
+  const mergeStep = useCallback((step: ChatStep) => {
+    stepBufferRef.current.set(step.id, step);
+    if (stepFrameRef.current !== null) return;
+    stepFrameRef.current = requestAnimationFrame(flushSteps);
+  }, [flushSteps]);
+
+  /** Bersihkan langkah + buffer yang belum sempat di-flush. */
+  const resetSteps = useCallback(() => {
+    stepBufferRef.current.clear();
+    if (stepFrameRef.current !== null) {
+      cancelAnimationFrame(stepFrameRef.current);
+      stepFrameRef.current = null;
+    }
+    setSteps([]);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (stepFrameRef.current !== null) cancelAnimationFrame(stepFrameRef.current);
+      stepFrameRef.current = null;
+      stepBufferRef.current.clear();
+    };
   }, []);
 
   const handleResponse = (response: ChatResponse) => {
@@ -658,14 +684,14 @@ export function ChatSidebar({
     }
     if (response.status === "cancelled") {
       setPending(null);
-      setSteps([]);
+      resetSteps();
       setError(undefined);
       if (response.sessionId) setSessionId(response.sessionId);
       return;
     }
     if (response.status === "done") {
       setPending(null);
-      setSteps([]);
+      resetSteps();
       const deferred = readDeferredReview(response);
       setReviewOffer(deferred);
       if (deferred) {
@@ -693,7 +719,7 @@ export function ChatSidebar({
       return;
     }
     if (response.status === "approval_required") {
-      setSteps([]);
+      resetSteps();
       setReviewOffer(null);
       if (response.sessionId) setSessionId(response.sessionId);
       setPending({
@@ -705,7 +731,7 @@ export function ChatSidebar({
       refreshSessions().catch(console.error);
       return;
     }
-    setSteps([]);
+    resetSteps();
     setReviewOffer(null);
     setPending(null);
     dispatchReview(null, null);
@@ -739,27 +765,24 @@ export function ChatSidebar({
     return () => window.removeEventListener(CHAT_RESPONSE_EVENT, handler);
   }, []);
 
-  useEffect(() => {
-    const source = new EventSource("/api/events");
-    source.onmessage = (message) => {
-      try {
-        const event = JSON.parse(message.data) as { type?: string; payload?: ChatStep };
-        if (event.type !== "chat.step" || !event.payload) return;
-        const activeProjectId = projectIdRef.current;
-        if (
-          event.payload.projectId &&
-          activeProjectId &&
-          event.payload.projectId !== activeProjectId
-        ) {
-          return;
-        }
-        mergeStep(event.payload);
-      } catch {
-        // ignore malformed events
-      }
-    };
-    return () => source.close();
-  }, [mergeStep]);
+  /**
+   * REL-1: `chat.step` datang dari satu koneksi `/api/events` milik
+   * `EventsProvider` (bukan `EventSource` sendiri). Langganan di-pause saat
+   * panel chat ditutup (`hidden`) supaya event tidak diproses sia-sia.
+   */
+  useEventSubscription("chat.step", (event) => {
+    const payload = event.payload as ChatStep | undefined;
+    if (!payload) return;
+    const activeProjectId = projectIdRef.current;
+    if (
+      payload.projectId &&
+      activeProjectId &&
+      payload.projectId !== activeProjectId
+    ) {
+      return;
+    }
+    mergeStep(payload);
+  }, !hidden);
 
   useEffect(() => {
     const handler = (event: Event) => {
@@ -786,11 +809,11 @@ export function ChatSidebar({
         setSelectedSkill(null);
         setPending(null);
         setReviewOffer(null);
-        setSteps([]);
+        resetSteps();
         setError(undefined);
         dispatchReview(null, null);
 
-        const next: Entry[] = [
+        const next: ChatEntry[] = [
           {
             id: crypto.randomUUID(),
             role: "user",
@@ -892,7 +915,7 @@ export function ChatSidebar({
     setAttachments([]);
     setSelectedSkill(null);
     setSkillMenuOpen(false);
-    const userEntry: Entry = {
+    const userEntry: ChatEntry = {
       id: crypto.randomUUID(),
       role: "user",
       content: `/${AUTOSKILL_COMMAND}`,
@@ -992,7 +1015,7 @@ export function ChatSidebar({
     setAttachments([]);
     setSelectedSkill(null);
     setSkillMenuOpen(false);
-    const next: Entry[] = [
+    const next: ChatEntry[] = [
       ...entries,
       {
         id: crypto.randomUUID(),
@@ -1003,7 +1026,7 @@ export function ChatSidebar({
       },
     ];
     setEntries(next);
-    setSteps([]);
+    resetSteps();
     setSending(true);
     const controller = new AbortController();
     streamAbortRef.current = controller;
@@ -1031,25 +1054,25 @@ export function ChatSidebar({
     }
   };
 
-  const decidePermission = async (
-    step: ChatStep,
-    decision: "once" | "always" | "deny",
-  ) => {
-    if (!step.runId || permissionBusy) return;
-    setPermissionBusy(step.id);
-    setError(undefined);
-    try {
-      await api.decideToolPermission({
-        runId: step.runId,
-        permissionId: step.id,
-        decision,
-      });
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setPermissionBusy(null);
-    }
-  };
+  const decidePermission = useCallback(
+    async (step: ChatStep, decision: "once" | "always" | "deny") => {
+      if (!step.runId || permissionBusy) return;
+      setPermissionBusy(step.id);
+      setError(undefined);
+      try {
+        await api.decideToolPermission({
+          runId: step.runId,
+          permissionId: step.id,
+          decision,
+        });
+      } catch (e) {
+        setError((e as Error).message);
+      } finally {
+        setPermissionBusy(null);
+      }
+    },
+    [permissionBusy],
+  );
 
   const stop = async () => {
     if (!projectId) return;
@@ -1062,7 +1085,7 @@ export function ChatSidebar({
     }
     controller?.abort();
     setSending(false);
-    setSteps([]);
+    resetSteps();
     setPermissionBusy(null);
   };
 
@@ -1073,7 +1096,7 @@ export function ChatSidebar({
       setAttachments([]);
       setPending(null);
       setReviewOffer(null);
-      setSteps([]);
+      resetSteps();
       setError(undefined);
       dispatchReview(null, null);
       return;
@@ -1092,7 +1115,7 @@ export function ChatSidebar({
       );
       setPending(null);
       setReviewOffer(null);
-      setSteps([]);
+      resetSteps();
       setError(undefined);
     } catch (e) {
       setError((e as Error).message);
@@ -1108,7 +1131,7 @@ export function ChatSidebar({
       setEntries([]);
       setPending(null);
       setReviewOffer(null);
-      setSteps([]);
+      resetSteps();
       await refreshSessions();
     } catch (e) {
       setError((e as Error).message);
@@ -1212,181 +1235,16 @@ export function ChatSidebar({
         </div>
       </div>
 
-      <div
-        ref={scrollRef}
-        className="chat-surface flex-1 overflow-y-auto p-3"
-        style={{ fontFamily: chatFontFamily, fontSize: `${chatFontSize}px` }}
-      >
-        {entries.length === 0
-          ? (
-            <p className="text-muted-foreground">
-              Mulai chat dengan LLM. Lampirkan gambar/file teks, atau seret file, dokumen, dan tiket
-              dari panel kiri ke sini sebagai konteks. Aplikasi dapat membaca/menulis file di
-              workspace — setiap edit langsung diterapkan lalu bisa di-review atau di-revert setelah
-              chat selesai.
-            </p>
-          )
-          : (
-            <div className="flex flex-col gap-3">
-              {entries.map((entry) => (
-                <div
-                  key={entry.id}
-                  className={cn(
-                    "text-md",
-                    entry.role === "user"
-                      ? "max-w-[85%] self-end rounded-lg border border-muted-foreground/10 px-3 py-2 text-primary"
-                      : "w-full self-start",
-                  )}
-                >
-                  {entry.skillName ? (
-                    <div className="mb-1.5">
-                      <Badge variant="secondary" className="gap-1 font-mono text-[10px]">
-                        <Sparkles className="size-3" />
-                        /{entry.skillName}
-                      </Badge>
-                    </div>
-                  ) : null}
-                  {entry.attachments?.length
-                    ? (
-                      <div className="mb-2 flex flex-wrap gap-1.5">
-                        {entry.attachments.map((item, itemIndex) =>
-                          item.type === "image" && item.preview
-                            ? (
-                              <img
-                                key={itemIndex}
-                                src={item.preview}
-                                alt={item.name}
-                                className="max-h-40 rounded-md border border-black/10 object-contain"
-                              />
-                            )
-                            : (
-                              <span
-                                key={itemIndex}
-                                className="flex items-center gap-1 rounded bg-black/10 px-1.5 py-0.5 text-[11px]"
-                                title={item.path ?? item.name}
-                              >
-                                {item.type === "workspace"
-                                  ? <FileCode2 className="size-3" />
-                                  : <FileText className="size-3" />}
-                                {item.type === "workspace" ? item.path : item.name}
-                              </span>
-                            )
-                        )}
-                      </div>
-                    )
-                    : null}
-                  {entry.role === "assistant"
-                    ? (
-                      <>
-                        {entry.content
-                          ? (
-                            <Suspense fallback={<Skeleton className="h-4 w-32" />}>
-                              <MarkdownView
-                                content={entry.content}
-                                fontSize={chatFontSize}
-                                fontFamily={chatFontFamily}
-                              />
-                            </Suspense>
-                          )
-                          : null}
-                        {entry.changes?.length
-                          ? (
-                            <ChatChangesList
-                              changes={entry.changes}
-                              onOpenFile={openChangedFile}
-                              className="mt-2"
-                            />
-                          )
-                          : null}
-                      </>
-                    )
-                    : <span className="whitespace-pre-wrap">{entry.content}</span>}
-                </div>
-              ))}
-              {steps.length > 0 || sending
-                ? (
-                  <div className="flex flex-col gap-1.5 rounded-md border border-border/50 bg-muted/20 p-2">
-                    {steps.map((step) => (
-                      <div
-                        key={step.id}
-                        className={cn(
-                          "flex items-start gap-2 text-xs",
-                          step.toolName === "spawn_agent" &&
-                            "ml-3 border-l border-border/60 pl-2",
-                        )}
-                      >
-                        {step.status === "running"
-                          ? <Spinner className="mt-0.5 size-3 shrink-0" />
-                          : step.status === "error"
-                          ? <CircleAlert className="mt-0.5 size-3 shrink-0 text-destructive" />
-                          : <Check className="mt-0.5 size-3 shrink-0 text-emerald-500" />}
-                        <div className="min-w-0">
-                          <p
-                            className={cn(
-                              "font-medium",
-                              step.status === "done" && "text-muted-foreground",
-                              step.toolName === "spawn_agent" && "text-[11px]",
-                            )}
-                          >
-                            {step.title}
-                          </p>
-                          {step.detail
-                            ? (
-                              <p className="break-words text-muted-foreground/80">{step.detail}</p>
-                            )
-                            : null}
-                          {step.kind === "permission" && step.status === "running"
-                            ? (
-                              <div className="mt-1.5 flex flex-wrap gap-1.5">
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  className="h-6 px-2 text-[11px]"
-                                  disabled={permissionBusy !== null ||
-                                    step.runId === undefined}
-                                  onClick={() => void decidePermission(step, "once")}
-                                >
-                                  Allow once
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  className="h-6 px-2 text-[11px]"
-                                  disabled={permissionBusy !== null ||
-                                    step.runId === undefined}
-                                  onClick={() => void decidePermission(step, "always")}
-                                >
-                                  Always allow
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  className="h-6 px-2 text-[11px] text-destructive"
-                                  disabled={permissionBusy !== null ||
-                                    step.runId === undefined}
-                                  onClick={() => void decidePermission(step, "deny")}
-                                >
-                                  No
-                                </Button>
-                              </div>
-                            )
-                            : null}
-                        </div>
-                      </div>
-                    ))}
-                    {sending && steps.length === 0
-                      ? (
-                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                          <Spinner />
-                          Bekerja…
-                        </div>
-                      )
-                      : null}
-                  </div>
-                )
-                : null}
-            </div>
-          )}
-      </div>
+      <ChatMessageList
+        entries={entries}
+        steps={steps}
+        sending={sending}
+        permissionBusy={permissionBusy}
+        fontFamily={chatFontFamily}
+        fontSize={chatFontSize}
+        onOpenFile={openChangedFile}
+        onDecidePermission={decidePermission}
+      />
 
       <div className="flex flex-col gap-2 border-t p-3">
         {pending && pending.changes.length > 0
@@ -1734,11 +1592,12 @@ export function ChatSidebar({
               className="ml-auto size-7 shrink-0"
               onClick={sending ? stop : send}
               disabled={!sending && (!!pending ||
-                (!input.trim() && attachments.length === 0 && !selectedSkill))}
-              aria-label={sending ? "Hentikan chat" : "Kirim"}
-              title={sending ? "Hentikan chat" : "Kirim"}
+                (!input.trim() && attachments.length === 0 && !selectedSkill) ||
+                providers.length === 0)}
+              aria-label={sending ? "Hentikan" : "Kirim"}
+              title={sending ? "Hentikan" : "Kirim"}
             >
-              {sending ? <Square className="size-3 fill-current" /> : <Send />}
+              {sending ? <Square /> : <Send />}
             </Button>
           </div>
         </div>

@@ -99,6 +99,7 @@ import {
   type WorkflowRunSummary,
   type WorkflowSummary,
 } from "@/lib/api";
+import { useEventSubscription } from "@/lib/events-provider";
 
 const MonacoViewer = lazy(() => import("@/components/MonacoViewer"));
 const SearchableMarkdown = lazy(() => import("@/components/SearchableMarkdown"));
@@ -888,19 +889,11 @@ export default function App() {
     if (menu === "files" && (!currentId || !hasWorkspace)) setMenu("workspace");
   }, [menu, currentId, hasWorkspace]);
 
-  useEffect(() => {
-    const source = new EventSource("/api/events");
-    source.onmessage = (message) => {
-      try {
-        const event = JSON.parse(message.data) as ActivityEvent;
-        if (event.type.startsWith("workflow.step.") || event.type === "chat.step") return;
-        setActivity((current) => [event, ...current].slice(0, 50));
-      } catch {
-        // ignore malformed events
-      }
-    };
-    return () => source.close();
-  }, []);
+  useEventSubscription("*", (event) => {
+    if (event.type === "hello") return;
+    if (event.type.startsWith("workflow.step.") || event.type === "chat.step") return;
+    setActivity((current) => [event as unknown as ActivityEvent, ...current].slice(0, 50));
+  });
 
   const onMenuChange = (next: Menu) => {
     if (next === "global") openSingleton("global", "Global Settings");

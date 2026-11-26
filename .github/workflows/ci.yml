@@ -4,6 +4,10 @@ on:
   push:
   pull_request:
 
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -15,19 +19,16 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Cache Deno module cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/deno
+          key: deno-${{ runner.os }}-${{ hashFiles('deno.json', 'deno.lock', 'web/deno.lock') }}
+          restore-keys: |
+            deno-${{ runner.os }}-
       - name: Install client deps
-        run: npm --prefix web install
-      - name: Build client + assets
-        run: deno task build
-      - name: Type check backend
-        run: deno task check
-      - name: Type check client
-        run: npm --prefix web run typecheck
-      - name: Lint
-        run: deno lint
-      - name: Format check
-        run: deno fmt --check
-      - name: Test
-        run: deno test -A --coverage=coverage test/
-      - name: Coverage summary
-        run: deno coverage coverage
+        run: npm --prefix web ci
+      - name: Verify (build, check, lint, fmt, deno test, web typecheck, web vitest)
+        run: deno task verify

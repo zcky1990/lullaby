@@ -13,9 +13,14 @@
     "start": "deno task build && deno run --allow-read --allow-write --allow-net --allow-env --allow-run --allow-ffi main.ts",
     "check": "deno check --desktop main.ts",
     "test": "deno test -A test/",
+    "test:coverage": "deno test -A --coverage=coverage test/ && deno coverage coverage",
+    "test:web": "npm --prefix web run test",
+    "typecheck:web": "npm --prefix web run typecheck",
+    "verify": "deno task build && deno task check && deno task lint && deno fmt --check && deno task test:coverage && deno task typecheck:web && deno task test:web",
     "lint": "deno lint",
     "fmt": "deno fmt",
-    "i18n:codemod": "deno run --allow-read --allow-write scripts/i18n-apply.ts"
+    "i18n:codemod": "deno run --allow-read --allow-write scripts/i18n-apply.ts",
+    "rel1:codemod": "deno run --allow-read --allow-write scripts/rel1-events-migration.ts"
   },
   "imports": {
     "@std/yaml": "jsr:@std/yaml@^1.3.0",

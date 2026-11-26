@@ -34,7 +34,7 @@ Diambil dari checkout ini (`web/dist` hasil build terakhir, `ls -S web/dist/asse
 | --- | --- | --- | --- |
 | `src/ui/assets.generated.ts` | **7.414.781 B** (±7,1 MiB) | ≤ 5 MiB | turun dari 24 MB setelah gzip + favicon WebP |
 | Chunk utama `index-*.js` | **817.165 B** | ≤ 600 KB | semua panel non-lazy ikut di sini |
-| `MonacoViewer-*.js` | **3.717.363 B** | ≤ 2,5 MB | chunk terbesar yang di-parse saat buka file |
+| `MonacoViewer-*.js` | **3.717.363 B** (sebelum A1) | ≤ 2,5 MB | chunk terbesar yang di-parse saat buka file |
 | `MonacoViewer-*.css` | 169.546 B | — | ikut terunduh bersama editor |
 | `ts.worker-*.js` | **7.046.033 B** | jangan di-ship / opt-in jelas | lazy, tapi tetap masuk binary |
 | `css.worker` / `html.worker` / `json.worker` | 1.056.201 / 718.831 / 409.063 B | — | lazy per bahasa |
@@ -51,7 +51,7 @@ Diambil dari checkout ini (`web/dist` hasil build terakhir, `ls -S web/dist/asse
 | `web/src/lib/api.ts` | **37.600 B** | — | satu `request()`, tipe manual |
 | `web/src/components/GitTab.tsx` | 31.209 B | — | **statis** di chunk utama |
 | `web/src/components/FileTreePanel.tsx` | 30.387 B | — | render rekursif tanpa memo |
-| Test frontend | 18 file `web/src/**/*.test.ts` | dijalankan CI | CI belum memanggil vitest |
+| Test frontend | 19 file `web/src/**/*.test.ts` | dijalankan CI | CI belum memanggil vitest |
 
 Jumlah file di `web/dist/assets` ± 130 (JS/CSS/font). Cara ukur cepat:
 
@@ -97,25 +97,49 @@ Pola yang sudah benar dan harus dipertahankan (jangan "diperbaiki"):
 ### A1. Pangkas `MonacoViewer` 3,7 MB: audit fitur yang benar-benar dipakai
 
 - [ ] **A1** Kurangi registrasi `features/*/register` di `web/src/lib/monaco.ts` (**M**)
-  - **Bukti**: `monaco.ts` mendaftarkan ±45 modul fitur. Chunk `MonacoViewer-*.js` = 3.717.363 B
-    dan `MonacoViewer-*.css` = 169.546 B, di-parse setiap kali tab file dibuka.
-  - **Cara**: buat daftar fitur yang dipakai produk ini (find, suggest, hover, format, folding,
-    bracketMatching, multicursor, clipboard, comment, contextmenu, gotoError, gotoSymbol,
-    referenceSearch, rename, snippet, wordHighlighter, indentation, linesOperations,
-    wordOperations, readOnlyMessage). Kandidat dibuang (ukur satu per satu, bukan sekaligus):
-    `codelens`, `inlayHints`, `colorPicker`, `linkedEditing`, `stickyScroll`, `smartSelect`,
-    `semanticTokens` (bila LSP tidak mengirim semantic tokens), `unicodeHighlighter`,
-    `unusualLineTerminators`, `dropOrPasteInto`.
-  - **Jangan** membuang: `codicon`, `codeEditor`, `find`, `suggest`, `hover`, `format`,
-    `folding`, `multicursor`, `comment`, `clipboard`, `bracketMatching`, `cursorUndo`,
-    `linesOperations`, `wordOperations`. LSP bergantung pada `codeAction`, `documentSymbols`,
-    `rename`, `referenceSearch`, `semanticTokens`, `parameterHints`, `signatureHelp`-related.
-  - **Kriteria selesai**: `ls -l web/dist/assets/MonacoViewer-*.js` turun ≥ 25%; manual: buka file
-    `.ts`/`.json`/`.md`, cek find, suggest, hover, format, folding, LSP code action, rename,
-    multi-cursor tetap jalan; `monaco-workers.test.ts` + `monaco-languages.test.ts` hijau.
-  - **Catatan**: bila pemangkasan tidak cukup, alternatifnya pisahkan fitur ke chunk terpisah lewat
-    `build.rollupOptions.output.manualChunks` — tapi Monaco tidak mendukung registrasi lazy per
-    fitur dengan bersih, jadi ukur dulu sebelum memilih.
+  - **Bukti (sebelum)**: `monaco.ts` mendaftarkan ±45 modul fitur. Chunk
+    `web/dist/assets/MonacoViewer-DX2ocYno.js` = **3.717.363 B** dan `MonacoViewer-BeQMFf5T.css` =
+    **169.546 B**, di-parse setiap kali tab file dibuka.
+  - **Audit (dipakai vs dibuang)** — hasil pemetaan registrasi ke pemakaian nyata produk:
+
+    | Fitur | Keputusan | Alasan |
+    | --- | --- | --- |
+    | `codicon`, `codeEditor`, `find`, `gotoError`, `gotoSymbol`, `referenceSearch` | tetap | ikon widget, Cmd/Ctrl+F, next/previous problem, ctrl+klik definisi, find all references |
+    | `codeAction`, `documentSymbols`, `format`, `hover`, `parameterHints`, `rename` | tetap | capability yang dikirim `lib/lsp.ts` (quick fix, outline, format, hover, signature help, rename) |
+    | `suggest`, `snippet`, `wordHighlighter`, `links` | tetap | completion widget, insert snippet, highlight kata, ctrl+klik URL |
+    | `bracketMatching`, `clipboard`, `comment`, `contextmenu`, `cursorUndo`, `folding`, `inPlaceReplace`, `indentation`, `insertFinalNewLine`, `linesOperations`, `longLinesHelper`, `multicursor`, `readOnlyMessage`, `wordOperations`, `wordPartOperations` | tetap | perilaku editing dasar |
+    | `coreCommands`, `standaloneStrings`, `caretOperations`, `markerSelectionStatus`, `goToCommands`, `suggestController` | tetap | kontribusi tanpa wrapper `features/*` (typing/movement, string UI, peek, controller completion) |
+    | `codelens` | dibuang | tidak ada provider: capability LSP tidak meminta `codeLens`, `tsMode` tidak menyediakannya |
+    | `linkedEditing` | dibuang | tidak ada provider `linkedEditingRange` |
+    | `semanticTokens` (+ `documentSemanticTokens`) | dibuang | capability LSP tidak meminta `semanticTokens`, dan `tsMode` tidak mendaftarkan provider semantic token |
+    | `stickyScroll` | dibuang | `stickyScroll.enabled` tidak pernah dinyalakan `MonacoViewer` |
+    | `colorPicker` | dibuang | trade-off: swatch/picker warna CSS hilang, token warna tetap disorot |
+    | `inlayHints` | dibuang | trade-off: hint nama parameter TypeScript hilang |
+    | `smartSelect` | dibuang | expand/shrink selection tidak dipakai UI |
+    | `unicodeHighlighter`, `unusualLineTerminators` | dibuang | hanya banner/prompt |
+    | `dropOrPasteInto` (`copyPasteContribution`) | dibuang | menu "paste as"/preview drop; Cmd+V biasa tetap lewat `clipboard` |
+
+  - **Perubahan**: 11 modul registrasi dihapus dari `web/src/lib/monaco.ts` (9
+    `features/*/register` + `editor/contrib/semanticTokens/browser/documentSemanticTokens` +
+    `editor/contrib/dropOrPasteInto/browser/copyPasteContribution`). Daftar yang tersisa dijaga
+    test baru `web/src/lib/monaco-features.test.ts` (fitur wajib, fitur yang dibuang, dan validasi
+    setiap jalur impor terhadap `node_modules/monaco-editor`).
+  - **Cara ukur sebelum/sesudah**:
+    `npm --prefix web run build && ls -l web/dist/assets/MonacoViewer-*` (bandingkan dengan angka
+    "sebelum" di atas), lalu isi kolom "sesudah" di sini.
+  - **Temuan penting (kenapa target −25% tidak otomatis tercapai)**: bobot terbesar chunk ini
+    adalah inti editor (`editor.api` + `base/` + `platform/` + widget `codeEditor`), bukan modul
+    `contrib/*`. Total 11 modul yang dipangkas ±480 KB **sumber** (≈0,25 MB setelah minify),
+    sedangkan −25% dari 3.717.363 B = −929.341 B. Perkiraan realistis: −5% s/d −10% dari
+    pemangkasan fitur. Bila hasil ukur < 25%, lanjutkan ke **A5** (`manualChunks`: inti Monaco jadi
+    chunk stabil `monaco-core`) — jangan mengorbankan fitur yang dipakai hanya untuk mengejar angka.
+  - **Status**: kode + guard test selesai; **angka "sesudah", manual QA, dan `deno task build`
+    belum dijalankan** pada sesi kerja ini (lingkungan tanpa shell). Item tetap `- [ ]` sampai
+    angka dan QA di bawah terisi.
+  - **Kriteria selesai**: `ls -l web/dist/assets/MonacoViewer-*.js` ≤ 2.788.022 B (turun ≥ 25% dari
+    3.717.363 B); manual: buka file `.ts`/`.json`/`.md`, cek find, suggest, hover, format, folding,
+    LSP code action, rename, multi-cursor tetap jalan; `monaco-workers.test.ts`,
+    `monaco-languages.test.ts`, dan `monaco-features.test.ts` hijau.
 
 - [ ] **A2** Putuskan nasib `ts.worker` (7 MB) secara eksplisit (**S**)
   - **Bukti**: `web/dist/assets/ts.worker-*.js` = 7.046.033 B dan tetap ikut ter-embed ke
@@ -329,9 +353,9 @@ Pola yang sudah benar dan harus dipertahankan (jangan "diperbaiki"):
     timeout internal → 408; GET 503 → retry lalu sukses.
 
 - [ ] **C3** Hilangkan refetch berulang saat pindah menu (**S**)
-  - **Bukti**: efek `[menu, currentId, docSource, …]` di `App.tsx` memanggil
-    `loadGit(currentId)` setiap kali `menu` menjadi `files` **atau** `git`, `loadDocuments` +
-    `loadLocalDocuments` setiap masuk `document`, dan `loadWorkflows` untuk `workflow`/`cron`.
+  - **Bukti**: efek `[menu, currentId, docSource, …]` di `App.tsx` memanggil `loadGit(currentId)`
+    setiap kali `menu` menjadi `files` **atau** `git`, `loadDocuments` + `loadLocalDocuments` setiap
+    masuk `document`, dan `loadWorkflows` untuk `workflow`/`cron`.
   - **Cara**: cache per project + invalidasi eksplisit setelah mutasi (commit/stage/save), atau
     pisahkan "fetch awal" dari "refresh manual" (tombol refresh sudah ada di semua panel).
   - **Kriteria selesai**: pindah menu bolak-balik 5× tidak memicu request baru; setelah aksi
@@ -367,7 +391,7 @@ Pola yang sudah benar dan harus dipertahankan (jangan "diperbaiki"):
   - **Kriteria selesai**: test migrasi (DB v0 → vN) + test penolakan downgrade.
 
 - [ ] **D3** SSE: `id`, `retry`, dan resume (**M**, REL-2)
-  - **Bukti**: `src/server/sse.ts` mengirim `data:` + heartbeat `: ping`; tanpa `id:`, tanpa
+  - **Bukti**: `src/server/sse.ts` mengirim `data:` + heartbeat `: ping`; tanpa `id:` , tanpa
     `retry:`, tanpa dukungan `Last-Event-ID`; klien tidak punya backoff (lihat **B2**).
   - **Cara**: kirim `events.id` sebagai `id:`, `retry: 3000`; saat `Last-Event-ID` ada, replay dari
     tabel `events` (`id > last`, batasi 200). Tambah backoff eksponensial klien.
@@ -401,9 +425,9 @@ Pola yang sudah benar dan harus dipertahankan (jangan "diperbaiki"):
     cookie + happy path).
 
 - [ ] **D7** Verifikasi urutan boot window vs server (**S**)
-  - **Bukti**: `main.ts` memanggil `createMainWindow()` **sebelum** `Deno.serve(...)`; `bootstrap()`
-    (DB, migrasi, `pruneEvents`, `rehydrateChatRuns`, `installDefaultSkills`) di-`await` sebelum
-    keduanya.
+  - **Bukti**: `main.ts` memanggil `createMainWindow()` **sebelum** `Deno.serve(...)`;
+    `bootstrap()` (DB, migrasi, `pruneEvents`, `rehydrateChatRuns`, `installDefaultSkills`) di-`await`
+    sebelum keduanya.
   - **Cara**: pastikan webview tidak menavigasi sebelum listener siap (retry/`listenThenOpen`),
     dan pindahkan pekerjaan non-kritis dari `bootstrap()` ke `bootstrapBackground()` bila durasinya
     > 300 ms.
@@ -424,7 +448,7 @@ Pola yang sudah benar dan harus dipertahankan (jangan "diperbaiki"):
 
 - [ ] **E1** Jalankan vitest di CI (**S**, CI-1)
   - **Bukti**: `.github/workflows/ci.yml` menjalankan `deno test -A --coverage` tapi **tidak**
-    `npm --prefix web run test`, padahal ada 18 file `web/src/**/*.test.ts` dan
+    `npm --prefix web run test`, padahal ada 19 file `web/src/**/*.test.ts` dan
     `web/package.json` punya script `test`.
   - **Cara**: tambah step `npm --prefix web run test` setelah typecheck client; ganti
     `npm --prefix web install` → `npm --prefix web ci`; tambah cache Deno/npm dan
@@ -438,8 +462,7 @@ Pola yang sudah benar dan harus dipertahankan (jangan "diperbaiki"):
   - **Kriteria selesai**: satu perintah, exit code 0 di checkout bersih; CI memakai task itu.
 
 - [ ] **E3** Lint/format untuk `web/` (**M**, CI-5)
-  - **Bukti**: `deno.json` mengecualikan `web/**` dari lint; `web/` tidak punya Biome/ESLint/
-    Prettier.
+  - **Bukti**: `deno.json` mengecualikan `web/**` dari lint; `web/` tidak punya Biome/ESLint/Prettier.
   - **Cara**: Biome (`biome check`) untuk `web/src` dengan aturan React hooks; jalankan di CI dan
     pre-commit.
   - **Kriteria selesai**: `biome check` hijau + jalan di CI.
@@ -545,6 +568,15 @@ Manual smoke (urutan yang paling sering rusak bila item performa disentuh):
 5. Git: stage → commit → history + diff tampil; pindah menu bolak-balik tidak memicu refetch
    berlebihan (**C3**).
 6. Terminal: buka/tutup panel, resize, dua sesi; xterm hanya diunduh sekali.
+
+Khusus **A1** (setelah memangkas fitur Monaco), tambahan manual QA:
+
+1. Buka file `.ts` → find (Cmd/Ctrl+F), suggest (Ctrl+Space), hover, format (Shift+Alt+F), folding,
+   multi-cursor (Cmd/Ctrl+D), dan rename symbol tetap jalan.
+2. Dengan language server aktif: code action (lightbulb), find all references, go to definition
+   (peek), signature help.
+3. Buka file `.json` dan `.md` → completion + folding + format (JSON) tetap jalan.
+4. File CSS → token warna tetap disorot (swatch picker memang sudah dibuang).
 
 ---
 

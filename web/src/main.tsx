@@ -2,6 +2,7 @@ import * as React from "react";
 import { createRoot } from "react-dom/client";
 import App from "@/App";
 import { ThemeProvider } from "@/components/ThemeProvider";
+import { EventsProvider } from "@/lib/events-provider";
 import { I18nProvider } from "@/lib/i18n";
 import { applyLayoutMode, installLayoutShortcut, readLayoutMode } from "@/lib/layout-mode";
 import { installZoomShortcuts } from "@/lib/zoom";
@@ -19,7 +20,9 @@ createRoot(container).render(
   <React.StrictMode>
     <ThemeProvider>
       <I18nProvider>
-        <App />
+        <EventsProvider>
+          <App />
+        </EventsProvider>
       </I18nProvider>
     </ThemeProvider>
   </React.StrictMode>,

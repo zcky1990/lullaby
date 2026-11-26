@@ -33,6 +33,7 @@ dijalankan dari root repo sehingga `web/node_modules` tidak terlihat). Perbaikan
 
 | Perintah | Fungsi |
 | --- | --- |
+| `deno task verify` | **Verifikasi standar (satu perintah)**: build → check → lint → fmt --check → test (+coverage) → typecheck web → test web |
 | `deno task web:install` | Pasang dependensi client (`npm --prefix web ci`) |
 | `deno task build` | Build Vite (`web/dist`) + embed ke `src/ui/assets.generated.ts` |
 | `deno task dev` | Build lalu jalankan desktop + HMR |
@@ -42,9 +43,31 @@ dijalankan dari root repo sehingga `web/node_modules` tidak terlihat). Perbaikan
 | `deno task check` | Typecheck backend (`deno check --desktop main.ts`) |
 | `deno task lint` / `deno task fmt` | Lint / format Deno (exclude `web/**`) |
 | `deno task test` | `deno test -A test/` |
-| `cd web && npx tsc --noEmit` | Typecheck client |
+| `deno task test:coverage` | Test backend + laporan `deno coverage` |
+| `deno task typecheck:web` | Typecheck client (`npm --prefix web run typecheck`) |
+| `deno task test:web` | Unit test client (`npm --prefix web run test` = vitest) |
 
 Permission yang dipakai task desktop/run: `--allow-read --allow-write --allow-net --allow-env --allow-run --allow-ffi`.
+
+## Verifikasi sebelum PR (satu perintah)
+
+```bash
+deno task web:install   # sekali saja / setelah package-lock berubah
+deno task verify
+```
+
+`deno task verify` menjalankan urutan lengkap dan berhenti pada kegagalan pertama:
+
+1. `deno task build` — Vite build + embed aset (gagal bila `web/` tidak compile)
+2. `deno task check` — typecheck backend
+3. `deno task lint` — `deno lint`
+4. `deno fmt --check` — cek format
+5. `deno task test:coverage` — `deno test -A test/` + ringkasan coverage
+6. `deno task typecheck:web` — `tsc --noEmit` untuk client
+7. `deno task test:web` — vitest untuk `web/src/**/*.test.ts`
+
+Workflow CI (`.github/workflows/ci.yml`) memanggil task yang sama, jadi hasil lokal = hasil CI.
+Exit code `0` berarti seluruh gate lolos.
 
 ## Setup pertama di aplikasi
 
@@ -66,12 +89,11 @@ Treat `data.db` sebagai sensitif: token/API key disimpan plaintext di config.
 
 ## Checklist sebelum selesai mengubah kode
 
-Sesuai [`AGENTS.md`](../AGENTS.md):
+Sesuai [`AGENTS.md`](../AGENTS.md), jalankan satu perintah:
 
-1. `deno task build`
-2. `deno task check`
-3. `deno task lint`
-4. `deno task test`
-5. `cd web && npx tsc --noEmit`
+```bash
+deno task verify
+```
 
-Jangan edit `src/ui/assets.generated.ts` secara manual.
+Itu sudah mencakup `build` → `check` → `lint` → `fmt --check` → `test` (+coverage) → typecheck web →
+test web. Jangan edit `src/ui/assets.generated.ts` secara manual.

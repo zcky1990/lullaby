@@ -4,20 +4,25 @@ Product/engineering docs for humans: [`docs/README.md`](docs/README.md).
 
 ## Commands
 
+- **Verify all (single command): `deno task verify`** — `build` → `check` → `lint` → `fmt --check`
+  → `test:coverage` → `typecheck:web` → `test:web`. CI runs this same task.
 - Build client + assets: `deno task build` (`build:web` + `assets`)
 - Type check (backend): `deno task check` (`deno check --desktop main.ts`)
-- Type check (client): `cd web && npx tsc --noEmit`
+- Type check (client): `deno task typecheck:web` (`cd web && npx tsc --noEmit`)
 - Lint: `deno task lint` (`deno lint`)
 - Format: `deno task fmt` (`deno fmt`)
-- Test: `deno task test` (`deno test -A`)
+- Test (backend): `deno task test` (`deno test -A test/`)
+- Test (client): `deno task test:web` (`npm --prefix web run test`, vitest)
+- Install client deps: `deno task web:install` (`npm --prefix web ci`)
 - Dev (desktop + HMR): `deno task dev`
 - Client-only dev server: `deno task web:dev`
 - Build desktop app: `deno task desktop`
 - Run without desktop shell: `deno task start`
 
-Always run `deno task build` (so `src/ui/assets.generated.ts` matches `web/`), then
-`deno task check`, `deno task lint`, `deno task test`, and `cd web && npx tsc --noEmit` before
-finishing a change.
+Before finishing a change run `deno task verify` (needs `deno task web:install` once so
+`web/node_modules` exists). It rebuilds `src/ui/assets.generated.ts` from `web/`, so it also covers
+the "`deno task build` first" rule. `.github/workflows/ci.yml` runs exactly this task, so a green
+local run means a green PR.
 
 ## Conventions
 

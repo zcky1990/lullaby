@@ -9,6 +9,22 @@ import { isMonacoTypeScriptServiceEnabled } from "./monaco-settings";
 // Kontribusi editor (find, suggest, hover, peek, dst).
 // `editor.api` hanya berisi API; fitur UI harus didaftarkan satu per satu.
 // Modul bahasa tidak diimpor di sini — lihat blok "definisi bahasa" di bawah.
+//
+// A1 (LOCAL-528B09) — daftar ini hasil audit pemakaian produk, bukan salinan
+// `features/register.all`. Yang **sengaja tidak** didaftarkan:
+//   codelens · linkedEditing · semanticTokens
+//       → tidak ada provider: `lib/lsp.ts` tidak meminta
+//         codeLens/linkedEditingRange/semanticTokens, dan `tsMode` tidak
+//         mendaftarkan provider semantic token.
+//   stickyScroll      → opsi `stickyScroll.enabled` tidak pernah dinyalakan.
+//   colorPicker       → swatch/picker warna CSS (trade-off diterima: token
+//                       warna tetap disorot, hanya UI picker yang hilang).
+//   inlayHints        → hint nama parameter TypeScript.
+//   smartSelect       → expand/shrink selection.
+//   unicodeHighlighter · unusualLineTerminators → hanya banner/prompt.
+//   dropOrPasteInto   → menu "paste as"/preview drop; Cmd+V biasa tetap
+//                       ditangani `clipboard`.
+// Guard: `web/src/lib/monaco-features.test.ts`.
 // ---------------------------------------------------------------------------
 import "monaco-editor/features/codicon/register"; // font codicon (ikon widget)
 import "monaco-editor/features/codeEditor/register"; // code editor widget
@@ -17,16 +33,11 @@ import "monaco-editor/features/find/register";
 import "monaco-editor/features/gotoError/register";
 import "monaco-editor/features/gotoSymbol/register";
 import "monaco-editor/features/referenceSearch/register";
-import "monaco-editor/features/semanticTokens/register";
 // IntelliSense dari language server
 import "monaco-editor/features/codeAction/register";
-import "monaco-editor/features/codelens/register";
-import "monaco-editor/features/colorPicker/register";
 import "monaco-editor/features/documentSymbols/register";
 import "monaco-editor/features/format/register";
 import "monaco-editor/features/hover/register";
-import "monaco-editor/features/inlayHints/register";
-import "monaco-editor/features/linkedEditing/register";
 import "monaco-editor/features/links/register";
 import "monaco-editor/features/parameterHints/register";
 import "monaco-editor/features/rename/register";
@@ -47,10 +58,6 @@ import "monaco-editor/features/linesOperations/register";
 import "monaco-editor/features/longLinesHelper/register";
 import "monaco-editor/features/multicursor/register";
 import "monaco-editor/features/readOnlyMessage/register";
-import "monaco-editor/features/smartSelect/register";
-import "monaco-editor/features/stickyScroll/register";
-import "monaco-editor/features/unicodeHighlighter/register";
-import "monaco-editor/features/unusualLineTerminators/register";
 import "monaco-editor/features/wordOperations/register";
 import "monaco-editor/features/wordPartOperations/register";
 
@@ -58,10 +65,8 @@ import "monaco-editor/features/wordPartOperations/register";
 import "monaco-editor/editor/browser/coreCommands";
 import "monaco-editor/editor/common/standaloneStrings";
 import "monaco-editor/editor/contrib/caretOperations/browser/caretOperations";
-import "monaco-editor/editor/contrib/dropOrPasteInto/browser/copyPasteContribution";
 import "monaco-editor/editor/contrib/gotoError/browser/markerSelectionStatus";
 import "monaco-editor/editor/contrib/gotoSymbol/browser/goToCommands";
-import "monaco-editor/editor/contrib/semanticTokens/browser/documentSemanticTokens";
 import "monaco-editor/editor/contrib/suggest/browser/suggestController";
 
 // ---------------------------------------------------------------------------
