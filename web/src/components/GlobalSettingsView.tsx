@@ -59,6 +59,11 @@ const ChatToolsSettings = lazy(() =>
     default: module.ChatToolsSettings,
   }))
 );
+const DocStudioSettings = lazy(() =>
+  import("@/components/DocStudioSettings").then((module) => ({
+    default: module.DocStudioSettings,
+  }))
+);
 const LayoutSettings = lazy(() =>
   import("@/components/LayoutSettings").then((module) => ({ default: module.LayoutSettings }))
 );
@@ -245,6 +250,7 @@ function GlobalSettingsSections({
     );
   }
   if (section === "prompts") return <PromptsSettings />;
+  if (section === "docstudio") return <DocStudioSettings />;
   if (section === "mcp") return <McpSettings />;
   if (section === "skills") return <SkillsSettings projectId={projectId} />;
   if (section === "tools") return <ChatToolsSettings />;

@@ -2,6 +2,7 @@ import type { MessageDict } from "../../types";
 import { app } from "./app";
 import { chat } from "./chat";
 import { common } from "./common";
+import { docStudio } from "./docStudio";
 import { documents } from "./documents";
 import { explorer } from "./explorer";
 import { git } from "./git";
@@ -20,6 +21,7 @@ export const en: MessageDict = {
   ...language,
   ...app,
   ...chat,
+  ...docStudio,
   ...documents,
   ...explorer,
   ...git,

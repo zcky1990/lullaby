@@ -1,0 +1,86 @@
+import type { MessageDict } from "../../types";
+
+/** Kamus menu Doc Studio (versi Bahasa Indonesia). */
+export const docStudio: MessageDict = {
+  "nav.docStudio": "Doc Studio",
+  "settings.global.section.docStudio": "Doc Studio",
+
+  "docStudio.title": "Doc Studio",
+  "docStudio.noProject": "Pilih project dulu untuk mulai membuat dokumen terpandu.",
+  "docStudio.noWorkspace":
+    "Atur document workspace di Project Settings → Workspace sebelum membuat dokumen.",
+  "docStudio.pickTitle": "Pilih tipe dokumen",
+  "docStudio.pickHint": "AI akan mewawancarai kamu dulu, lalu menulis dokumennya.",
+  "docStudio.draftsTitle": "Interview tersimpan",
+  "docStudio.noDrafts": "Belum ada interview.",
+  "docStudio.status.interviewing": "Interview",
+  "docStudio.status.ready": "Siap",
+  "docStudio.status.saved": "Tersimpan",
+  "docStudio.roleLabel": "Dipandu oleh {role}",
+  "docStudio.roleNone": "Belum ada role",
+  "docStudio.back": "Kembali",
+  "docStudio.answerPlaceholder": "Tulis jawabanmu…",
+  "docStudio.send": "Kirim",
+  "docStudio.sending": "AI berpikir…",
+  "docStudio.finalize": "Buat dokumen",
+  "docStudio.finalizing": "Menulis dokumen…",
+  "docStudio.readyHint": "Informasi sudah cukup — siap dibuatkan dokumen.",
+  "docStudio.openDocument": "Buka {title}",
+  "docStudio.savedAt": "Tersimpan di {path}",
+  "docStudio.startError": "Gagal memulai interview: {message}",
+  "docStudio.turnError": "Gagal mengirim jawaban: {message}",
+  "docStudio.finalizeError": "Gagal membuat dokumen: {message}",
+  "docStudio.loadError": "Gagal memuat Doc Studio: {message}",
+  "docStudio.deleteDraft": "Hapus interview",
+  "docStudio.emptyTranscript": "Menyiapkan pertanyaan pertama…",
+
+  "docStudio.error.llmNotConfigured":
+    "Belum ada provider LLM — tambahkan di Global Settings → LLM, lalu coba lagi.",
+  "docStudio.error.workspaceMissing":
+    "Project ini belum punya document workspace. Atur di Project Settings → Workspace.",
+  "docStudio.error.projectNotFound": "Project tidak ditemukan. Pilih project lain.",
+  "docStudio.error.templateNotFound": "Tipe dokumen tersebut sudah tidak ada.",
+  "docStudio.error.draftNotFound": "Interview ini sudah tidak tersedia.",
+  "docStudio.error.draftAlreadySaved": "Interview ini sudah disimpan menjadi dokumen.",
+  "docStudio.error.unauthorized": "Sesi berakhir — muat ulang aplikasi.",
+  "docStudio.error.invalidInput": "Input ditolak server — periksa isian formulir.",
+
+  "docStudio.settings.title": "Doc Studio",
+  "docStudio.settings.description":
+    "Role, provider, bahasa, dan prompt interview per tipe dokumen untuk dokumen terpandu.",
+  "docStudio.settings.defaultRole": "Role default",
+  "docStudio.settings.defaultRoleHint":
+    "Persona role ditempel di depan prompt interview. Tipe dokumen bisa menimpanya.",
+  "docStudio.settings.defaultRoleNone": "Tanpa role",
+  "docStudio.settings.defaultProvider": "Provider default",
+  "docStudio.settings.defaultProviderHint":
+    "Dipakai saat role terpilih tidak punya provider. Fallback ke provider pertama.",
+  "docStudio.settings.providerAuto": "Ikut role",
+  "docStudio.settings.language": "Bahasa output",
+  "docStudio.settings.languageAuto": "Ikut bahasa user",
+  "docStudio.settings.languageId": "Bahasa Indonesia",
+  "docStudio.settings.languageEn": "English",
+  "docStudio.settings.perType": "Per tipe dokumen",
+  "docStudio.settings.perTypeHint":
+    "Timpa role atau prompt interview untuk tipe dokumen tertentu.",
+  "docStudio.settings.typeRole": "Role",
+  "docStudio.settings.typePrompt": "Prompt interview",
+  "docStudio.settings.typePromptPlaceholder": "Kosongkan untuk memakai prompt bawaan.",
+  "docStudio.settings.typeDefault": "bawaan",
+  "docStudio.settings.typeCustom": "custom",
+  "docStudio.settings.resetPrompt": "Reset",
+  "docStudio.settings.customTypes": "Tipe dokumen kustom",
+  "docStudio.settings.customTypesHint":
+    "Tambahkan tipe sendiri (maks 20). Tipe bawaan dengan id sama akan ditimpa.",
+  "docStudio.settings.newTypeId": "Id (a-z, -, _)",
+  "docStudio.settings.newTypeLabel": "Label",
+  "docStudio.settings.newTypeOutline": "Outline (satu bagian per baris)",
+  "docStudio.settings.newTypeTopics": "Topik interview (satu per baris)",
+  "docStudio.settings.addType": "Tambah tipe",
+  "docStudio.settings.remove": "Hapus",
+  "docStudio.settings.save": "Simpan",
+  "docStudio.settings.saving": "Menyimpan…",
+  "docStudio.settings.saved": "Tersimpan.",
+  "docStudio.settings.saveError": "Gagal menyimpan: {message}",
+  "docStudio.settings.loadError": "Gagal memuat pengaturan: {message}",
+};

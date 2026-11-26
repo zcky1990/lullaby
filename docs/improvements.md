@@ -195,6 +195,46 @@ dengan `@dnd-kit` + `@base-ui`, `TerminalPanel`/xterm, `GlobalSettingsView`, `Gi
 
 **Dampak**: time-to-interactive awal lebih cepat; chunk utama turun ke kisaran 500–700 KB.
 
+### PERF-9 — Lanjutan code split: sisa panel statis di shell
+
+**Bukti**: setelah PERF-7 + LOCAL-96C322 (GitTab, FileTreePanel, DocumentPanel, pemecahan vendor
+chunk), chunk utama turun ke **405.635 B** (`web/dist/assets/index-*.js`). Masih ada panel yang
+di-import statis di `web/src/App.tsx` sehingga ikut chunk utama: `GitPanel` (12.185 B),
+`TicketDetailDialog` (21.107 B), `SettingsView` (17.289 B), `TerminalPanel` shell (14.950 B),
+`GlobalSettingsView` (21.145 B), `QuickOpen` (7.388 B), `TicketCreateDialog` (6.855 B),
+`AddToChatDialog` (3.114 B), `TicketPanel` (3.181 B).
+
+**Cara** (LOCAL-4CB805, pola sama dengan LOCAL-96C322): lazy boundary dipasang di modul pemilik
+panel, bukan di `App.tsx` — file 69 KB itu melebihi batas baca tool (±50.000 karakter) sehingga
+tidak bisa di-rewrite agent secara aman; dengan pola ini call site di shell tidak berubah.
+
+1. `GitPanel` → `components/git/GitPanel.tsx`, `TicketPanel`/`TicketCreateDialog`/
+   `TicketDetailDialog` → `components/tickets/`, `QuickOpen` → `components/explorer/`,
+   `AddToChatDialog` → `components/chat/`. File publik lama jadi wrapper `lazy()` + `Suspense` +
+   `Skeleton` dan tetap mengekspor nama + tipe props yang sama (`<Nama>Props`).
+2. Dialog lebih agresif: wrapper mengembalikan `null` selama `open === false`, jadi dialog (dan
+   chunk-nya) belum di-mount/diunduh sebelum pertama kali dibuka. Konsekuensi: fallback `null`
+   (bukan skeleton yang mengapung di root) dan animasi tutup Radix tidak jalan — trade-off yang
+   diterima karena dialog jadi tidak pernah ikut biaya startup.
+3. Guard `PERF-9` di `web/src/lib/heavy-panels-lazy.test.ts` diperluas: tiap panel dicek punya
+   wrapper lazy + implementasi di modul terpisah + tipe props diekspor, `App.tsx` tidak menyebut
+   path impl, dan (bila `web/dist` lebih baru dari sumber) tiap panel punya chunk `Nama-*.js`
+   sendiri serta chunk utama ≤ 400 KB.
+
+**Hasil**: chunk per panel (`GitPanel-*.js`, `TicketPanel-*.js`, `TicketCreateDialog-*.js`,
+`TicketDetailDialog-*.js`, `QuickOpen-*.js`, `AddToChatDialog-*.js`); `GitPanel` + dua dialog tiket
+membawa dependensi beratnya sendiri (Select/Badge/RichTextEditor/sanitize-html).
+
+**Sisa**: `SettingsView`, `GlobalSettingsView`, dan shell `TerminalPanel` masih statis di
+`App.tsx` (±53 KB) — kandidat lanjutan; butuh `read_file` dengan `offset` (atau rewrite `App.tsx`
+manual oleh manusia) agar boundary bisa dipasang tanpa memotong berkas.
+
+**Verifikasi**: `npm --prefix web run build` lalu `ls web/dist/assets | grep -E
+'^(GitPanel|TicketPanel|TicketCreateDialog|TicketDetailDialog|QuickOpen|AddToChatDialog)-'`, cek
+ukuran `index-*.js` ≤ 400 KB, `npm --prefix web run test`, `npm --prefix web run typecheck`, plus
+QA manual: buka Settings, Global Settings, detail tiket, dan Cmd+P — tidak ada error dan skeleton
+hanya muncul sekali.
+
 ---
 
 ## 4. Arsitektur & maintainability

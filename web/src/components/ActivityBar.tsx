@@ -4,6 +4,7 @@ import {
   FolderTree,
   GitBranch,
   LayoutGrid,
+  ScrollText,
   Search,
   Settings,
   SlidersHorizontal,
@@ -12,6 +13,7 @@ import {
   Workflow,
   type LucideIcon,
 } from "lucide-react";
+import { DocStudioPanel } from "@/components/DocStudioPanel";
 import { Button } from "@/components/ui/button";
 import { useI18n } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
@@ -23,11 +25,15 @@ export type Menu =
   | "terminal"
   | "git"
   | "document"
+  | "docstudio"
   | "ticket"
   | "workflow"
   | "cron"
   | "settings"
   | "global";
+
+/** Lebar panel Doc Studio (dirender dari sini, bukan dari `App.tsx`). */
+const DOC_STUDIO_WIDTH = 288;
 
 const ITEMS: {
   id: Menu;
@@ -55,6 +61,13 @@ const ITEMS: {
     group: "main",
   },
   { id: "document", labelKey: "nav.document", icon: FileText, group: "main" },
+  {
+    id: "docstudio",
+    labelKey: "nav.docStudio",
+    icon: ScrollText,
+    requiresProject: true,
+    group: "main",
+  },
   { id: "ticket", labelKey: "nav.ticket", icon: Ticket, group: "main" },
   {
     id: "workflow",
@@ -154,22 +167,10 @@ export function ActivityBar({
   const tools = visible.filter((item) => item.group === "tools");
 
   return (
-    <nav className="flex w-12 shrink-0 flex-col items-center border-r border-border/50 bg-[var(--activitybar)]/70 py-2 backdrop-blur-xl">
-      <div className="flex w-full flex-col items-center gap-0.5">
-        {main.map((item) => (
-          <MenuButton
-            key={item.id}
-            item={item}
-            active={active}
-            terminalOpen={terminalOpen}
-            onChange={onChange}
-          />
-        ))}
-      </div>
-
-      {tools.length > 0 ? (
-        <div className="mt-auto flex w-full flex-col items-center gap-0.5 border-t border-border/60 pt-2">
-          {tools.map((item) => (
+    <>
+      <nav className="flex w-12 shrink-0 flex-col items-center border-r border-border/50 bg-[var(--activitybar)]/70 py-2 backdrop-blur-xl">
+        <div className="flex w-full flex-col items-center gap-0.5">
+          {main.map((item) => (
             <MenuButton
               key={item.id}
               item={item}
@@ -179,7 +180,35 @@ export function ActivityBar({
             />
           ))}
         </div>
+
+        {tools.length > 0 ? (
+          <div className="mt-auto flex w-full flex-col items-center gap-0.5 border-t border-border/60 pt-2">
+            {tools.map((item) => (
+              <MenuButton
+                key={item.id}
+                item={item}
+                active={active}
+                terminalOpen={terminalOpen}
+                onChange={onChange}
+              />
+            ))}
+          </div>
+        ) : null}
+      </nav>
+
+      {/*
+        Panel Doc Studio dirender di sini (bukan di `App.tsx`) supaya menu baru
+        tidak butuh perubahan shell: sibling `<aside>` ikut jadi flex item di
+        antara rail dan `<main>`, sama seperti panel menu lain.
+      */}
+      {active === "docstudio" && hasProject ? (
+        <aside
+          style={{ width: DOC_STUDIO_WIDTH }}
+          className="flex min-h-0 shrink-0 flex-col overflow-hidden border-r border-border/50 bg-[var(--sidebar)]/70 backdrop-blur-xl"
+        >
+          <DocStudioPanel />
+        </aside>
       ) : null}
-    </nav>
+    </>
   );
 }

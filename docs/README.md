@@ -19,6 +19,7 @@ pengguna maupun developer.
 | [data-model.md](data-model.md)                       | SQLite, `app_settings`, path data aplikasi                |
 | [api.md](api.md)                                     | Peta endpoint HTTP / WebSocket                            |
 | [features/documents.md](features/documents.md)       | Dokumen lokal, Docmost, Notion, Confluence                |
+| [features/doc-studio.md](features/doc-studio.md)     | Doc Studio: PRD/BRD/RFC/RCA terpandu AI + role             |
 | [features/tickets.md](features/tickets.md)           | Tiket lokal, Jira/ClickUp, Kanban, sync                   |
 | [features/chat-agent.md](features/chat-agent.md)     | Chat Plan/Build, tools, Review, skills, roles             |
 | [features/autoskill.md](features/autoskill.md)       | Slash `/autoskill` → npx autoskills di workspace          |

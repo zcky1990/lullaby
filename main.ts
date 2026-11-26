@@ -2,6 +2,7 @@ import { bootstrap, bootstrapBackground } from "./src/core/bootstrap.ts";
 import { createMainWindow } from "./src/desktop/window.ts";
 import { handleBackupRequest } from "./src/server/routes/backup.ts";
 import { handleChatReviewRequest } from "./src/server/routes/chat-review.ts";
+import { handleDocStudioRequest } from "./src/server/routes/doc-studio.ts";
 import { handleRequest as handleCoreRequest } from "./src/server/router.ts";
 
 await bootstrap();
@@ -25,6 +26,7 @@ Deno.serve(
   opts,
   async (req) =>
     (await handleChatReviewRequest(req)) ??
+    (await handleDocStudioRequest(req)) ??
     (await handleBackupRequest(req)) ??
     await handleCoreRequest(req),
 );

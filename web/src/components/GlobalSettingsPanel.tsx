@@ -6,6 +6,7 @@ import {
   type LucideIcon,
   MessageSquareText,
   Palette,
+  ScrollText,
   Server,
   ServerCog,
   ShieldCheck,
@@ -24,6 +25,7 @@ export type GlobalSection =
   | "llm"
   | "roles"
   | "prompts"
+  | "docstudio"
   | "mcp"
   | "skills"
   | "tools"
@@ -40,6 +42,7 @@ const SECTIONS: { id: GlobalSection; labelKey: string; icon: LucideIcon }[] = [
   { id: "llm", labelKey: "settings.global.section.llm", icon: Cpu },
   { id: "roles", labelKey: "settings.global.section.roles", icon: Users },
   { id: "prompts", labelKey: "settings.global.section.prompts", icon: MessageSquareText },
+  { id: "docstudio", labelKey: "settings.global.section.docStudio", icon: ScrollText },
   { id: "mcp", labelKey: "settings.global.section.mcp", icon: Server },
   { id: "skills", labelKey: "settings.global.section.skills", icon: Sparkles },
   { id: "tools", labelKey: "settings.global.section.tools", icon: ShieldCheck },
